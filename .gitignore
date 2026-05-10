@@ -1,0 +1,16 @@
+# Archives / old backups
+*.zip
+*.rar
+*.7z
+
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Environment / secrets
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db

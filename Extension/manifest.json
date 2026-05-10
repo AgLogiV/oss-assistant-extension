@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "OSS Assistant",
+  "version": "1.0.1",
+  "description": "This extension automates workflows in A1 internal OSS portal",
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  },
+  "permissions": [
+    "clipboardRead",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://oss.a1.bg/*",
+    "https://oss.mobiltel.bg/*",
+    "https://srvvm-webtst-0.mobiltel.bg/*",
+    "https://oss-assistant.onrender.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/*.svg",
+        "images/*.png",
+        "images/devices/*.webp",
+        "images/categories/*.webp"
+      ],
+      "matches": [
+        "https://oss.a1.bg/*",
+        "https://oss.mobiltel.bg/*",
+        "https://srvvm-webtst-0.mobiltel.bg/*"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://oss.a1.bg/*",
+        "https://oss.mobiltel.bg/*",
+        "https://srvvm-webtst-0.mobiltel.bg/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
+

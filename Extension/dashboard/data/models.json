@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "1000055165",
+      "name": "TP Link NX220v"
+    },
+    {
+      "id": "1000057334",
+      "name": "ZTE G5TS"
+    },
+    {
+      "id": "1000059633",
+      "name": "TP-Link NX520"
+    },
+    {
+      "id": "1200014914",
+      "name": "HX520 Home"
+    },
+    {
+      "id": "1200014928",
+      "name": "K562E-10 Home"
+    },
+    {
+      "id": "1200017460",
+      "name": "Modem ADB 2220 AT"
+    },
+    {
+      "id": "108445",
+      "name": "DTH CAM Neotion CI+ 1.3 CP"
+    },
+    {
+      "id": "110328",
+      "name": "DTH CAM Neotion DVB-CI Plus CSP"
+    },
+    {
+      "id": "111732",
+      "name": "Huawei B310s"
+    },
+    {
+      "id": "112070",
+      "name": "CAM Module for access Conax"
+    },
+    {
+      "id": "112071",
+      "name": "CAM module chipset pairing"
+    },
+    {
+      "id": "112072",
+      "name": "CAM module Neotion DVB-CI NP Conax NKE1"
+    },
+    {
+      "id": "112073",
+      "name": "CAM_sDTV CI+ CP OP (TAG)"
+    },
+    {
+      "id": "112079",
+      "name": "LED CAM CI+ V1.3 CSP Neotion modul"
+    },
+    {
+      "id": "112411",
+      "name": "DTH_SmarCAM-3.5 MTel Conax Full CI+ 1.3"
+    },
+    {
+      "id": "114225",
+      "name": "STB ZXV B700v5"
+    },
+    {
+      "id": "114228",
+      "name": "CAM_sDTV CI+ CP OP"
+    },
+    {
+      "id": "114915",
+      "name": "DTH STB KAON KSTB1001"
+    },
+    {
+      "id": "115763",
+      "name": "Huawei B311 White"
+    },
+    {
+      "id": "116081",
+      "name": "Huawei B311 Black"
+    },
+    {
+      "id": "118542",
+      "name": "KSTB5019 XploreTV"
+    },
+    {
+      "id": "118543",
+      "name": "KSTB6106 Zapper"
+    },
+    {
+      "id": "118544",
+      "name": "KSTB5020 XploreTV"
+    },
+    {
+      "id": "118551",
+      "name": "Deco M4, AC1200, 2xGbE, MU-MIMO"
+    },
+    {
+      "id": "118552",
+      "name": "Archer A6/AC1200/DB LVA"
+    },
+    {
+      "id": "118560",
+      "name": "Huawei GPON HG8145V5"
+    },
+    {
+      "id": "118562",
+      "name": "CAM_sDTV CI+ CP OP (TAG) A1"
+    },
+    {
+      "id": "118563",
+      "name": "GPON CPE ZXHN F670V"
+    },
+    {
+      "id": "118564",
+      "name": "GPON CPE ZXHN F660"
+    },
+    {
+      "id": "118831",
+      "name": "ZTE MF283U"
+    },
+    {
+      "id": "118857",
+      "name": "Cube ZTE 801A"
+    },
+    {
+      "id": "119442",
+      "name": "ZTE MF293N"
+    },
+    {
+      "id": "119477",
+      "name": "Modem Technicolor7200"
+    },
+    {
+      "id": "121150",
+      "name": "TP-Link EX220"
+    },
+    {
+      "id": "121153",
+      "name": "TP-link TL-WR850N"
+    },
+    {
+      "id": "121376",
+      "name": "TP-Link EX220 Home"
+    },
+    {
+      "id": "121561",
+      "name": "ZTE MC888A"
+    },
+    {
+      "id": "121678",
+      "name": "B866V2F02 (AndroidTV)"
+    },
+    {
+      "id": "121679",
+      "name": "DV9161 (AndroidTV)"
+    },
+    {
+      "id": "121961",
+      "name": "DTH Nagra DTS3460"
+    },
+    {
+      "id": "122933",
+      "name": "GPON CPE ZXHN F660OP"
+    },
+    {
+      "id": "122944",
+      "name": "GPON ONT ZXHN F6600R"
+    },
+    {
+      "id": "123357",
+      "name": "ZTE ZXHN H3601P"
+    },
+    {
+      "id": "123451",
+      "name": "ZTE MF296R"
+    },
+    {
+      "id": "123580",
+      "name": "ZTE G5B1"
+    }
+  ]
+}
+

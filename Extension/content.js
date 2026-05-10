@@ -1,0 +1,2704 @@
+(() => {
+  if (window.__wifiOssAssistantInjected) return;
+  window.__wifiOssAssistantInjected = true;
+
+  const AUTO_MODE_KEY = "wifi_oss_auto_mode_enabled";
+  const LAST_CLIPBOARD_KEY = "wifi_oss_last_clipboard_text";
+
+  let autoMode = false;
+  let autoTimer = null;
+  let lastClipboardText = "";
+  let autoButtonRef = null;
+  let autoErrorCount = 0;
+
+  const deviceConfig = {
+    MF283U: { ports: "4", has5g: false },
+    MF293N: { ports: "1", has5g: false },
+    MF296R: { ports: "4", has5g: true },
+    MC888A: { ports: "2", has5g: false },
+    MC801A: { ports: "2", has5g: true },
+    G5B: { ports: "2", has5g: false },
+    G5B1: { ports: "2", has5g: false },
+    G5TS: { ports: "2", has5g: false },
+    EX220: { ports: "4", has5g: true },
+    NX220: { ports: "4", has5g: true },
+    HX520: { ports: "4", has5g: false },
+    "Deco M4": { ports: "2", has5g: false },
+    "ZXHN H3601P": { ports: "3", has5g: true },
+    H3601P: { ports: "3", has5g: true }
+  };
+
+  function detectDeviceModel(text) {
+    const upper = text.toUpperCase();
+    for (const model of Object.keys(deviceConfig)) {
+      const variants = [
+        model.toUpperCase(),
+        model.replace(/\s+/g, "").toUpperCase(),
+        ("ZTE " + model).toUpperCase(),
+        ("TP-LINK " + model).toUpperCase(),
+        ("TPLINK " + model).toUpperCase()
+      ];
+      if (variants.some(v => upper.includes(v))) {
+        return { model, ...deviceConfig[model] };
+      }
+    }
+    return { model: null, ports: "1", has5g: false };
+  }
+
+  // --- Нова логика за H3601P ---
+  function parseForH3601P(text) {
+    // Търсим WLAN SSID(2.4G)
+    const ssidM = text.match(/WLAN\s+SSID\(2\.4G\)\s*[:\-]?\s*([^\n\r]+)/i);
+    // Търсим WLAN Security за паролата
+    const passM = text.match(/WLAN\s+Security\s*[:\-]?\s*([^\n\r]+)/i);
+
+    const ssid1 = ssidM ? ssidM[1].trim().replace(/\s+/g, "") : null;
+    const pass = passM ? passM[1].trim() : null;
+    
+    let ssid2 = null;
+    if (ssid1) {
+      // Генерираме SSID2 със суфикс _5G
+      ssid2 = ssid1.toUpperCase().endsWith("_5G") ? ssid1 : `${ssid1}_5G`;
+    }
+
+    return { ssid1, ssid2, pass };
+  }
+
+  function parseForMF296R(text) {
+    const m = text.match(/(?:WiFi SSID1|WIFI SSID1|wifi ssid1)\s*[:\-]?\s*([^\n\r]+)/i);
+    if (!m) return null;
+    const raw = m[1].trim();
+    return raw.replace(/\s+/g, "");
+  }
+
+  function parseForMF283U(text) {
+    const ssidM = text.match(/WLAN\s+NAME.*?\(SSID\)\s*[:\-]?\s*([^\n\r]+)/i);
+    const passM = text.match(/\(PASSWORD\)\s*[:\-]?\s*([^\n\r]+)/i);
+    const ssid = ssidM ? ssidM[1].trim().replace(/\s+/g, "") : null;
+    const pass = passM ? passM[1].trim() : null;
+    return { ssid, pass };
+  }
+
+  function parseForMF293N(text) {
+    const m = text.match(/WLAN\s+NAME\s*\(SSID\)\s*[:\-]?\s*([^\n\r]+)/i);
+    const ssid = m ? m[1].trim().replace(/\s+/g, "") : null;
+    return ssid;
+  }
+
+  function parseForEX220(text) {
+    const passM = text.match(/Wireless\s+Password\/PIN\s*[:\-]?\s*([^\s]+)/i);
+    const pass = passM ? passM[1].trim() : null;
+    const parts = text.split(/SSID\s*:/i).slice(1);
+    const cleaned = parts.map(p => p.split(/SSID\s*:/i)[0]).map(p => p.trim()).filter(Boolean);
+    let ssid1 = null;
+    let ssid2 = null;
+    if (cleaned.length > 0) {
+      ssid1 = normalizeA1Base(cleaned[0]);
+      if (cleaned.length > 1) {
+        ssid2 = normalizeA1Base(cleaned[1]);
+      } else if (ssid1) {
+        ssid2 = ssid1;
+      }
+    }
+    if (ssid2 && !ssid2.toUpperCase().endsWith("_5G")) {
+      ssid2 = `${ssid2}_5G`;
+    }
+    return { ssid1, ssid2, pass };
+  }
+
+  function parseForG5B(text) {
+    const m = text.match(/Wi[- ]?Fi[- ]?Name\s*[:\-]?\s*([^\n\r]+)/i);
+    if (!m) return null;
+    const raw = m[1].trim();
+    return raw.replace(/\s+/g, "");
+  }
+
+  function normalizeA1Base(ssid) {
+    if (!ssid) return ssid;
+    const m = ssid.match(/(A1)[\s_-]*([0-9A-F]{4})/i);
+    if (!m) return ssid.replace(/\s+/g, "");
+    const prefix = m[1].toUpperCase();
+    const num = m[2].toUpperCase();
+    return `${prefix}_${num}`;
+  }
+
+  function normalizeZeros(value) {
+    if (!value) return value;
+    return value.replace(/[OoОо]/g, "0");
+  }
+
+  function isRecognizedClipboardText(text) {
+    if (!text || text.length > 2000) return false;
+    const dev = detectDeviceModel(text);
+    if (dev && dev.model) return true;
+    // Generic fallback: в auto mode попълваме само при силен сигнал (SSID + парола).
+    const g = genericParse(text);
+    return !!(g && g.ssid && g.pass);
+  }
+
+  function genericParse(text) {
+    let ssid = null;
+    let pass = null;
+    const ssidM = text.match(/(?:SSID|Wi[- ]?Fi[- ]?Name|WLAN SSID)[\s:]+([^\s]+)/i);
+    if (ssidM) ssid = ssidM[1].trim();
+    if (!ssid) {
+      const a1 = text.match(/(A1)[\s_-]*([0-9A-F]{4})/i);
+      if (a1) {
+        const num = a1[2].toUpperCase();
+        ssid = `${a1[1].toUpperCase()}_${num}`;
+      }
+    }
+    const passM = text.match(/(?:PASSWORD|KEY|WiFi Key|Wireless Password\/PIN)[\s:]+([^\s]+)/i);
+    if (passM) pass = passM[1].trim();
+    return { ssid, pass };
+  }
+
+  async function readClipboard() {
+    try {
+      return await navigator.clipboard.readText();
+    } catch (e) {
+      alert("Браузърът блокира достъпа до клипборда.");
+      throw e;
+    }
+  }
+
+  function loadLastClipboardText() {
+    try {
+      lastClipboardText = window.localStorage.getItem(LAST_CLIPBOARD_KEY) || "";
+    } catch (e) { lastClipboardText = ""; }
+  }
+
+  function rememberClipboardText(text) {
+    lastClipboardText = text;
+    try { window.localStorage.setItem(LAST_CLIPBOARD_KEY, text); } catch (e) {}
+  }
+
+  function normalizeLabelText(t) {
+    return (t || "").replace(/\s+/g, " ").replace(":", "").trim().toLowerCase();
+  }
+
+  function findFieldByLabel(labelText) {
+    const normalizedTarget = normalizeLabelText(labelText);
+    const idMap = {
+      "избери брой портове": ["_wflowRecycleState_PortCount", "_correctWifiSettings_PortCount"],
+      "тествай wifi": ["_wflowRecycleState_CheckWifi", "_correctWifiSettings_CheckWifi"],
+      "ssid1": ["_wflowRecycleState_Ssid1", "_correctWifiSettings_Ssid1"],
+      "ssid2": ["_wflowRecycleState_Ssid2", "_correctWifiSettings_Ssid2"],
+      "psk1": ["_wflowRecycleState_Psk1", "_correctWifiSettings_Psk1"],
+      "psk2": ["_wflowRecycleState_Psk2", "_correctWifiSettings_Psk2"]
+    };
+
+    for (const [key, ids] of Object.entries(idMap)) {
+      if (normalizedTarget.startsWith(key)) {
+        for (const id of ids) {
+          const el = document.getElementById(id);
+          if (el) return el;
+        }
+      }
+    }
+
+    const allNodes = document.querySelectorAll("td, th, span, label, div");
+    for (const node of allNodes) {
+      const txt = normalizeLabelText(node.textContent);
+      if (txt === normalizedTarget || txt.startsWith(normalizedTarget)) {
+        const row = node.closest("tr");
+        if (row) {
+          let cell = node.nextElementSibling;
+          while (cell) {
+            const field = cell.querySelector?.("input, select, textarea");
+            if (field) return field;
+            cell = cell.nextElementSibling;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  function updateChosenDisplay(selectEl, chosenId) {
+    if (!selectEl) return;
+    const id = chosenId || (selectEl.id ? `${selectEl.id}_chosen` : null);
+    if (!id) return;
+    const chosen = document.getElementById(id);
+    const span = chosen?.querySelector(".chosen-single span");
+    if (span && selectEl.options[selectEl.selectedIndex]) {
+      span.textContent = selectEl.options[selectEl.selectedIndex].textContent;
+    }
+  }
+
+  function fillOssForm({ ports, ssid1, ssid2, pass, has5g }) {
+    const portsField = findFieldByLabel("Избери брой портове:");
+    if (portsField) {
+      portsField.value = ports;
+      portsField.dispatchEvent(new Event("change", { bubbles: true }));
+      updateChosenDisplay(portsField);
+    }
+
+    const testField = findFieldByLabel("Тествай Wifi:");
+    if (testField) {
+      testField.value = "Yes";
+      testField.dispatchEvent(new Event("change", { bubbles: true }));
+      updateChosenDisplay(testField);
+    }
+
+    const ssid1Field = findFieldByLabel("Ssid1:");
+    if (ssid1Field && ssid1) {
+      ssid1Field.value = ssid1;
+      ssid1Field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    const psk1Field = findFieldByLabel("Psk1:");
+    if (psk1Field && pass) {
+      psk1Field.value = pass;
+      psk1Field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    const ssid2Field = findFieldByLabel("Ssid2:");
+    if (ssid2Field) {
+      ssid2Field.value = (has5g && ssid2) ? ssid2 : "";
+      ssid2Field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    const psk2Field = findFieldByLabel("Psk2:");
+    if (psk2Field) {
+      psk2Field.value = (has5g && pass) ? pass : "";
+      psk2Field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    const customSelect = document.getElementById("_correctWifiSettings_CustomRequest");
+    if (customSelect) {
+      customSelect.value = "Yes";
+      customSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      updateChosenDisplay(customSelect, "_correctWifiSettings_CustomRequest_chosen");
+    }
+
+    const saveBtn = document.getElementById("_correctWifiSettings_save");
+    if (saveBtn) { try { saveBtn.click(); } catch (e) {} }
+  }
+
+  function processText(text) {
+    if (!text || text.length > 2000) {
+      alert("Невалидни данни в клипборда.");
+      return;
+    }
+
+    const dev = detectDeviceModel(text);
+    let ports = dev.ports || "1";
+    let has5g = !!dev.has5g;
+    let ssid1 = null;
+    let ssid2 = null;
+    let pass = null;
+
+    if (dev.model === "MF296R") {
+      ssid1 = normalizeA1Base(parseForMF296R(text));
+      pass = genericParse(text).pass;
+      if (ssid1) ssid2 = ssid1.toUpperCase().endsWith("_5G") ? ssid1 : `${ssid1}_5G`;
+      has5g = true;
+    } 
+    // Прилагане на новата логика за H3601P
+    else if (dev.model === "H3601P" || dev.model === "ZXHN H3601P") {
+      const r = parseForH3601P(text);
+      ssid1 = r.ssid1;
+      ssid2 = r.ssid2;
+      pass = r.pass;
+      has5g = true;
+    }
+    else if (dev.model === "MF283U") {
+      const r = parseForMF283U(text);
+      ssid1 = r.ssid; pass = r.pass;
+    } else if (dev.model === "MF293N") {
+      ssid1 = parseForMF293N(text);
+      pass = genericParse(text).pass;
+    } else if (dev.model === "MC801A") {
+      const m1 = text.match(/WLAN\s+SSID1\s*[:\-]?\s*([^\n\r]+)/i);
+      const m2 = text.match(/WLAN\s+SSID2\s*[:\-]?\s*([^\n\r]+)/i);
+      if (m1) ssid1 = normalizeA1Base(m1[1].trim());
+      if (m2) ssid2 = normalizeA1Base(m2[1].trim());
+      else if (ssid1) ssid2 = ssid1;
+      if (ssid2 && !ssid2.toUpperCase().endsWith("_5G")) ssid2 = `${ssid2}_5G`;
+      pass = genericParse(text).pass;
+      has5g = true;
+    } else if (dev.model === "EX220" || dev.model === "NX220") {
+      const r = parseForEX220(text);
+      ssid1 = r.ssid1; ssid2 = r.ssid2; pass = r.pass;
+      has5g = true;
+    } else if (dev.model === "G5B" || dev.model === "G5B1") {
+      ssid1 = parseForG5B(text);
+      pass = genericParse(text).pass;
+    } else {
+      const g = genericParse(text);
+      ssid1 = g.ssid; pass = g.pass;
+    }
+
+    ssid1 = normalizeZeros(ssid1);
+    ssid2 = normalizeZeros(ssid2);
+    pass = normalizeZeros(pass);
+
+    fillOssForm({ ports, ssid1, ssid2, pass, has5g });
+  }
+
+  async function main() {
+    const text = await readClipboard();
+    rememberClipboardText(text);
+    processText(text);
+  }
+
+  async function autoLoopTick() {
+    // Само табът, който в момента се вижда и е с фокус, да попълва формата.
+    // Иначе всеки отворен таб към същата страница реагира на промяната в клипборда.
+    if (document.hidden || document.visibilityState !== "visible") return;
+    if (typeof document.hasFocus === "function" && !document.hasFocus()) return;
+    // Синхронизирай от localStorage, за да не се "задейства" в таб,
+    // който просто е станал активен след като друг таб вече е обработил клипборда.
+    loadLastClipboardText();
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || text.length > 2000 || text === lastClipboardText) return;
+      // В auto mode не опитваме да попълваме за всеки произволен текст в клипборда.
+      if (!isRecognizedClipboardText(text)) {
+        rememberClipboardText(text);
+        return;
+      }
+      rememberClipboardText(text);
+      processText(text);
+      autoErrorCount = 0;
+    } catch (e) { autoErrorCount += 1; }
+  }
+
+  async function syncClipboardBaselineOnActivate() {
+    // When a tab becomes active, we should NOT process the current clipboard content immediately.
+    // We only want to react to changes *after* activation.
+    if (document.hidden || document.visibilityState !== "visible") return;
+    if (typeof document.hasFocus === "function" && !document.hasFocus()) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || text.length > 2000) return;
+      rememberClipboardText(text);
+    } catch (e) {
+      // silently ignore clipboard permission errors in auto mode
+    }
+  }
+
+  function setAutoMode(enabled) {
+    autoMode = enabled;
+    if (autoTimer) clearInterval(autoTimer);
+    if (autoMode) autoTimer = setInterval(autoLoopTick, 1000);
+    if (autoButtonRef) autoButtonRef.style.backgroundColor = autoMode ? "#4CAF50" : "";
+    // Persist across tabs (user wants auto mode always on).
+    try { window.localStorage.setItem(AUTO_MODE_KEY, autoMode ? "1" : "0"); } catch (e) {}
+
+    // Prime baseline in the active tab to avoid re-processing old clipboard on focus.
+    if (autoMode) { try { syncClipboardBaselineOnActivate(); } catch (e) {} }
+  }
+
+  function injectButton() {
+    if (document.getElementById("wifi-oss-assistant-btn")) return;
+    const buttons = document.querySelectorAll("input[type='submit'], input[type='button'], button");
+    let anchorBtn = null;
+    let continueBtn = null;
+    for (const b of buttons) {
+      const txt = normalizeLabelText(b.value || b.textContent);
+      if (txt === "запази") { anchorBtn = b; break; }
+      if (!continueBtn && txt === "продължи") continueBtn = b;
+    }
+    if (!anchorBtn) anchorBtn = continueBtn;
+    if (!anchorBtn || !anchorBtn.parentElement) { setTimeout(injectButton, 1000); return; }
+
+    const fillBtn = document.createElement(anchorBtn.tagName.toLowerCase());
+    fillBtn.id = "wifi-oss-assistant-btn";
+    fillBtn.type = "button";
+    fillBtn.value = fillBtn.textContent = "ПОПЪЛНИ";
+
+    const autoBtn = document.createElement(anchorBtn.tagName.toLowerCase());
+    autoBtn.id = "wifi-oss-assistant-auto-btn";
+    autoBtn.type = "button";
+    autoBtn.value = autoBtn.textContent = "АВТОМАТИЧНО";
+
+    const resetBtn = document.createElement(anchorBtn.tagName.toLowerCase());
+    resetBtn.id = "wifi-oss-assistant-reset-btn";
+    resetBtn.type = "button";
+    resetBtn.value = resetBtn.textContent = "RESET";
+
+    [fillBtn, autoBtn, resetBtn].forEach(btn => {
+      btn.className = anchorBtn.className;
+      if (anchorBtn.getAttribute("style")) btn.setAttribute("style", anchorBtn.getAttribute("style"));
+      btn.style.marginLeft = "6px";
+    });
+
+    fillBtn.addEventListener("click", (e) => { e.preventDefault(); main(); });
+    autoBtn.addEventListener("click", (e) => { e.preventDefault(); setAutoMode(!autoMode); });
+    resetBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      try { sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY); } catch (e2) {}
+      try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DATE_KEY); } catch (e2) {}
+      const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
+      const panel = root ? root.querySelector(".wifi-oss-recycle-category-panel") : null;
+      if (panel) {
+        panel.dataset.wifiOssRecycleSelected = "";
+        const buttons = Array.from(panel.querySelectorAll("button[data-wifi-oss-recycle-cat]"));
+        buttons.forEach(b => { b.style.background = "#585858"; });
+      }
+      const inlineMsg = document.getElementById("wifi-oss-recycle-serial-msg");
+      if (inlineMsg && inlineMsg.style) { inlineMsg.textContent = ""; inlineMsg.style.display = "none"; }
+    });
+    autoButtonRef = autoBtn;
+
+    let savedAuto = false;
+    try { savedAuto = window.localStorage.getItem(AUTO_MODE_KEY) === "1"; } catch (e) {}
+    setAutoMode(savedAuto);
+
+    // When switching tabs/windows, prevent "catching up" by processing the current clipboard.
+    // Instead, treat the current clipboard as baseline and only process subsequent changes.
+    window.addEventListener("focus", () => { if (autoMode) syncClipboardBaselineOnActivate(); }, true);
+    document.addEventListener("visibilitychange", () => {
+      if (autoMode && document.visibilityState === "visible") syncClipboardBaselineOnActivate();
+    }, true);
+
+    anchorBtn.parentElement.insertBefore(fillBtn, anchorBtn.nextSibling);
+    anchorBtn.parentElement.insertBefore(autoBtn, fillBtn.nextSibling);
+    anchorBtn.parentElement.insertBefore(resetBtn, autoBtn.nextSibling);
+  }
+
+  // -------------------------------
+  // Warehouse cell list: PDF labels
+  // -------------------------------
+  const WAREHOUSE_LIST_ID = "_warehouseMaterialsCellList";
+  const WAREHOUSE_EDIT_COLUMNS_BTN_ID = "_warehouseMaterialsCellList_edit_columns";
+  const WAREHOUSE_PRINT_LABELS_BTN_ID = "_warehouseMaterialsCellList_print_labels";
+
+  const RECYCLE_LIST_ID = "_recycleDevicesByTechnician";
+  const RECYCLE_EDIT_COLUMNS_BTN_ID = "_recycleDevicesByTechnician_edit_columns";
+  const RECYCLE_PRINT_LABELS_BTN_ID = "_recycleDevicesByTechnician_print_labels";
+
+  let __labelTemplateSvgDataUrl = null;
+
+  function mm(n) {
+    return `${n}mm`;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function deviceImageForModel(name) {
+    const n = String(name || "").toLowerCase();
+    // Use the new device images from images/devices/.
+    if (n.includes("nx220")) return "images/devices/TP_Link_NX220v_5G-removebg-preview.webp";
+    if (n.includes("g5ts")) return "images/devices/ZTE_G5TS_5G-removebg-preview.webp";
+    if (n.includes("nx520")) return "images/devices/TP-Link_NX520_5G-removebg-preview.webp";
+    if (n.includes("hx520")) return "images/devices/Router_TP_Link_HX520_Home_WiFi-removebg-preview.webp";
+    if (n.includes("k562e")) return "images/devices/Router_Huawei_K562E-10_Home_WiFi-removebg-preview.webp";
+    if (n.includes("adb") && n.includes("2220")) return "images/devices/Modem_ADB_VoIP_VV_2220_AT-removebg-preview.webp";
+    if (n.includes("b311") && n.includes("white")) return "images/devices/Huawei_B311-221_white+ext._Antenna-removebg-preview.webp";
+    if (n.includes("b311")) return "images/devices/Huawei_B311-221_black_+ext._Antenna-removebg-preview.webp";
+    if (n.includes("b310") && n.includes("generic")) return "images/devices/Huawei_B310s-22_generic-removebg-preview.webp";
+    if (n.includes("b310")) return "images/devices/Huawei_B310s-22+2pc_FMC_external_antenna-removebg-preview.webp";
+    if (n.includes("hg8145")) return "images/devices/Huawei_GPON_HG8145V5-removebg-preview.webp";
+    if (n.includes("deco m4")) return "images/devices/TP-LINK_Deco_M4__AC1200__2xGbE__MU-MIMO-removebg-preview.webp";
+    if (n.includes("archer a6")) return "images/devices/Router_TP-Link_Archer_A6AC1200DB_LVA-removebg-preview.webp";
+    if (n.includes("wr850n")) return "images/devices/Router_TP-Link_TL-WR850N-removebg-preview.webp";
+    if (n.includes("ex220")) return "images/devices/Router_TP-Link_EX220-removebg-preview.webp";
+    if (n.includes("h3601p")) return "images/devices/Router_ZTE_ZXHN_H3601P_RG_WiFi-removebg-preview.webp";
+    if (n.includes("801a")) return "images/devices/ZTE_MC888A_5G-removebg-preview.webp";
+    if (n.includes("mc888a")) return "images/devices/ZTE_G5B1_5G-removebg-preview.webp";
+    if (n.includes("mf283u")) return "images/devices/ZTE_MF283U+ext._Antenna-removebg-preview.webp";
+    if (n.includes("mf293n")) return "images/devices/ZTE_MF293N_+_ext._Antenna-removebg-preview.webp";
+    if (n.includes("mf296r")) return "images/devices/ZTE_MF296R-removebg-preview.webp";
+    if (n.includes("g5b1")) return "images/devices/ZTE_G5B1_5G-removebg-preview.webp";
+    if (n.includes("kstb6106")) return "images/devices/Kaon_KSTB6106_DVB-C_Zapper-removebg-preview.webp";
+    if (n.includes("kstb5020")) return "images/devices/Kaon_KSTB5020_XploreTV.webp";
+    if (n.includes("kstb5019")) return "images/devices/Kaon_KSTB5019_XploreTV_IP_only__BCM7268_-removebg-preview.webp";
+    if (n.includes("kstb1001")) return "images/devices/DTH_STB_KAON_KSTB1001-BCM73625-1GB-removebg-preview.webp";
+    if (n.includes("nagra")) return "images/devices/DTH_Nagra_DTS3460.webp";
+    if (n.includes("b866")) return "images/devices/STB_ZTE_B866V2F02__AndroidTV_-removebg-preview.webp";
+    if (n.includes("dv9161")) return "images/devices/STB_SDMC_DV9161__AndroidTV_-removebg-preview.webp";
+    if (n.includes("b700")) return "images/devices/STB_ZXV_B700v5-removebg-preview.webp";
+    if (n.includes("f670")) return "images/devices/GPON_CPE_ZXHN_F670L_V1.1-removebg-preview.webp";
+    if (n.includes("f6600r")) return "images/devices/ZTE_ONT_ZXHN_F6600R-removebg-preview.webp";
+    if (n.includes("f660op")) return "images/devices/GPON_CPE_ZXHN_F6600P_V9.0-removebg-preview.webp";
+    if (n.includes("f660")) return "images/devices/GPON_CPE_ZXHN_F600-removebg-preview.webp";
+    if (n.includes("technicolor")) return "images/devices/Modem_Technicolor7200D3WiFirefurbCROA-removebg-preview.webp";
+    return null;
+  }
+
+  function getSerialNumbersFromList(listRootId) {
+    const root = document.getElementById(listRootId);
+    if (!root) return [];
+
+    const table = root.querySelector("table");
+    if (!table) return [];
+
+    const headerCells = Array.from(table.querySelectorAll("tr th"));
+    let serialIdx = headerCells.findIndex(th => (th.getAttribute("rel") || "").toLowerCase() === "serialnumber");
+    if (serialIdx < 0) {
+      serialIdx = headerCells.findIndex(th => {
+        const t = (th.textContent || "").trim().toLowerCase();
+        return t === "сериен номер" || t.includes("сериен номер") || t === "serial number" || t.includes("serial");
+      });
+    }
+    if (serialIdx < 0) serialIdx = 2; // fallback
+
+    const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
+    const values = [];
+    for (const tr of rows) {
+      const tds = tr.querySelectorAll("td");
+      const raw = (tds[serialIdx]?.textContent || "").trim();
+      if (raw) values.push(raw);
+    }
+
+    // unique, stable order
+    const seen = new Set();
+    const uniq = [];
+    for (const v of values) {
+      if (seen.has(v)) continue;
+      seen.add(v);
+      uniq.push(v);
+    }
+    return uniq;
+  }
+
+  function getSelectedSerialNumbersFromList(listRootId) {
+    const root = document.getElementById(listRootId);
+    if (!root) return [];
+
+    const table = root.querySelector("table");
+    if (!table) return [];
+
+    const headerCells = Array.from(table.querySelectorAll("tr th"));
+    let serialIdx = headerCells.findIndex(th => (th.getAttribute("rel") || "").toLowerCase() === "serialnumber");
+    if (serialIdx < 0) {
+      serialIdx = headerCells.findIndex(th => {
+        const t = (th.textContent || "").trim().toLowerCase();
+        return t === "сериен номер" || t.includes("сериен номер") || t === "serial number" || t.includes("serial");
+      });
+    }
+    if (serialIdx < 0) serialIdx = 2;
+
+    const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
+    const values = [];
+
+    for (const tr of rows) {
+      // Select checkbox is in the first column in this list; ignore header "check-all".
+      const isChecked = !!tr.querySelector("td input[type='checkbox'].icheck-input:checked");
+      if (!isChecked) continue;
+
+      const tds = tr.querySelectorAll("td");
+      const raw = (tds[serialIdx]?.textContent || "").trim();
+      if (raw) values.push(raw);
+    }
+
+    const seen = new Set();
+    const uniq = [];
+    for (const v of values) {
+      if (seen.has(v)) continue;
+      seen.add(v);
+      uniq.push(v);
+    }
+    return uniq;
+  }
+
+  function getRecycleDevicesForBarcodeSheet({ preferSelected = true } = {}) {
+    const root = document.getElementById(RECYCLE_LIST_ID);
+    if (!root) return [];
+
+    const table = root.querySelector("table");
+    if (!table) return [];
+
+    const headerCells = Array.from(table.querySelectorAll("tr th"));
+
+    const findIdx = (relName, bgTextMatchers, fallbackIdx) => {
+      let idx = headerCells.findIndex(th => (th.getAttribute("rel") || "").toLowerCase() === relName);
+      if (idx < 0) {
+        idx = headerCells.findIndex(th => {
+          const t = (th.textContent || "").trim().toLowerCase();
+          return bgTextMatchers.some(m => (typeof m === "string" ? t === m : m.test(t)));
+        });
+      }
+      return idx >= 0 ? idx : fallbackIdx;
+    };
+
+    const nameIdx = findIdx("name", ["име"], 3);
+    const serialIdx = findIdx("serialnumber", ["сериен номер", "serial number"], 4);
+    const sapIdx = findIdx("sapid", ["sapid", "sap id"], 5);
+
+    const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
+    const checkedRows = preferSelected
+      ? rows.filter(tr => !!tr.querySelector("td input[type='checkbox'].icheck-input:checked"))
+      : [];
+    const useRows = (preferSelected && checkedRows.length) ? checkedRows : rows;
+
+    const items = [];
+    for (const tr of useRows) {
+      const tds = tr.querySelectorAll("td");
+      const name = (tds[nameIdx]?.textContent || "").trim();
+      const serial = (tds[serialIdx]?.textContent || "").trim();
+      const sapId = (tds[sapIdx]?.textContent || "").trim();
+      if (!serial) continue;
+      items.push({ name, serial, sapId });
+    }
+
+    // unique by serial, stable order
+    const seen = new Set();
+    const uniq = [];
+    for (const it of items) {
+      if (seen.has(it.serial)) continue;
+      seen.add(it.serial);
+      uniq.push(it);
+    }
+    return uniq;
+  }
+
+  function getWarehouseSerialNumbers() {
+    return getSerialNumbersFromList(WAREHOUSE_LIST_ID);
+  }
+
+  function toSvgDataUrl(svgText) {
+    // Keep it ASCII-safe; btoa fails for non-latin chars.
+    const utf8 = encodeURIComponent(svgText)
+      .replaceAll(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode(parseInt(p1, 16)));
+    const base64 = btoa(utf8);
+    return `data:image/svg+xml;base64,${base64}`;
+  }
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  async function tryFetchAsDataUrl(path, kind) {
+    const url = (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+      ? chrome.runtime.getURL(path)
+      : path;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    if (kind === "svg") {
+      const text = await res.text();
+      return toSvgDataUrl(text);
+    }
+    if (kind === "png") {
+      const buf = await res.arrayBuffer();
+      const base64 = arrayBufferToBase64(buf);
+      return `data:image/png;base64,${base64}`;
+    }
+    return null;
+  }
+
+  async function getLabelTemplateDataUrl() {
+    if (__labelTemplateSvgDataUrl) return __labelTemplateSvgDataUrl;
+
+    // Prefer SVG (crisper printing). Fallback to PNG.
+    const svg = await tryFetchAsDataUrl("images/label.svg", "svg");
+    if (svg) { __labelTemplateSvgDataUrl = svg; return svg; }
+
+    const png = await tryFetchAsDataUrl("images/label.png", "png");
+    if (png) { __labelTemplateSvgDataUrl = png; return png; }
+
+    return null;
+  }
+
+  function buildA4LabelsHtml(serialNumbers, { labelSvgDataUrl }) {
+    // Specs:
+    // A4: 210 x 297mm
+    // Label: 99.1 x 67.7mm
+    // 8 labels per page -> 2 cols x 4 rows
+    const pageW = 210;
+    const pageH = 297;
+    const labelW = 99.1;
+    const labelH = 67.7;
+
+    const cols = 2;
+    const rows = 4;
+    const perPage = cols * rows;
+
+    const hGap = (pageW - cols * labelW) / (cols + 1); // left + gutter + right (legacy calc)
+    const vGap = (pageH - rows * labelH) / (rows + 1); // top + gaps + bottom (legacy calc)
+    const pageOffsetY = -1.5; // mm: negative moves labels up; tweak as needed
+    const pageOffsetX = 0.5; // mm: positive moves labels right; tweak as needed
+
+    // Gap tweaks (in mm).
+    // - vertical: set to 0 (no gap between rows)
+    // - horizontal: reduce slightly (between columns)
+    const gapReduceX = 2; // mm: reduce the space between left/right labels (tweak 0..4)
+    const colGap = Math.max(0, hGap - gapReduceX);
+    const remainingH = Math.max(0, pageW - cols * labelW - colGap);
+    const padH = remainingH / 2;
+    const vGapUsed = 0;
+
+    // With row-gap = 0, use the remaining vertical space as page padding.
+    const remainingV = Math.max(0, pageH - rows * labelH);
+    const padV = remainingV / 2;
+
+    const pages = [];
+    for (let i = 0; i < serialNumbers.length; i += perPage) {
+      const chunk = serialNumbers.slice(i, i + perPage);
+      pages.push(chunk);
+    }
+
+    const labelSvgUrl = labelSvgDataUrl;
+
+    // Coordinates are based on label.svg viewBox: 1145 x 786.
+    // If you need perfect 1:1 alignment, we can tweak these 4 numbers.
+    // SN barcode: slightly larger overall, but a bit shorter in height to keep text readable.
+    // Converted to label.svg viewBox units (1145x786 on 99.1x67.7mm label).
+    // Give SN enough physical width to increase X-dimension (scanner readability), but keep it within the original template.
+    // Keep SN away from the right-side WiFi logo area.
+    const SN_BOX = { x: 245, y: 445, w: 600, h: 226 };
+    const SN_TEXT = { x: 565, y: 676 }; // text baseline (centered, moved down)
+
+    const labelMarkup = (sn) => {
+      // Use the provided label.svg as the exact template.
+      // Only SN barcode + human-readable text are overlaid.
+      return `
+        <div class="label">
+          <img class="label-bg" alt="" src="${escapeHtml(labelSvgUrl)}" />
+
+          <!-- White mask to cover the original SN barcode/text in the template -->
+          <div class="sn-mask"></div>
+
+          <!-- Generated SN barcode (Code128) -->
+          <div
+            class="sn-barcode barcode code128"
+            data-value="${escapeHtml(sn)}"
+            data-h="18"
+            data-w="60"
+          ></div>
+
+          <!-- Generated SN text -->
+          <div class="sn-text">${escapeHtml(sn)}</div>
+        </div>`;
+    };
+
+    const pagesHtml = pages.map((sns, pageIdx) => {
+      const labels = sns.map(labelMarkup).join("\n");
+      const pageBreak = pageIdx < pages.length - 1 ? `<div class="page-break"></div>` : "";
+      return `<div class="page">${labels}</div>${pageBreak}`;
+    }).join("\n");
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Serial number labels</title>
+    <style>
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+      html, body {
+        width: ${mm(pageW)};
+        height: ${mm(pageH)};
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .page {
+        width: ${mm(pageW)};
+        height: ${mm(pageH)};
+        padding: 0;
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: repeat(${cols}, ${mm(labelW)});
+        grid-template-rows: repeat(${rows}, ${mm(labelH)});
+        column-gap: ${mm(colGap)};
+        row-gap: ${mm(vGapUsed)};
+        padding-left: ${mm(padH + pageOffsetX)};
+        padding-right: ${mm(Math.max(0, padH - pageOffsetX))};
+        padding-top: ${mm(padV + pageOffsetY)};
+        padding-bottom: ${mm(Math.max(0, padV - pageOffsetY))};
+      }
+      .page-break {
+        page-break-after: always;
+      }
+
+      .label {
+        width: ${mm(labelW)};
+        height: ${mm(labelH)};
+        box-sizing: border-box;
+        border: 1.2px solid #000;
+        border-radius: 10px;
+        padding: 0;
+        overflow: hidden;
+        position: relative;
+        background: #fff;
+        font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+        color: #000;
+      }
+      .label-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        pointer-events: none;
+        user-select: none;
+      }
+
+      .barcode { width: 100%; }
+      .barcode svg,
+      .barcode img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        image-rendering: crisp-edges;
+        image-rendering: pixelated;
+      }
+
+      /* Overlay SN elements using % based on the SVG coordinate system */
+      .sn-mask {
+        position: absolute;
+        left: ${(SN_BOX.x / 1145) * 100}%;
+        top: ${(SN_BOX.y / 786) * 100}%;
+        width: ${(SN_BOX.w / 1145) * 100}%;
+        height: ${((SN_TEXT.y - SN_BOX.y) / 786) * 100}%;
+        background: #fff;
+      }
+      .sn-barcode {
+        position: absolute;
+        left: ${(SN_BOX.x / 1145) * 100}%;
+        top: ${(SN_BOX.y / 786) * 100}%;
+        width: ${(SN_BOX.w / 1145) * 100}%;
+        height: ${(SN_BOX.h / 786) * 100}%;
+      }
+      .sn-barcode svg {
+        width: 100%;
+        height: 100%;
+        shape-rendering: crispEdges;
+      }
+      .sn-text {
+        position: absolute;
+        left: ${(SN_TEXT.x / 1145) * 100}%;
+        top: ${(SN_TEXT.y / 786) * 100}%;
+        transform: translate(-50%, 0);
+        font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+        font-weight: 400;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+      }
+
+      .hint {
+        position: fixed;
+        left: 6mm;
+        bottom: 6mm;
+        font-size: 3.2mm;
+        color: #444;
+      }
+      @media print {
+        .hint { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    ${pagesHtml}
+    <div class="hint">Съвет: натисни Ctrl+P → “Save as PDF”</div>
+    <script>
+      // Minimal Code128 (subset B) SVG renderer (no external libs).
+      // NOTE: This supports ASCII 32..126 and a few common chars; enough for your values.
+      const CODE128_PATTERNS = [
+        "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212",
+        "112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131",
+        "311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321",
+        "112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121",
+        "313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111",
+        "314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114",
+        "122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212",
+        "124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113",
+        "114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"
+      ];
+
+      function digitRunLength(s, from) {
+        let n = 0;
+        for (let i = from; i < s.length; i++) {
+          const c = s.charCodeAt(i);
+          if (c < 48 || c > 57) break;
+          n += 1;
+        }
+        return n;
+      }
+
+      function code128EncodeAuto(value) {
+        // Auto-switch between Code B and Code C.
+        // This mirrors what label software typically does for mixed alpha+numeric data.
+        if (!value) throw new Error("Empty barcode value");
+
+        let i = 0;
+        const leadDigits = digitRunLength(value, 0);
+        let set = (leadDigits >= 4 && leadDigits % 2 === 0) ? "C" : "B";
+        const codes = [set === "C" ? 105 : 104]; // Start C / Start B
+
+        while (i < value.length) {
+          if (set === "C") {
+            const run = digitRunLength(value, i);
+            if (run >= 2) {
+              const pair = value.slice(i, i + 2);
+              codes.push(Number(pair));
+              i += 2;
+              continue;
+            }
+            // Not enough digits for C pair -> switch to B
+            codes.push(100); // Code B
+            set = "B";
+            continue;
+          }
+
+          // set === "B"
+          const run = digitRunLength(value, i);
+          if (run >= 4) {
+            // For odd-length numeric run, encode 1 char in B, then switch to C.
+            if (run % 2 === 1) {
+              const cc = value.charCodeAt(i);
+              if (cc < 32 || cc > 126) throw new Error("Unsupported character for Code128-B");
+              codes.push(cc - 32);
+              i += 1;
+            }
+            codes.push(99); // Code C
+            set = "C";
+            continue;
+          }
+
+          const cc = value.charCodeAt(i);
+          if (cc < 32 || cc > 126) throw new Error("Unsupported character for Code128-B");
+          codes.push(cc - 32);
+          i += 1;
+        }
+
+        // checksum
+        let sum = codes[0];
+        for (let p = 1; p < codes.length; p++) sum += codes[p] * p;
+        const checksum = sum % 103;
+        codes.push(checksum);
+        codes.push(106); // Stop
+        return codes;
+      }
+
+      function code128Svg(value, targetWidthMm, barHeightMm) {
+        const codes = code128EncodeAuto(value);
+        const pattern = codes.map(c => CODE128_PATTERNS[c]).join("");
+        // pattern is a sequence of module widths alternating bar/space, starting with bar
+        const modules = pattern.split("").map(d => Number(d));
+        const totalModules = modules.reduce((a, b) => a + b, 0);
+
+        // We render in "module units" and scale via viewBox.
+        const h = 100; // arbitrary units
+        const quiet = 12; // quiet zone on both sides in module units (helps scanners)
+        const w = totalModules + quiet * 2;
+        let x = quiet;
+        let drawBar = true;
+        const rects = [];
+        for (const mw of modules) {
+          if (drawBar) rects.push('<rect x="' + x + '" y="0" width="' + mw + '" height="' + h + '" fill="#000" />');
+          x += mw;
+          drawBar = !drawBar;
+        }
+
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '"' +
+          ' width="' + targetWidthMm + 'mm" height="' + barHeightMm + 'mm" preserveAspectRatio="none" shape-rendering="crispEdges">' +
+          rects.join("") +
+          "</svg>"
+        );
+      }
+
+      function code128PngDataUrl(value, targetWidthMm, barHeightMm) {
+        // Render to canvas with integer pixel modules to avoid print aliasing / merged bars.
+        const codes = code128EncodeAuto(value);
+        const pattern = codes.map(c => CODE128_PATTERNS[c]).join("");
+        const modules = pattern.split("").map(d => Number(d));
+        const totalModules = modules.reduce((a, b) => a + b, 0);
+        const quiet = 12;
+        const total = totalModules + quiet * 2;
+
+        // Approx 300dpi -> ~12 px/mm. Use a bit higher for safety.
+        const pxPerMm = 20;
+        let wPx = Math.max(300, Math.round(targetWidthMm * pxPerMm));
+        const hPx = Math.max(60, Math.round(barHeightMm * pxPerMm));
+
+        // Ensure enough pixels per module to avoid ultra-thin bars after print scaling.
+        // Target >= 4px/module for scanners + glossy paper.
+        const minModulePx = 4;
+        if (wPx < total * minModulePx) wPx = total * minModulePx;
+
+        // Choose integer pixels per module (>=1) to prevent merging.
+        const modulePx = Math.max(minModulePx, Math.floor(wPx / total));
+        const usedW = modulePx * total;
+        const leftPad = Math.floor((wPx - usedW) / 2);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = wPx;
+        canvas.height = hPx;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.imageSmoothingEnabled = false;
+
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, wPx, hPx);
+
+        // Use pure black for maximum scanner contrast.
+        ctx.fillStyle = "#000";
+        let x = leftPad + quiet * modulePx;
+        let drawBar = true;
+        for (const mw of modules) {
+          const ww = mw * modulePx;
+          if (drawBar) {
+            // IMPORTANT: keep exact module ratios (no per-bar shrinking/expansion),
+            // otherwise Code128 becomes unreadable for scanners.
+            ctx.fillRect(x, 0, ww, hPx);
+          }
+          x += ww;
+          drawBar = !drawBar;
+        }
+
+        return canvas.toDataURL("image/png");
+      }
+
+      function renderBarcodes() {
+        const nodes = document.querySelectorAll(".barcode.code128");
+        for (const n of nodes) {
+          const value = n.getAttribute("data-value") || "";
+          const h = Number(n.getAttribute("data-h") || "10");
+          const w = Number(n.getAttribute("data-w") || "60");
+          try {
+            const png = code128PngDataUrl(value, w, h);
+            if (png) {
+              n.innerHTML = '<img alt="" src="' + png + '"/>';
+            } else {
+              n.innerHTML = code128Svg(value, w, h);
+            }
+          } catch (e) {
+            n.innerHTML = "<div style='font-size:3mm;color:#c00'>Barcode error</div>";
+          }
+        }
+      }
+
+      renderBarcodes();
+    </script>
+  </body>
+</html>`;
+  }
+
+  function buildRecycleBarcodeSheetHtml(items) {
+    // A4: 210 x 297mm, 24 slots: 3 cols x 8 rows
+    const pageW = 210;
+    const pageH = 297;
+    const cols = 3;
+    const rows = 8;
+    const perPage = cols * rows;
+
+    // Sticker sheet specs (given by user):
+    // A4: 210x297mm, label: 70x37mm, straight corners.
+    // 3*70 = 210mm exactly; 8*37 = 296mm -> 1mm remainder for vertical centering.
+    const labelW = 70;
+    const labelH = 37;
+    const gapX = 0;
+    const gapY = 0;
+    // Many printers/browsers have tiny non-printable margins.
+    // Add a small horizontal safe padding to avoid clipping at left/right page edges.
+    const padX = 1.5; // mm
+    const padY = (pageH - rows * labelH) / 2; // 0.5mm top + 0.5mm bottom
+
+    // Use computed cell width so 3 columns fit within the safe padding.
+    const cellW = (pageW - padX * 2 - gapX * (cols - 1)) / cols;
+
+    const pages = [];
+    for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
+    if (!pages.length) pages.push([]);
+
+    const slot = (it) => {
+      if (!it) return `<div class="slot empty"></div>`;
+      const name = escapeHtml(it.name || "");
+      const sap = escapeHtml(it.sapId || "");
+      const sn = escapeHtml(it.serial || "");
+      return `<div class="slot">
+  <div class="name">${name}</div>
+  <div class="sap">SAP ID: ${sap}</div>
+  <div class="barcode code128" data-value="${sn}" data-w="${Math.max(54, Math.floor(cellW - 10))}" data-h="6"></div>
+  <div class="sn">${sn}</div>
+</div>`;
+    };
+
+    const buildPage = (chunk) => {
+      const filled = chunk.slice(0, perPage);
+      const padded = filled.concat(Array.from({ length: Math.max(0, perPage - filled.length) }, () => null));
+      const html = padded.map(slot).join("\n");
+      return `<div class="page">${html}</div>`;
+    };
+
+    const pageHtml = pages.map((p, i) => buildPage(p) + (i < pages.length - 1 ? `<div class="page-break"></div>` : "")).join("\n");
+
+    // Uses same pure JS Code128 generator as the ADB label printer (no external libs).
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Barcode labels</title>
+    <style>
+      @page { size: A4; margin: 0; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page {
+        width: ${mm(pageW)};
+        height: ${mm(pageH)};
+        box-sizing: border-box;
+        padding: ${mm(padY)} ${mm(padX)};
+        display: grid;
+        grid-template-columns: repeat(${cols}, ${mm(cellW)});
+        grid-template-rows: repeat(${rows}, ${mm(labelH)});
+        column-gap: ${mm(gapX)};
+        row-gap: ${mm(gapY)};
+        align-content: start;
+      }
+      .page-break { break-after: page; }
+      .slot {
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0 ${mm(2)}; /* inner safe padding inside each label */
+        text-align: center;
+      }
+      .slot.empty { opacity: 0; }
+      .name {
+        font-family: Arial, sans-serif;
+        font-weight: 700;
+        font-size: ${mm(3.0)};
+        line-height: 1.1;
+        height: ${mm(8)};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        max-width: 100%;
+        box-sizing: border-box;
+        padding: 0 ${mm(0.8)};
+      }
+      .sap {
+        font-family: Arial, sans-serif;
+        font-weight: 400;
+        font-size: ${mm(2.7)};
+        height: ${mm(4)};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        max-width: 100%;
+      }
+      .barcode { width: 100%; height: ${mm(6)}; display: flex; justify-content: center; align-items: center; }
+      .barcode img, .barcode svg { width: 100%; height: 100%; }
+      .sn {
+        font-family: Arial, sans-serif;
+        font-size: ${mm(2.7)};
+        height: ${mm(4)};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        letter-spacing: 0.2px;
+      }
+    </style>
+  </head>
+  <body>
+    ${pageHtml}
+    <script>
+      // Minimal Code128 SVG/PNG renderer (same snippet as the existing labels printer).
+      const CODE128_PATTERNS = [
+        "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212",
+        "112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131",
+        "311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321",
+        "112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121",
+        "313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111",
+        "314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114",
+        "122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212",
+        "124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113",
+        "114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"
+      ];
+
+      function digitRunLength(s, from) {
+        let n = 0;
+        for (let i = from; i < s.length; i++) {
+          const c = s.charCodeAt(i);
+          if (c < 48 || c > 57) break;
+          n += 1;
+        }
+        return n;
+      }
+
+      function code128EncodeAuto(value) {
+        // Auto-switch between Code B and Code C.
+        if (!value) throw new Error("Empty barcode value");
+
+        let i = 0;
+        const leadDigits = digitRunLength(value, 0);
+        let set = (leadDigits >= 4 && leadDigits % 2 === 0) ? "C" : "B";
+        const codes = [set === "C" ? 105 : 104]; // Start C / Start B
+
+        while (i < value.length) {
+          if (set === "C") {
+            const run = digitRunLength(value, i);
+            if (run >= 2) {
+              const pair = value.slice(i, i + 2);
+              codes.push(Number(pair));
+              i += 2;
+              continue;
+            }
+            codes.push(100); // Code B
+            set = "B";
+            continue;
+          }
+
+          // set === "B"
+          const run = digitRunLength(value, i);
+          if (run >= 4) {
+            if (run % 2 === 1) {
+              const cc = value.charCodeAt(i);
+              if (cc < 32 || cc > 126) throw new Error("Unsupported character for Code128-B");
+              codes.push(cc - 32);
+              i += 1;
+            }
+            codes.push(99); // Code C
+            set = "C";
+            continue;
+          }
+
+          const cc = value.charCodeAt(i);
+          if (cc < 32 || cc > 126) throw new Error("Unsupported character for Code128-B");
+          codes.push(cc - 32);
+          i += 1;
+        }
+
+        let sum = codes[0];
+        for (let p = 1; p < codes.length; p++) sum += codes[p] * p;
+        const checksum = sum % 103;
+        codes.push(checksum);
+        codes.push(106); // Stop
+        return codes;
+      }
+
+      function code128Svg(value, targetWidthMm, barHeightMm) {
+        const codes = code128EncodeAuto(value);
+        const pattern = codes.map(c => CODE128_PATTERNS[c]).join("");
+        const modules = pattern.split("").map(d => Number(d));
+        const totalModules = modules.reduce((a, b) => a + b, 0);
+
+        const h = 100;
+        const quiet = 12;
+        const w = totalModules + quiet * 2;
+        let x = quiet;
+        let drawBar = true;
+        const rects = [];
+        for (const mw of modules) {
+          if (drawBar) rects.push('<rect x="' + x + '" y="0" width="' + mw + '" height="' + h + '" fill="#000" />');
+          x += mw;
+          drawBar = !drawBar;
+        }
+
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '"' +
+          ' width="' + targetWidthMm + 'mm" height="' + barHeightMm + 'mm" preserveAspectRatio="none" shape-rendering="crispEdges">' +
+          rects.join("") +
+          "</svg>"
+        );
+      }
+
+      function code128PngDataUrl(value, targetWidthMm, barHeightMm) {
+        const codes = code128EncodeAuto(value);
+        const pattern = codes.map(c => CODE128_PATTERNS[c]).join("");
+        const modules = pattern.split("").map(d => Number(d));
+        const totalModules = modules.reduce((a, b) => a + b, 0);
+        const quiet = 12;
+        const total = totalModules + quiet * 2;
+
+        const pxPerMm = 20;
+        let wPx = Math.max(300, Math.round(targetWidthMm * pxPerMm));
+        const hPx = Math.max(60, Math.round(barHeightMm * pxPerMm));
+
+        const minModulePx = 4;
+        if (wPx < total * minModulePx) wPx = total * minModulePx;
+
+        const modulePx = Math.max(minModulePx, Math.floor(wPx / total));
+        const usedW = modulePx * total;
+        const leftPad = Math.floor((wPx - usedW) / 2);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = wPx;
+        canvas.height = hPx;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.imageSmoothingEnabled = false;
+
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, wPx, hPx);
+
+        ctx.fillStyle = "#000";
+        let x = leftPad + quiet * modulePx;
+        let drawBar = true;
+        for (const mw of modules) {
+          const ww = mw * modulePx;
+          if (drawBar) ctx.fillRect(x, 0, ww, hPx);
+          x += ww;
+          drawBar = !drawBar;
+        }
+
+        return canvas.toDataURL("image/png");
+      }
+
+      function renderBarcodes() {
+        const nodes = document.querySelectorAll(".barcode.code128");
+        for (const n of nodes) {
+          const value = n.getAttribute("data-value") || "";
+          const h = Number(n.getAttribute("data-h") || "6");
+          const w = Number(n.getAttribute("data-w") || "55");
+          try {
+            const png = code128PngDataUrl(value, w, h);
+            if (png) n.innerHTML = '<img alt="" src="' + png + '"/>';
+            else n.innerHTML = code128Svg(value, w, h);
+          } catch (e) {
+            n.innerHTML = "<div style='font-size:3mm;color:#c00'>Barcode error</div>";
+          }
+        }
+      }
+      renderBarcodes();
+    </script>
+  </body>
+</html>`;
+  }
+
+  async function printRecycleBarcodeSheetInIframe(items) {
+    const html = buildRecycleBarcodeSheetHtml(items);
+    const iframe = ensurePrintIframe();
+    iframe.srcdoc = html;
+
+    await new Promise((resolve) => {
+      const done = () => resolve();
+      const t = setTimeout(done, 500);
+      iframe.onload = () => { clearTimeout(t); done(); };
+    });
+
+    try {
+      if (iframe.dataset.wifiOssPrinting === "1") return;
+      iframe.dataset.wifiOssPrinting = "1";
+
+      const doc = iframe.contentDocument;
+      const win = iframe.contentWindow;
+      if (doc) {
+        const imgs = Array.from(doc.images || []);
+        await Promise.race([
+          Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; }))),
+          new Promise(r => setTimeout(r, 800))
+        ]);
+      } else {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      win?.focus?.();
+      win?.print?.();
+      setTimeout(() => { try { delete iframe.dataset.wifiOssPrinting; } catch (e) { iframe.dataset.wifiOssPrinting = "0"; } }, 1500);
+    } catch (e) {
+      try {
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "barcode-labels.html";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        alert("Не успях да пусна print директно. Свалих 'barcode-labels.html' — отвори го и принтирай към PDF.");
+      } catch (e2) {
+        alert("Не успях да отворя/принтирам баркод етикетите. Опитай с друг браузър (Edge/Chrome).");
+      }
+    }
+  }
+
+  function bindRecyclePrintBarcodeButton() {
+    const btn = document.getElementById("_recycleDevicesByTechnician_printBarcode");
+    if (!btn) return false;
+    // Do NOT override the existing "Принтирай баркод" button behavior.
+    // The user wants the new button to handle checkbox printing instead.
+
+    // Add companion button: "Принтирай Всичко"
+    const existingAllBtnId = "_recycleDevicesByTechnician_printAll";
+    if (!document.getElementById(existingAllBtnId)) {
+      const allBtn = document.createElement("button");
+      allBtn.id = existingAllBtnId;
+      allBtn.type = "button";
+      allBtn.className = btn.className || "";
+      // copy inline styles if any, then tweak spacing
+      if (btn.getAttribute("style")) allBtn.setAttribute("style", btn.getAttribute("style"));
+      allBtn.style.marginLeft = "8px";
+      allBtn.innerHTML = 'Принтирай Всичко';
+
+      const anchorA = btn.closest("a");
+      if (anchorA && anchorA.parentElement) {
+        anchorA.parentElement.insertBefore(allBtn, anchorA.nextSibling);
+      } else if (btn.parentElement) {
+        btn.parentElement.insertBefore(allBtn, btn.nextSibling);
+      }
+
+      allBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Like ADB labels: if rows are selected -> print only selected; otherwise print all.
+        const items = getRecycleDevicesForBarcodeSheet({ preferSelected: true });
+        if (!items.length) {
+          alert("Не намерих серийни номера в таблицата.");
+          return;
+        }
+        printRecycleBarcodeSheetInIframe(items);
+      }, true);
+    }
+
+    return true;
+  }
+
+  function ensurePrintIframe() {
+    let iframe = document.getElementById("wifi-oss-labels-print-iframe");
+    if (iframe) return iframe;
+    iframe = document.createElement("iframe");
+    iframe.id = "wifi-oss-labels-print-iframe";
+    iframe.setAttribute("aria-hidden", "true");
+    // Keep it off-screen but still renderable for printing
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+    document.documentElement.appendChild(iframe);
+    return iframe;
+  }
+
+  async function printLabelsInIframe(serialNumbers) {
+    let labelSvgDataUrl = null;
+    try {
+      labelSvgDataUrl = await getLabelTemplateDataUrl();
+    } catch (e) {
+      labelSvgDataUrl = null;
+    }
+
+    if (!labelSvgDataUrl) {
+      alert("Не успях да заредя шаблона за етикета (label.svg/label.png). Провери дали extension-ът е инсталиран правилно.");
+      return;
+    }
+
+    const html = buildA4LabelsHtml(serialNumbers, { labelSvgDataUrl });
+    const iframe = ensurePrintIframe();
+
+    // Use srcdoc where supported
+    iframe.srcdoc = html;
+
+    // Wait for iframe to load enough to have a contentWindow
+    await new Promise((resolve) => {
+      const done = () => resolve();
+      const t = setTimeout(done, 500);
+      iframe.onload = () => { clearTimeout(t); done(); };
+    });
+
+    try {
+      // Guard: avoid double print if onload fires more than once
+      if (iframe.dataset.wifiOssPrinting === "1") return;
+      iframe.dataset.wifiOssPrinting = "1";
+
+      const doc = iframe.contentDocument;
+      const win = iframe.contentWindow;
+
+      // Wait a bit for barcodes (canvas->img) and template image to be ready
+      if (doc) {
+        const imgs = Array.from(doc.images || []);
+        await Promise.race([
+          Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; }))),
+          new Promise(r => setTimeout(r, 800))
+        ]);
+      } else {
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+      win?.focus?.();
+      win?.print?.();
+
+      // allow next manual print after a short delay
+      setTimeout(() => { try { delete iframe.dataset.wifiOssPrinting; } catch (e) { iframe.dataset.wifiOssPrinting = "0"; } }, 1500);
+    } catch (e) {
+      // As a fallback, offer a downloadable HTML that the user can open and print.
+      try {
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "labels.html";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        alert("Не успях да пусна print директно. Свалих 'labels.html' — отвори го и принтирай към PDF.");
+      } catch (e2) {
+        alert("Не успях да отворя/принтирам етикетите. Опитай с друг браузър (Edge/Chrome).");
+      }
+    }
+  }
+
+  function injectLabelsButton({ listId, editColumnsBtnId, printBtnId }) {
+    const listRoot = document.getElementById(listId);
+    if (!listRoot) return false;
+
+    const pagination = listRoot.querySelector(".pagination");
+    if (!pagination) return false;
+
+    if (document.getElementById(printBtnId)) return true;
+
+    const anchor = document.getElementById(editColumnsBtnId);
+    if (!anchor) return false;
+
+    const btn = document.createElement("button");
+    btn.id = printBtnId;
+    btn.className = anchor.className || "icon-only";
+    btn.title = "Етикети (PDF) - всички серийни номера";
+    btn.type = "button";
+    btn.style.display = "inline-flex";
+    btn.style.alignItems = "center";
+    btn.style.justifyContent = "center";
+    btn.style.marginLeft = "8px";
+    btn.style.marginRight = "8px";
+    btn.innerHTML = '<span class="fas fa-print"> </span>';
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      let sns = [];
+      if (listId === RECYCLE_LIST_ID) {
+        // If user selected rows -> print only selected; otherwise print all.
+        const selected = getSelectedSerialNumbersFromList(listId);
+        sns = selected.length ? selected : getSerialNumbersFromList(listId);
+      } else {
+        sns = getSerialNumbersFromList(listId);
+      }
+      if (!sns.length) {
+        alert("Не намерих серийни номера в таблицата.");
+        return;
+      }
+      printLabelsInIframe(sns);
+    });
+
+    // Insert as sibling (same parent as the anchor button) to avoid nesting/overlap issues.
+    if (anchor.parentElement) {
+      anchor.parentElement.insertBefore(btn, anchor.nextSibling);
+    } else {
+      anchor.insertAdjacentElement("afterend", btn);
+    }
+    return true;
+  }
+
+  function startLabelsObservers() {
+    // Many listControls are dynamic; watch DOM and inject when available.
+    const tryInjectAll = () => {
+      const a = injectLabelsButton({
+        listId: WAREHOUSE_LIST_ID,
+        editColumnsBtnId: WAREHOUSE_EDIT_COLUMNS_BTN_ID,
+        printBtnId: WAREHOUSE_PRINT_LABELS_BTN_ID
+      });
+      const b = injectLabelsButton({
+        listId: RECYCLE_LIST_ID,
+        editColumnsBtnId: RECYCLE_EDIT_COLUMNS_BTN_ID,
+        printBtnId: RECYCLE_PRINT_LABELS_BTN_ID
+      });
+      const c = bindRecyclePrintBarcodeButton();
+      return a && b && c;
+    };
+
+    if (tryInjectAll()) return;
+
+    const obs = new MutationObserver(() => { tryInjectAll(); });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
+  // -----------------------------------------
+  // Device functions dialog: checkbox 2-column
+  // -----------------------------------------
+  const DEVICE_FUNCTIONS_SELECT_ID = "_deviceFunctions_DeviceFunction";
+
+  function guessDeviceFunctionGroup(value, text) {
+    const v = String(value || "").toLowerCase();
+    const t = String(text || "").toLowerCase();
+    if (v.includes("adb") || t.includes("adb")) return "adb";
+    if (v.includes("hybrid") || t.includes("hybrid")) return "hybrid";
+    return "other";
+  }
+
+  function setChosenValue(selectEl, value) {
+    if (!selectEl) return;
+    selectEl.value = value || "";
+    // Trigger any dependent logic on the page (chosen, ajax-updaters, etc.)
+    selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+    try { selectEl.dispatchEvent(new Event("chosen:updated", { bubbles: true })); } catch (e) {}
+    updateChosenDisplay(selectEl);
+  }
+
+  function buildDeviceFunctionsCheckboxUi(selectEl) {
+    if (!selectEl || selectEl.dataset.wifiOssAssistantEnhanced === "1") return false;
+
+    const container = selectEl.closest(".half-row") || selectEl.parentElement;
+    if (!container) return false;
+
+    // Avoid double-inject if the dialog re-renders.
+    if (container.querySelector(".wifi-oss-devicefn-ui")) {
+      selectEl.dataset.wifiOssAssistantEnhanced = "1";
+      return true;
+    }
+
+    const options = Array.from(selectEl.options || []);
+    if (!options.length) return false;
+
+    // Hide chosen UI if present; keep the real <select> for form submission / existing logic.
+    const chosenId = selectEl.id ? `${selectEl.id}_chosen` : null;
+    const chosen = chosenId ? document.getElementById(chosenId) : null;
+    if (chosen) chosen.style.display = "none";
+    selectEl.style.display = "none";
+
+    const wrap = document.createElement("div");
+    wrap.className = "wifi-oss-devicefn-ui";
+    wrap.style.marginTop = "6px";
+
+    const grid = document.createElement("div");
+    grid.style.display = "grid";
+    grid.style.gridTemplateColumns = "1fr 1fr";
+    grid.style.gap = "12px";
+
+    const colAdb = document.createElement("div");
+    const colHybrid = document.createElement("div");
+
+    const hAdb = document.createElement("div");
+    hAdb.textContent = "ADB модели";
+    hAdb.style.fontWeight = "600";
+    hAdb.style.marginBottom = "6px";
+
+    const hHybrid = document.createElement("div");
+    hHybrid.textContent = "Hybrid модели";
+    hHybrid.style.fontWeight = "600";
+    hHybrid.style.marginBottom = "6px";
+
+    colAdb.appendChild(hAdb);
+    colHybrid.appendChild(hHybrid);
+
+    const listAdb = document.createElement("div");
+    const listHybrid = document.createElement("div");
+    listAdb.style.display = "grid";
+    listAdb.style.gap = "6px";
+    listHybrid.style.display = "grid";
+    listHybrid.style.gap = "6px";
+
+    const name = `wifi-oss-devicefn-${Math.random().toString(16).slice(2)}`;
+
+    const makeItem = (opt) => {
+      const value = opt.value;
+      const text = (opt.textContent || "").trim();
+      if (!value) return null; // skip "Всички"/empty option; user can uncheck to clear
+
+      const label = document.createElement("label");
+      label.style.display = "flex";
+      label.style.alignItems = "center";
+      label.style.gap = "8px";
+      label.style.cursor = "pointer";
+      label.style.userSelect = "none";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.name = name;
+      cb.value = value;
+      cb.checked = selectEl.value === value;
+
+      cb.addEventListener("change", () => {
+        const all = wrap.querySelectorAll(`input[type="checkbox"][name="${name}"]`);
+        // Make it mutually exclusive: only one can stay checked.
+        if (cb.checked) {
+          all.forEach(x => { if (x !== cb) x.checked = false; });
+          setChosenValue(selectEl, cb.value);
+        } else {
+          // If user unchecks the current selection -> clear select.
+          setChosenValue(selectEl, "");
+        }
+      });
+
+      const span = document.createElement("span");
+      span.textContent = text;
+
+      label.appendChild(cb);
+      label.appendChild(span);
+      return label;
+    };
+
+    for (const opt of options) {
+      const item = makeItem(opt);
+      if (!item) continue;
+      const group = guessDeviceFunctionGroup(opt.value, opt.textContent);
+      if (group === "adb") listAdb.appendChild(item);
+      else if (group === "hybrid") listHybrid.appendChild(item);
+      else listAdb.appendChild(item); // fallback
+    }
+
+    colAdb.appendChild(listAdb);
+    colHybrid.appendChild(listHybrid);
+    grid.appendChild(colAdb);
+    grid.appendChild(colHybrid);
+    wrap.appendChild(grid);
+
+    // Keep checkboxes in sync if the page changes the select from elsewhere.
+    selectEl.addEventListener("change", () => {
+      const all = wrap.querySelectorAll(`input[type="checkbox"][name="${name}"]`);
+      all.forEach(x => { x.checked = (x.value === selectEl.value); });
+    });
+
+    container.appendChild(wrap);
+    selectEl.dataset.wifiOssAssistantEnhanced = "1";
+    return true;
+  }
+
+  function startDeviceFunctionsObserver() {
+    const tryInject = () => {
+      const selectEl = document.getElementById(DEVICE_FUNCTIONS_SELECT_ID);
+      if (!selectEl) return false;
+      return buildDeviceFunctionsCheckboxUi(selectEl);
+    };
+
+    if (tryInject()) return;
+    const obs = new MutationObserver(() => { tryInject(); });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
+  // -----------------------------------------
+  // Swap Shop Material: quick-fill buttons
+  // -----------------------------------------
+  const SWAP_MATERIAL_ROOT_ID = "_wflowSwapShopMaterial";
+  const SWAP_MATERIAL_INPUT_ID = "_wflowSwapShopMaterial_MaterialId";
+
+  const SWAP_MATERIAL_MODELS_DEFAULT = [
+    { id: "1-000-055-165", name: "TP Link NX220v" },
+    { id: "1-000-057-334", name: "ZTE G5TS" },
+    { id: "1-000-059-633", name: "TP-Link NX520" },
+    { id: "1-200-014-914", name: "HX520 Home" },
+    { id: "1-200-014-928", name: "K562E-10 Home" },
+    { id: "1-200-017-460", name: "Modem ADB 2220" },
+    { id: "BG108322", name: "DTH Conax Smart Card" },
+    { id: "BG108445", name: "DTH CAM Neotion CI+ 1.3 CP" },
+    { id: "BG108892", name: "STB ZXV B700v5" },
+    { id: "BG110328", name: "DTH CAM Neotion DVB-CI Plus CSP" },
+    { id: "BG111732", name: "Huawei B310s" },
+    { id: "BG112070", name: "CAM Module for access Conax" },
+    { id: "BG112071", name: "CAM module chipset pairing" },
+    { id: "BG112072", name: "CAM module Neotion DVB-CI NP Conax NKE1" },
+    { id: "BG112073", name: "CAM_sDTV CI+ CP OP (TAG)" },
+    { id: "BG112076", name: "Conax Smart Card CH" },
+    { id: "BG112079", name: "LED CAM CI+ V1.3 CSP Neotion modul" },
+    { id: "BG112102", name: "Cable Modem Technicolor TC7200.20 Docsis" },
+    { id: "BG112411", name: "DTH_SmarCAM-3.5 MTel Conax Full CI+ 1.3" },
+    { id: "BG112486", name: "Modem Technicolor7200 " },
+    { id: "BG112487", name: "Modem Technicolor7200" },
+    { id: "BG112880", name: "Huawei B310s-22 generic" },
+    { id: "BG114215", name: "DTV Smart Card" },
+    { id: "BG114225", name: "STB ZXV B700v5" },
+    { id: "BG114228", name: "CAM_sDTV CI+ CP OP" },
+    { id: "BG114230", name: "Huawei B310s" },
+    { id: "BG114581", name: "DTH Smart Card" },
+    { id: "BG114877", name: "ModemTechnicolor7200" },
+    { id: "BG114915", name: "DTH STB KAON KSTB1001" },
+    { id: "BG115630", name: "Kaon KSTB5020" },
+    { id: "BG115631", name: "Kaon KSTB5019" },
+    { id: "BG115763", name: "Huawei B311 White" },
+    { id: "BG116081", name: "Huawei B311 Black" },
+    { id: "BG116102", name: "KSTB6106 Zapper" },
+    { id: "BG117174", name: "Huawei GPON HG8145V5" },
+    { id: "BG117336", name: "Deco M4, AC1200, 2xGbE, MU-MIMO" },
+    { id: "BG118542", name: "KSTB5019 XploreTV" },
+    { id: "BG118543", name: "KSTB6106 Zapper" },
+    { id: "BG118544", name: "KSTB5020 XploreTV" },
+    { id: "BG118550", name: "Modem Technicolor7200" },
+    { id: "BG118551", name: "Deco M4, AC1200, 2xGbE, MU-MIMO" },
+    { id: "BG118552", name: "Archer A6/AC1200/DB LVA" },
+    { id: "BG118560", name: "Huawei GPON HG8145V5" },
+    { id: "BG118562", name: "CAM_sDTV CI+ CP OP (TAG) A1" },
+    { id: "BG118563", name: "GPON CPE ZXHN F670V" },
+    { id: "BG118564", name: "GPON CPE ZXHN F660" },
+    { id: "BG118831", name: "ZTE MF283U" },
+    { id: "BG118857", name: "Cube ZTE 801A" },
+    { id: "BG119442", name: "ZTE MF293N" },
+    { id: "BG119477", name: "Modem Technicolor7200" },
+    { id: "BG121150", name: "TP-Link EX220" },
+    { id: "BG121153", name: "TP-link TL-WR850N" },
+    { id: "BG121376", name: "TP-Link EX220 Home" },
+    { id: "BG121561", name: "ZTE MC888A" },
+    { id: "BG121678", name: "B866V2F02 (AndroidTV)" },
+    { id: "BG121679", name: "DV9161 (AndroidTV)" },
+    { id: "BG121961", name: "DTH Nagra DTS3460" },
+    { id: "BG122933", name: "GPON CPE ZXHN F660OP" },
+    { id: "BG122944", name: "GPON ONT ZXHN F6600R" },
+    { id: "BG123357", name: "ZTE ZXHN H3601P" },
+    { id: "BG123451", name: "ZTE MF296R" },
+    { id: "BG123580", name: "ZTE G5B1" }
+  ];
+
+  // This list is controlled dynamically from the dashboard.
+  let swapMaterialModels = SWAP_MATERIAL_MODELS_DEFAULT;
+  let swapMaterialModelsSig = SWAP_MATERIAL_MODELS_DEFAULT.map(m => String(m.id || "")).join(",");
+  const SWAP_MATERIAL_DASHBOARD_URLS = [
+    "https://oss-assistant.onrender.com/api/models"
+  ];
+  let __swapDashboardInFlight = false;
+  let __swapDashboardPollStarted = false;
+
+  async function refreshSwapMaterialModelsFromDashboard() {
+    if (__swapDashboardInFlight) return false;
+    __swapDashboardInFlight = true;
+    try {
+      let rawModels = null;
+      for (const url of SWAP_MATERIAL_DASHBOARD_URLS) {
+        try {
+          // IMPORTANT: do the fetch from the extension background to avoid HTTPS page -> HTTP mixed-content blocking.
+          const resp = await new Promise((resolve) => {
+            try {
+              if (!chrome?.runtime?.sendMessage) return resolve({ ok: false, error: "chrome.runtime.sendMessage unavailable" });
+              chrome.runtime.sendMessage({ type: "swapMaterial.fetchModels", url }, (r) => {
+                // Capture runtime errors (service worker not running, permissions, etc.)
+                const lastErr = chrome.runtime.lastError?.message;
+                if (lastErr) return resolve({ ok: false, error: lastErr });
+                resolve(r);
+              });
+            } catch (e) {
+              resolve({ ok: false, error: String(e?.message || e) });
+            }
+          });
+          if (!resp?.ok) {
+            console.warn("[swapMaterial] dashboard fetch failed:", url, resp?.error);
+            continue;
+          }
+          const data = resp.data;
+          rawModels = data?.models;
+          if (Array.isArray(rawModels)) break;
+        } catch (e) {}
+      }
+      if (!Array.isArray(rawModels)) return false;
+
+      const models = rawModels
+        .map(m => ({
+          id: String(m?.id ?? "").replace(/\D+/g, ""),
+          name: String(m?.name ?? "").trim(),
+          image: String(m?.image ?? "").trim(),
+          category: String(m?.category ?? "").trim().toLowerCase()
+        }))
+        .filter(m => m.id)
+        .map(m => ({
+          id: m.id,
+          name: m.name || m.id,
+          image: m.image || "",
+          category: (m.category === "internet" || m.category === "tv" || m.category === "other") ? m.category : ""
+        }));
+
+      // Include important fields so category/image/name updates are detected too.
+      const sig = models.map(m => `${m.id}|${m.name}|${m.image}|${m.category || ""}`).join(",");
+      if (!sig) return false;
+      if (sig === swapMaterialModelsSig) return false;
+
+      swapMaterialModels = models;
+      swapMaterialModelsSig = sig;
+      console.info("[swapMaterial] models updated:", models.length);
+      return true;
+    } catch (e) {
+      return false;
+    } finally {
+      __swapDashboardInFlight = false;
+    }
+  }
+
+  function startSwapMaterialDashboardPolling() {
+    if (__swapDashboardPollStarted) return;
+    __swapDashboardPollStarted = true;
+
+    const tick = async () => {
+      const changed = await refreshSwapMaterialModelsFromDashboard();
+      if (!changed) return;
+
+      const root = document.getElementById("_wflowSwapShopMaterial");
+      if (!root) return;
+
+      const oldPanel = root.querySelector(".wifi-oss-swap-material-panel");
+      if (oldPanel) oldPanel.remove();
+
+      // Re-render with updated swapMaterialModels
+      try { injectSwapMaterialButtons(); } catch (e) {}
+    };
+
+    // Initial load and then periodic updates.
+    tick();
+    setInterval(tick, 30000);
+  }
+
+  function setSwapMaterialInputValue(el, value) {
+    if (!el) return;
+    const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : null;
+    const desc = proto ? Object.getOwnPropertyDescriptor(proto, "value") : null;
+    if (desc?.set) desc.set.call(el, value);
+    else el.value = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function normalizeSwapMaterialId(id) {
+    const raw = String(id || "").trim();
+    // Keep only digits in the Material ID.
+    // Examples:
+    // - "1-000-055-165" -> "1000055165"
+    // - "BG108322" -> "108322"
+    // - "118550_DISMANTLED" -> "118550"
+    return raw.replace(/\D+/g, "");
+  }
+
+  function attachSwapMaterialRewriteRule(input) {
+    if (!input) return;
+    if (input.dataset.wifiOssSwapRewriteAttached === "1") return;
+    input.dataset.wifiOssSwapRewriteAttached = "1";
+
+    // Rewrite rules by normalized MaterialId (BG prefix removed, dashes removed).
+    // If a value matches a key here, it gets rewritten to the mapped value.
+    const rewriteMap = new Map([
+      // Technicolor group -> 119477
+      ["112102", "119477"],
+      ["112486", "119477"],
+      ["112487", "119477"],
+      ["114877", "119477"],
+      ["118550", "119477"],
+      // Huawei B310 group -> 111732
+      ["112880", "111732"],
+      ["114230", "111732"],
+      // Kaon KSTB5020 group -> 118544
+      ["115630", "118544"],
+      // Kaon KSTB5019 group -> 118542
+      ["115631", "118542"],
+      // Huawei GPON HG8145V5 group -> 118560
+      ["117174", "118560"],
+      // Kaon KSTB6106 DVB-C Zapper group -> 118543
+      ["116102", "118543"],
+      // STB ZXV B700v5 group -> 114225
+      ["108892", "114225"],
+      // TP-LINK Deco M4 group -> 118551
+      ["117336", "118551"]
+    ]);
+
+    const maybeRewrite = () => {
+      const curRaw = String(input.value || "").trim();
+      if (!curRaw) return;
+      const cur = normalizeSwapMaterialId(curRaw);
+      // Always sanitize input so nothing except digits remains.
+      if (cur && curRaw !== cur) {
+        setSwapMaterialInputValue(input, cur);
+        return;
+      }
+      const to = rewriteMap.get(cur);
+      if (!to) return;
+      if (cur === to) return;
+      setSwapMaterialInputValue(input, to);
+    };
+
+    input.addEventListener("input", maybeRewrite, true);
+    input.addEventListener("change", maybeRewrite, true);
+    // Also sanitize/rewrite initial value on page load.
+    maybeRewrite();
+  }
+
+  function autoContinueSwapMaterialIfReady(root, input) {
+    if (!root || !input) return;
+    if (root.dataset.wifiOssSwapAutoContinueDone === "1") return;
+    const raw = String(input.value || "").trim();
+    const normalized = normalizeSwapMaterialId(raw);
+    if (!normalized) return;
+
+    const continueBtn = document.getElementById("_wflowSwapShopMaterial_save")
+      || root.querySelector("#_wflowSwapShopMaterial_save")
+      || root.querySelector("button[name='save']");
+    if (!continueBtn) return;
+
+    // Ensure field value is normalized before submit.
+    if (raw !== normalized) setSwapMaterialInputValue(input, normalized);
+    root.dataset.wifiOssSwapAutoContinueDone = "1";
+    try { continueBtn.click(); } catch (e) {}
+  }
+
+  function injectSwapMaterialButtons() {
+    const root = document.getElementById(SWAP_MATERIAL_ROOT_ID);
+    if (!root) return false;
+    if (root.querySelector(".wifi-oss-swap-material-panel")) return true;
+
+    const input = document.getElementById(SWAP_MATERIAL_INPUT_ID);
+    if (!input) return false;
+    // Lock manual typing; value is controlled by quick buttons + rewrite rules.
+    input.readOnly = true;
+    input.setAttribute("aria-readonly", "true");
+    input.style.backgroundColor = "#f3f3f3";
+    input.style.cursor = "not-allowed";
+    attachSwapMaterialRewriteRule(input);
+    // If we came from the recycle flow (Android TV & ZTE IPTV), prefill based on serial.
+    try { applyRecycleCategoryMaterialPreset(input); } catch (e) {}
+    autoContinueSwapMaterialIfReady(root, input);
+
+    const panel = document.createElement("div");
+    panel.className = "wifi-oss-swap-material-panel";
+    panel.style.marginTop = "12px";
+    panel.style.paddingTop = "10px";
+    panel.style.borderTop = "1px solid #ddd";
+
+    const title = document.createElement("div");
+    title.textContent = "Бърз избор на Material Id";
+    title.style.fontWeight = "600";
+    title.style.marginBottom = "8px";
+    panel.appendChild(title);
+
+    const searchWrap = document.createElement("div");
+    searchWrap.style.marginBottom = "8px";
+
+    const search = document.createElement("input");
+    search.type = "text";
+    search.placeholder = "Търси по име на устройство…";
+    search.autocomplete = "off";
+    search.style.width = "100%";
+    search.style.maxWidth = "520px";
+    search.style.padding = "6px 8px";
+    search.style.border = "1px solid #ccc";
+    search.style.borderRadius = "6px";
+    searchWrap.appendChild(search);
+    panel.appendChild(searchWrap);
+
+    let activeCategory = "all";
+
+    const categorizeSwapMaterial = (name) => {
+      const n = String(name || "").toLowerCase();
+      // Forced "Other" (cards/CAM modules), even if text contains "dth".
+      if (
+        n.includes("conax smart card") ||
+        n.includes("cam neotion ci+ 1.3 cp") ||
+        n.includes("cam neotion dvb-ci plus csp") ||
+        n.includes("smarcam-3.5") ||
+        n.includes("dth smart card")
+      ) return "other";
+
+      // Internet-ish
+      if (
+        n.includes("router") ||
+        n.includes("modem") ||
+        n.includes("gpon") ||
+        n.includes("deco") ||
+        /\b5g\b/.test(n) ||
+        n.includes("home wifi") ||
+        n.includes("wi-fi") ||
+        n.includes("wifi") ||
+        n.includes("mf283u") ||
+        n.includes("mf293n") ||
+        n.includes("mf296r") ||
+        n.includes("mc888a") ||
+        n.includes("mc801a") ||
+        n.includes("zxhn h3601p") ||
+        n.includes("ex220") ||
+        n.includes("wr850n") ||
+        n.includes("g5b1") ||
+        n.includes("cube zte") ||
+        n.includes("b311") ||
+        n.includes("b310") ||
+        n.includes("nx220") ||
+        n.includes("nx520") ||
+        n.includes("g5ts") ||
+        n.includes("hx520") ||
+        n.includes("k562e") ||
+        n.includes("archer a6")
+      ) return "internet";
+
+      // TV-ish
+      if (
+        n.includes("stb") ||
+        n.includes("dth") ||
+        n.includes("androidtv") ||
+        n.includes("kaon") ||
+        n.includes("nagra") ||
+        n.includes("zapper")
+      ) return "tv";
+
+      // Non-device accessories/cards/modules -> Other
+      if (
+        n.includes("smart card") ||
+        n.includes("cam") ||
+        n.includes("conax") ||
+        n.includes("card")
+      ) return "other";
+
+      return "other";
+    };
+
+    const catRow = document.createElement("div");
+    catRow.style.display = "flex";
+    catRow.style.flexWrap = "wrap";
+    catRow.style.gap = "6px";
+    catRow.style.marginBottom = "10px";
+    catRow.style.alignItems = "center";
+
+    const catLabel = document.createElement("div");
+    catLabel.textContent = "Сортирай:";
+    catLabel.style.fontWeight = "600";
+    catLabel.style.color = "#333";
+    catLabel.style.marginRight = "4px";
+    catRow.appendChild(catLabel);
+
+    const catButtons = new Map();
+
+    const makeCatBtn = (id, label) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.style.padding = "5px 10px";
+      b.style.borderRadius = "999px";
+      b.style.border = "1px solid #4a4a4a";
+      b.style.background = id === "all" ? "#4a4a4a" : "#585858";
+      b.style.color = "#fff";
+      b.style.cursor = "pointer";
+      b.style.fontSize = "13px";
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        activeCategory = id;
+        // update visuals
+        Array.from(catRow.querySelectorAll("button")).forEach(x => {
+          const xid = x.dataset.wifiOssCat || "";
+          x.style.background = (xid === activeCategory) ? "#4a4a4a" : "#585858";
+        });
+        applyFilter();
+      });
+      b.dataset.wifiOssCat = id;
+      b.dataset.wifiOssCatLabel = label;
+      catButtons.set(id, b);
+      return b;
+    };
+
+    catRow.appendChild(makeCatBtn("all", "Всички"));
+    catRow.appendChild(makeCatBtn("internet", "Интернет"));
+    catRow.appendChild(makeCatBtn("tv", "Телевизия"));
+    catRow.appendChild(makeCatBtn("other", "Други"));
+    panel.appendChild(catRow);
+
+    const grid = document.createElement("div");
+    grid.style.display = "grid";
+    // Fixed layout: 10 devices per row
+    grid.style.gridTemplateColumns = "repeat(10, minmax(0, 1fr))";
+    grid.style.gap = "6px";
+
+    const dashboardOrigin = "https://oss-assistant.onrender.com";
+
+    const hydrateRemoteImages = async () => {
+      const imgs = Array.from(grid.querySelectorAll("img[data-remote-url]"));
+      for (const img of imgs) {
+        const url = img.getAttribute("data-remote-url") || "";
+        if (!url) continue;
+        const resp = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ type: "swapMaterial.fetchImageDataUrl", url }, (r) => {
+              const lastErr = chrome.runtime.lastError?.message;
+              if (lastErr) return resolve({ ok: false, error: lastErr });
+              resolve(r);
+            });
+          } catch (e) {
+            resolve({ ok: false, error: String(e?.message || e) });
+          }
+        });
+        if (resp?.ok && resp.dataUrl) {
+          img.src = resp.dataUrl;
+          img.removeAttribute("data-remote-url");
+        }
+      }
+    };
+
+    for (const m of swapMaterialModels) {
+      const normalizedId = normalizeSwapMaterialId(m.id);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn-sm btn-light";
+      b.style.textAlign = "left";
+      b.style.padding = "5px 6px";
+      b.style.background = "#585858";
+      b.style.borderColor = "#4a4a4a";
+      b.style.color = "#fff";
+      // Prefer image from dashboard config; fallback to packaged images.
+      let imgHtml = "";
+      const remote = String(m.image || "").trim();
+      if (remote) {
+        const abs = /^https?:\/\//i.test(remote)
+          ? remote
+          : `${dashboardOrigin}${remote.startsWith("/") ? "" : "/"}${remote}`;
+        imgHtml = `<img alt="" data-remote-url="${escapeHtml(abs)}" style="width:100%;object-fit:contain;background:#4f4f4f;border-radius:6px;display:block;margin-bottom:6px" />`;
+      } else {
+        const imgPath = deviceImageForModel(m.name);
+        const imgUrl = imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+          ? chrome.runtime.getURL(imgPath)
+          : null;
+        imgHtml = imgUrl
+          ? `<img alt="" src="${escapeHtml(imgUrl)}" style="width:100%;object-fit:contain;background:#4f4f4f;border-radius:6px;display:block;margin-bottom:6px" />`
+          : "";
+      }
+      b.innerHTML = `${imgHtml}<div style="font-weight:600;font-size:12px;line-height:1.15;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:2.3em">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#e6e6e6;line-height:1.1">${escapeHtml(normalizedId)}</div>`;
+      b.dataset.wifiOssSwapMaterialName = String(m.name || "").toLowerCase();
+      b.dataset.wifiOssSwapMaterialCategory = (m.category === "internet" || m.category === "tv" || m.category === "other")
+        ? m.category
+        : categorizeSwapMaterial(m.name);
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setSwapMaterialInputValue(input, normalizedId);
+        try { input.focus(); input.select?.(); } catch (e2) {}
+      });
+      b.addEventListener("mouseenter", () => { b.style.background = "#4a4a4a"; });
+      b.addEventListener("mouseleave", () => { b.style.background = "#585858"; });
+      grid.appendChild(b);
+    }
+
+    hydrateRemoteImages();
+
+    const updateCategoryCounts = () => {
+      const buttons = Array.from(grid.querySelectorAll("button"));
+      const total = buttons.length;
+      let internet = 0;
+      let tv = 0;
+      let other = 0;
+      for (const btn of buttons) {
+        const c = btn.dataset.wifiOssSwapMaterialCategory || "other";
+        if (c === "internet") internet += 1;
+        else if (c === "tv") tv += 1;
+        else other += 1;
+      }
+      const setCount = (id, count) => {
+        const cb = catButtons.get(id);
+        if (!cb) return;
+        const lbl = cb.dataset.wifiOssCatLabel || cb.textContent || "";
+        cb.textContent = `${lbl} - (${count})`;
+      };
+      setCount("all", total);
+      setCount("internet", internet);
+      setCount("tv", tv);
+      setCount("other", other);
+    };
+    updateCategoryCounts();
+
+    panel.appendChild(grid);
+    root.appendChild(panel);
+
+    const applyFilter = () => {
+      const q = String(search.value || "").trim().toLowerCase();
+      const buttons = grid.querySelectorAll("button");
+      buttons.forEach(btn => {
+        const n = (btn.dataset.wifiOssSwapMaterialName || "");
+        const c = (btn.dataset.wifiOssSwapMaterialCategory || "other");
+        // Ако има текст в търсачката, търсим глобално (игнорираме категорията).
+        // Категориите действат само когато търсачката е празна.
+        const okCat = q ? true : ((activeCategory === "all") || (c === activeCategory));
+        const okQuery = !q || n.includes(q);
+        btn.style.display = (okCat && okQuery) ? "" : "none";
+      });
+    };
+    search.addEventListener("input", applyFilter);
+    // focus for faster workflow
+    try { search.focus(); } catch (e) {}
+    // initial apply (category defaults to "all")
+    applyFilter();
+
+    return true;
+  }
+
+  function startSwapMaterialObserver() {
+    const tryInject = () => injectSwapMaterialButtons();
+    if (tryInject()) return;
+    const obs = new MutationObserver(() => { tryInject(); });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
+  // -----------------------------------------
+  // Recycle device entry: Category + validation
+  // -----------------------------------------
+  const RECYCLE_ENTRY_ROOT_ID = "_wflowEnterDeviceDataForRecycle";
+  const RECYCLE_ENTRY_SERIAL_INPUT_ID = "_wflowEnterDeviceDataForRecycle_SerialNo";
+  const RECYCLE_ENTRY_CONTINUE_BTN_ID = "_wflowEnterDeviceDataForRecycle_save";
+  const RECYCLE_ENTRY_PANEL_CLASS = "wifi-oss-recycle-category-panel";
+  const RECYCLE_ENTRY_SELECTED_KEY = "wifi_oss_recycle_entry_category";
+  const RECYCLE_ENTRY_SELECTED_DATE_KEY = "wifi_oss_recycle_entry_category_date";
+  const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
+  const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
+
+  function localDateKey(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function isValidImeiLuhn(imei) {
+    const s = String(imei || "").trim();
+    if (!/^\d{15}$/.test(s)) return false;
+    let sum = 0;
+    for (let i = 0; i < 15; i++) {
+      let d = s.charCodeAt(i) - 48;
+      // Double every second digit from the right (i=13,11,...)
+      if ((i % 2) === 1) {
+        d *= 2;
+        if (d > 9) d -= 9;
+      }
+      sum += d;
+    }
+    return (sum % 10) === 0;
+  }
+
+  function validateRecycleSerial(categoryId, serialRaw) {
+    const s = String(serialRaw || "").trim();
+    if (!s) return { ok: false, msg: "Въведи сериен номер." };
+    const upper = s.toUpperCase();
+    const macWithSeparators = /^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/.test(upper);
+    // Important: do NOT treat 12 digits-only as MAC.
+    const macPlainHex = /^[0-9A-F]{12}$/.test(upper) && /[A-F]/.test(upper);
+    const macPlainLettersCount = (upper.match(/[A-F]/g) || []).length;
+
+    // XPLORE & Zapper: must be MAC (concatenated, no separators), must contain letters, and >2 letters.
+    if (categoryId === "xplore_zapper") {
+      if (macWithSeparators) return { ok: false, msg: "MAC адресът трябва да е слят (без ':' или '-')." };
+      if (!/^[0-9A-F]{12}$/.test(upper)) return { ok: false, msg: "Серийният номер трябва да е MAC адрес." };
+      if (!/[A-F]/.test(upper)) return { ok: false, msg: "MAC адресът трябва да съдържа букви (A-F), не може да е само цифри." };
+      if (macPlainLettersCount <= 2) return { ok: false, msg: "MAC адресът трябва да има повече от 2 букви (A-F)." };
+      return { ok: true, msg: "" };
+    }
+
+    // Modems: allow a single dash at position 6 for SAAP/SAPP formats.
+    // Rules:
+    // - accept if starts with SAAP or SAPP AND has '-' as 6th character
+    // - OR accept if starts with 0099
+    // - otherwise reject
+    if (categoryId === "modems") {
+      if (upper.startsWith("0099")) {
+        if (!/^\d+$/.test(s)) return { ok: false, msg: "Невалиден сериен номер за Модеми (0099... трябва да е само цифри)." };
+        return { ok: true, msg: "" };
+      }
+      const sa = (upper.startsWith("SAAP") || upper.startsWith("SAPP"));
+      if (sa) {
+        // SAAP/SAPP: allow letters/digits, and optionally a single dash ONLY at position 6.
+        if (s.includes("-")) {
+          if (s.length < 6 || s[5] !== "-" || (s.split("-").length - 1) !== 1) {
+            return { ok: false, msg: "Невалиден сериен номер за Модеми (ако има '-', трябва да е само един и да е на 6-ти символ)." };
+          }
+          if (!/^[A-Za-z0-9]{5}-[A-Za-z0-9]+$/.test(s)) return { ok: false, msg: "Невалиден сериен номер за Модеми." };
+          return { ok: true, msg: "" };
+        }
+        if (!/^[A-Za-z0-9]+$/.test(s)) return { ok: false, msg: "Невалиден сериен номер за Модеми." };
+        return { ok: true, msg: "" };
+      }
+
+      // Any other modem serial can be accepted if it has '-' at the 6th character.
+      if (s.length >= 6 && s[5] === "-") {
+        if (!/^[A-Za-z0-9]{5}-[A-Za-z0-9]+$/.test(s)) return { ok: false, msg: "Невалиден сериен номер за Модеми." };
+        return { ok: true, msg: "" };
+      }
+
+      return { ok: false, msg: "Невалиден сериен номер за Модеми." };
+    }
+
+    // Disallow special characters: allow only letters and digits.
+    // This blocks ".", "!", ":" and any other non-alphanumeric symbol.
+    if (!/^[A-Za-z0-9]+$/.test(s)) return { ok: false, msg: "Серийният номер не трябва да съдържа специални символи." };
+
+    // NOTE: These rules are tightened per category. Easy to adjust further.
+    if (categoryId === "android_iptv") {
+      // Reject MAC addresses (with separators or plain 12 hex chars with A-F letters).
+      if (macWithSeparators || macPlainHex) return { ok: false, msg: "Серийният номер не може да е MAC адрес." };
+      // Letters are allowed ONLY if the serial starts with "BG".
+      if (!upper.startsWith("BG")) {
+        if (/[A-Za-z]/.test(s)) return { ok: false, msg: "Букви в серийния номер не са позволени" };
+        // Without BG prefix, require digits-only.
+        if (!/^\d+$/.test(s)) return { ok: false, msg: "Серийният номер трябва да е само цифри" };
+      }
+    } else if (categoryId === "netbox") {
+      // Netbox: IMEI only (15 digits) with Luhn verification.
+      if (!/^\d{15}$/.test(s)) return { ok: false, msg: "За Netbox серийният номер трябва да е IMEI." };
+      if (!isValidImeiLuhn(s)) return { ok: false, msg: "Невалиден IMEI (Luhn проверката не минава)." };
+    } else if (categoryId === "routers") {
+      if (upper.startsWith("ZTE")) {
+        if (s.length !== 15) return { ok: false, msg: "Невалиден сериен номер за Рутери (ако започва с ZTE трябва да е точно 15 символа)." };
+      } else {
+        if (s.length !== 13) return { ok: false, msg: "Невалиден сериен номер за Рутери (трябва да е точно 13 символа)." };
+      }
+    } else if (categoryId === "gpon") {
+      // GPON:
+      // - accept if starts with 5A54 or 4857
+      // - otherwise accept only if starts with ZTE AND is exactly 12 chars long
+      if (upper.startsWith("5A54") || upper.startsWith("4857")) {
+        // ok
+      } else if (upper.startsWith("ZTEK") && s.length === 15) {
+        // ok
+      } else {
+        return { ok: false, msg: "Невалиден сериен номер за GPON." };
+      }
+    } else if (categoryId === "austrian") {
+      if (s.length < 16) return { ok: false, msg: "Невалиден сериен номер за Австрийски (трябва да е 16 или повече символи)." };
+    } else if (categoryId === "dth_kaon_nagra") {
+      if (!/^\d{11}$/.test(s)) return { ok: false, msg: "Невалиден сериен номер за DTH Kaon & Nagra." };
+    }
+    return { ok: true, msg: "" };
+  }
+
+  function injectRecycleEntryCategoryPanel() {
+    const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
+    if (!root) return false;
+    if (root.querySelector(`.${RECYCLE_ENTRY_PANEL_CLASS}`)) return true;
+
+    const serialInput = root.querySelector(`#${RECYCLE_ENTRY_SERIAL_INPUT_ID}`) || document.getElementById(RECYCLE_ENTRY_SERIAL_INPUT_ID);
+    if (!serialInput) return false;
+
+    const continueBtn = root.querySelector(`#${RECYCLE_ENTRY_CONTINUE_BTN_ID}`) || document.getElementById(RECYCLE_ENTRY_CONTINUE_BTN_ID);
+    if (!continueBtn) return false;
+
+    const fieldset = root.querySelector("fieldset") || root;
+    const serialRow = serialInput.closest(".row") || serialInput.parentElement;
+    const serialMsg = document.createElement("div");
+    serialMsg.id = "wifi-oss-recycle-serial-msg";
+    serialMsg.style.marginLeft = "10px";
+    serialMsg.style.fontWeight = "600";
+    serialMsg.style.color = "#b00020";
+    serialMsg.style.fontSize = "13px";
+    serialMsg.style.display = "none";
+    if (serialRow) {
+      // Keep layout on one line when possible.
+      if (serialRow.style && !serialRow.style.display) serialRow.style.display = "flex";
+      if (serialRow.style && !serialRow.style.gap) serialRow.style.gap = "8px";
+      if (serialRow.style && !serialRow.style.alignItems) serialRow.style.alignItems = "center";
+      serialRow.appendChild(serialMsg);
+    }
+
+    const panel = document.createElement("div");
+    panel.className = RECYCLE_ENTRY_PANEL_CLASS;
+    panel.style.marginTop = "10px";
+
+    const title = document.createElement("div");
+    title.textContent = "Категория:";
+    title.style.fontWeight = "600";
+    title.style.color = "#333";
+    title.style.marginBottom = "6px";
+    panel.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.style.display = "grid";
+    grid.style.gridTemplateColumns = "repeat(8, minmax(90px, 1fr))";
+    grid.style.gap = "6px";
+    grid.style.maxWidth = "100%";
+    grid.style.overflow = "hidden";
+
+    const categories = [
+      { id: "android_iptv", label: "Android TV & ZTE IPTV", hintModelName: "DV9161 (AndroidTV)", imagePath: "images/categories/android_iptv.webp" },
+      { id: "xplore_zapper", label: "XPLORE & Zapper", hintModelName: "Zapper", imagePath: "images/categories/xplore_zapper.webp" },
+      { id: "dth_kaon_nagra", label: "DTH Kaon & Nagra", hintModelName: "DTH Nagra DTS3460", imagePath: "images/categories/dth_nagra.webp" },
+      { id: "austrian", label: "Австрийски", hintModelName: "", imagePath: "images/categories/austria.webp" },
+      { id: "netbox", label: "Netbox", hintModelName: "", imagePath: "images/categories/netbox.webp" },
+      { id: "routers", label: "Рутери", hintModelName: "", imagePath: "images/categories/routers.webp" },
+      { id: "gpon", label: "GPON", hintModelName: "", imagePath: "images/categories/GPON.webp" },
+      { id: "modems", label: "Модеми", hintModelName: "", imagePath: "images/devices/Modem_Technicolor7200D3WiFirefurbCROA-removebg-preview.webp" }
+    ];
+
+    let selected = "";
+    try {
+      const today = localDateKey();
+      const savedDate = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DATE_KEY) || "");
+      if (savedDate && savedDate !== today) {
+        sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY);
+        localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DATE_KEY);
+      }
+      selected = String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "");
+    } catch (e) {}
+
+    panel.dataset.wifiOssRecycleSelected = selected;
+    const getSelected = () => {
+      const d = String(panel.dataset.wifiOssRecycleSelected || "").trim();
+      if (d) return d;
+      try { return String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
+      return "";
+    };
+
+    const setSelected = (id) => {
+      selected = id;
+      try {
+        sessionStorage.setItem(RECYCLE_ENTRY_SELECTED_KEY, id);
+        localStorage.setItem(RECYCLE_ENTRY_SELECTED_DATE_KEY, localDateKey());
+      } catch (e) {}
+      panel.dataset.wifiOssRecycleSelected = id;
+      Array.from(grid.querySelectorAll("button")).forEach(b => {
+        const bid = b.dataset.wifiOssRecycleCat || "";
+        const on = (bid === selected);
+        b.style.background = on ? "#111" : "#585858";
+        b.style.borderColor = on ? "#111" : "#4a4a4a";
+        b.style.boxShadow = on ? "0 0 0 3px rgba(255,255,255,0.25), 0 10px 22px rgba(0,0,0,0.35)" : "";
+        const mark = b.querySelector("[data-wifi-oss-check]");
+        if (mark) {
+          mark.style.background = on ? "#22c55e" : "rgba(255,255,255,0.18)";
+          mark.textContent = on ? "✓" : "";
+        }
+      });
+      serialMsg.style.display = "none";
+      serialMsg.textContent = "";
+    };
+
+    for (const c of categories) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.wifiOssRecycleCat = c.id;
+      b.style.textAlign = "left";
+      b.style.padding = "4px";
+      b.style.borderRadius = "6px";
+      b.style.border = "1px solid #4a4a4a";
+      const isOn = (c.id === selected);
+      b.style.background = isOn ? "#111" : "#585858";
+      b.style.borderColor = isOn ? "#111" : "#4a4a4a";
+      b.style.boxShadow = isOn ? "0 0 0 3px rgba(255,255,255,0.25), 0 10px 22px rgba(0,0,0,0.35)" : "";
+      b.style.color = "#fff";
+      b.style.cursor = "pointer";
+
+      const imgPath = c.imagePath ? String(c.imagePath) : deviceImageForModel(c.hintModelName);
+      const imgUrl = imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+        ? chrome.runtime.getURL(imgPath)
+        : null;
+
+      const imgHtml = imgUrl
+        ? `<img alt="" src="${escapeHtml(imgUrl)}" style="width:100%;object-fit:contain;background:#4f4f4f;border-radius:5px;display:block;margin-bottom:4px" />`
+        : "";
+
+      const check = `<div data-wifi-oss-check="1" style="position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:999px;background:${isOn ? "#22c55e" : "rgba(255,255,255,0.18)"};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#111">${isOn ? "✓" : ""}</div>`;
+      b.style.position = "relative";
+      b.innerHTML = `${check}${imgHtml}<div style="font-weight:700;font-size:12px;line-height:1.15;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:2.3em">${escapeHtml(c.label)}</div>`;
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelected(c.id);
+      });
+      b.addEventListener("mouseenter", () => {
+        const on = (b.dataset.wifiOssRecycleCat === selected);
+        b.style.background = on ? "#111" : "#4a4a4a";
+      });
+      b.addEventListener("mouseleave", () => {
+        const on = (b.dataset.wifiOssRecycleCat === selected);
+        b.style.background = on ? "#111" : "#585858";
+        b.style.borderColor = on ? "#111" : "#4a4a4a";
+        b.style.boxShadow = on ? "0 0 0 3px rgba(255,255,255,0.25), 0 10px 22px rgba(0,0,0,0.35)" : "";
+        const mark = b.querySelector("[data-wifi-oss-check]");
+        if (mark) {
+          mark.style.background = on ? "#22c55e" : "rgba(255,255,255,0.18)";
+          mark.textContent = on ? "✓" : "";
+        }
+      });
+      grid.appendChild(b);
+    }
+
+    panel.appendChild(grid);
+    fieldset.appendChild(panel);
+
+    // Validate before continuing.
+    const guardContinue = (e) => {
+      const cat = getSelected();
+      if (!cat) {
+        e.preventDefault();
+        e.stopPropagation();
+        serialMsg.textContent = "Избери категория преди да продължиш.";
+        serialMsg.style.display = "";
+        return;
+      }
+      const r = validateRecycleSerial(cat, serialInput.value);
+      if (!r.ok) {
+        e.preventDefault();
+        e.stopPropagation();
+        serialMsg.textContent = r.msg;
+        serialMsg.style.display = "";
+        try { serialInput.focus(); serialInput.select?.(); } catch (e2) {}
+        return;
+      }
+
+      // Store context for the next step (Material Id page).
+      try {
+        sessionStorage.setItem(RECYCLE_ENTRY_LAST_SERIAL_KEY, String(serialInput.value || "").trim());
+        sessionStorage.setItem(RECYCLE_ENTRY_PENDING_MATERIAL_KEY, "1");
+      } catch (e2) {}
+    };
+
+    continueBtn.addEventListener("click", guardContinue, true);
+    // Also guard form submit (e.g. Enter key).
+    const form = root.querySelector("form");
+    if (form) form.addEventListener("submit", guardContinue, true);
+    serialInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") guardContinue(e);
+    }, true);
+    serialInput.addEventListener("input", () => {
+      if (!serialMsg.textContent) return;
+      const cat = getSelected();
+      if (!cat) return;
+      const r = validateRecycleSerial(cat, serialInput.value);
+      if (r.ok) { serialMsg.textContent = ""; serialMsg.style.display = "none"; }
+    });
+
+    return true;
+  }
+
+  function startRecycleEntryObserver() {
+    const tryInject = () => injectRecycleEntryCategoryPanel();
+    if (tryInject()) return;
+    const obs = new MutationObserver(() => { tryInject(); });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
+  function applyRecycleCategoryMaterialPreset(inputEl) {
+    if (!inputEl) return false;
+    // Don't overwrite if user already has a value.
+    const existing = String(inputEl.value || "").trim();
+    if (existing) return false;
+
+    let pending = "";
+    let cat = "";
+    let serial = "";
+    try {
+      pending = String(sessionStorage.getItem(RECYCLE_ENTRY_PENDING_MATERIAL_KEY) || "");
+      cat = String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim();
+      serial = String(sessionStorage.getItem(RECYCLE_ENTRY_LAST_SERIAL_KEY) || "").trim();
+    } catch (e) {}
+    if (pending !== "1") return false;
+    if (!serial) return false;
+
+    const up = serial.toUpperCase();
+    const digitsOnly = /^\d+$/.test(serial);
+    let sapId = "";
+    if (cat === "android_iptv") {
+      if (up.startsWith("BG")) sapId = "121678";
+      else if (digitsOnly && serial.length === 12) sapId = "114225";
+      else if (digitsOnly) sapId = "121679";
+      else return false;
+    } else if (cat === "austrian") {
+      // Austrian: PI* => 1200017460, otherwise 1200017462
+      sapId = up.startsWith("PI") ? "1200017460" : "1200017462";
+    } else {
+      return false;
+    }
+
+    setSwapMaterialInputValue(inputEl, sapId);
+    try { sessionStorage.removeItem(RECYCLE_ENTRY_PENDING_MATERIAL_KEY); } catch (e) {}
+    return true;
+  }
+
+  loadLastClipboardText();
+  injectButton();
+  startLabelsObservers();
+  startSwapMaterialObserver();
+  startSwapMaterialDashboardPolling();
+  startDeviceFunctionsObserver();
+  startRecycleEntryObserver();
+})();
