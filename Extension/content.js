@@ -1782,6 +1782,9 @@
   // -----------------------------------------
   const SWAP_MATERIAL_ROOT_ID = "_wflowSwapShopMaterial";
   const SWAP_MATERIAL_INPUT_ID = "_wflowSwapShopMaterial_MaterialId";
+  const CAM_MODULES_MISSING_MATERIAL_OPERATION_KEY = "wifi_oss_cam_modules_missing_material_operation_id";
+  const CAM_MODULES_MISSING_MATERIAL_HINT_ID = "wifi-oss-cam-modules-missing-material-hint";
+  const CAM_MODULES_MISSING_MATERIAL_HINT_TEXT = "Не е открита история за този сериен номер в SAP. Опитайте с другия номер на CAM модула. При повторен неуспех предайте устройството на супервайзър.";
 
   const SWAP_MATERIAL_MODELS_DEFAULT = [
     { id: "1-000-055-165", name: "TP Link NX220v" },
@@ -2033,6 +2036,124 @@
     try { continueBtn.click(); } catch (e) {}
   }
 
+  function getSelectedRecycleEntryCategory() {
+    try { return String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
+    return "";
+  }
+
+  function getWflowOperationIdFromUrl(url) {
+    const m = String(url || "").match(/\/wflow\/(\d+)(?:$|[/?#])/);
+    return m ? m[1] : "";
+  }
+
+  function findRecycleOperationBreadcrumbLink() {
+    const links = Array.from(document.querySelectorAll("a[href]"));
+    return links.find(a => {
+      const text = String(a.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      const href = String(a.getAttribute("href") || "");
+      const absHref = String(a.href || "");
+      const isOperationHref = /\/wflow\/\d+(?:$|[/?#])/.test(href) || /\/wflow\/\d+(?:$|[/?#])/.test(absHref);
+      return text.includes("рециклиране на устройство") && isOperationHref;
+    }) || null;
+  }
+
+  function maybeRedirectCamModulesEmptyMaterial(root, input) {
+    if (!root || !input) return false;
+    if (root.dataset.wifiOssCamModulesFallback === "1") return false;
+    if (getSelectedRecycleEntryCategory() !== "cam_modules") return false;
+    if (normalizeSwapMaterialId(input.value)) return false;
+    if (root.dataset.wifiOssCamModulesRedirectStarted === "1") return true;
+
+    root.dataset.wifiOssCamModulesRedirectStarted = "1";
+    setTimeout(() => {
+      try {
+        if (normalizeSwapMaterialId(input.value)) {
+          autoContinueSwapMaterialIfReady(root, input);
+          return;
+        }
+
+        const link = findRecycleOperationBreadcrumbLink();
+        if (link) {
+          const opId = getWflowOperationIdFromUrl(link.href || link.getAttribute("href"));
+          if (opId) {
+            try { sessionStorage.setItem(CAM_MODULES_MISSING_MATERIAL_OPERATION_KEY, opId); } catch (e2) {}
+          }
+          link.click();
+          return;
+        }
+
+        console.warn("[swapMaterial] CAM modules recycle operation breadcrumb link not found; showing quick buttons fallback.");
+      } catch (e) {
+        console.warn("[swapMaterial] CAM modules redirect failed; showing quick buttons fallback.", e);
+      }
+
+      root.dataset.wifiOssCamModulesFallback = "1";
+      try { injectSwapMaterialButtons(); } catch (e2) {}
+    }, 600);
+
+    return true;
+  }
+
+  function shouldShowCamModulesMissingMaterialHint() {
+    let expectedOpId = "";
+    try { expectedOpId = String(sessionStorage.getItem(CAM_MODULES_MISSING_MATERIAL_OPERATION_KEY) || "").trim(); } catch (e) {}
+    if (!expectedOpId) return false;
+    return getWflowOperationIdFromUrl(window.location.href) === expectedOpId;
+  }
+
+  function findServiceTerminationButton() {
+    const controls = Array.from(document.querySelectorAll("button, input[type='button'], input[type='submit'], a"));
+    return controls.find(el => normalizeLabelText(el.value || el.textContent).includes("служебно прекратяване")) || null;
+  }
+
+  function injectCamModulesMissingMaterialHint() {
+    if (!shouldShowCamModulesMissingMaterialHint()) return false;
+    if (document.getElementById(CAM_MODULES_MISSING_MATERIAL_HINT_ID)) return true;
+
+    const btn = findServiceTerminationButton();
+    if (!btn) return false;
+
+    const target = btn.closest("a") || btn;
+    const row = target.parentElement;
+    if (row) {
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.flexWrap = "nowrap";
+      row.style.gap = "12px";
+      Array.from(row.querySelectorAll("button, input[type='button'], input[type='submit'], a")).forEach(el => {
+        el.style.flexShrink = "0";
+      });
+    }
+
+    const hint = document.createElement("span");
+    hint.id = CAM_MODULES_MISSING_MATERIAL_HINT_ID;
+    hint.textContent = CAM_MODULES_MISSING_MATERIAL_HINT_TEXT;
+    hint.style.display = "inline-block";
+    hint.style.flex = "1 1 auto";
+    hint.style.minWidth = "0";
+    hint.style.marginLeft = "0";
+    hint.style.verticalAlign = "middle";
+    hint.style.color = "#b00020";
+    hint.style.fontWeight = "600";
+    hint.style.fontSize = "13px";
+    hint.style.lineHeight = "1.25";
+    hint.style.maxWidth = "none";
+    hint.style.padding = "4px 0";
+
+    target.insertAdjacentElement("afterend", hint);
+    return true;
+  }
+
+  function startCamModulesOperationHintObserver() {
+    if (!shouldShowCamModulesMissingMaterialHint()) return;
+    if (injectCamModulesMissingMaterialHint()) return;
+
+    const obs = new MutationObserver(() => {
+      if (injectCamModulesMissingMaterialHint()) obs.disconnect();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
   function injectSwapMaterialButtons() {
     const root = document.getElementById(SWAP_MATERIAL_ROOT_ID);
     if (!root) return false;
@@ -2049,6 +2170,7 @@
     // If we came from the recycle flow (Android TV & ZTE IPTV), prefill based on serial.
     try { applyRecycleCategoryMaterialPreset(input); } catch (e) {}
     autoContinueSwapMaterialIfReady(root, input);
+    if (maybeRedirectCamModulesEmptyMaterial(root, input)) return true;
 
     const panel = document.createElement("div");
     panel.className = "wifi-oss-swap-material-panel";
@@ -2362,6 +2484,7 @@
   function validateRecycleSerial(categoryId, serialRaw) {
     const s = String(serialRaw || "").trim();
     if (!s) return { ok: false, msg: "Въведи сериен номер." };
+    if (categoryId === "cam_modules") return { ok: true, msg: "" };
     const upper = s.toUpperCase();
     const macWithSeparators = /^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/.test(upper);
     // Important: do NOT treat 12 digits-only as MAC.
@@ -2507,6 +2630,7 @@
       { id: "netbox", label: "Netbox", hintModelName: "", imagePath: "images/categories/netbox.webp" },
       { id: "routers", label: "Рутери", hintModelName: "", imagePath: "images/categories/routers.webp" },
       { id: "gpon", label: "GPON", hintModelName: "", imagePath: "images/categories/GPON.webp" },
+      { id: "cam_modules", label: "CAM Модули", hintModelName: "", imagePath: "images/categories/CAM_modules.webp" },
       { id: "modems", label: "Модеми", hintModelName: "", imagePath: "images/devices/Modem_Technicolor7200D3WiFirefurbCROA-removebg-preview.webp" }
     ];
 
@@ -2701,4 +2825,5 @@
   startSwapMaterialDashboardPolling();
   startDeviceFunctionsObserver();
   startRecycleEntryObserver();
+  startCamModulesOperationHintObserver();
 })();
