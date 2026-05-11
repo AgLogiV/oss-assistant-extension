@@ -2041,6 +2041,23 @@
     return "";
   }
 
+  const SWAP_MATERIAL_RECYCLE_FILTERS = {
+    android_iptv: ["114225", "121679", "121678"],
+    xplore_zapper: ["118542", "118543", "118544"],
+    dth_kaon_nagra: ["114915", "121961"]
+  };
+
+  function getSwapMaterialRecycleFilter(categoryId) {
+    const ids = SWAP_MATERIAL_RECYCLE_FILTERS[categoryId];
+    if (!Array.isArray(ids) || !ids.length) return null;
+    const normalizedIds = ids.map(normalizeSwapMaterialId).filter(Boolean);
+    if (!normalizedIds.length) return null;
+    return {
+      idSet: new Set(normalizedIds),
+      order: new Map(normalizedIds.map((id, idx) => [id, idx]))
+    };
+  }
+
   function getWflowOperationIdFromUrl(url) {
     const m = String(url || "").match(/\/wflow\/(\d+)(?:$|[/?#])/);
     return m ? m[1] : "";
@@ -2167,10 +2184,13 @@
     input.style.backgroundColor = "#f3f3f3";
     input.style.cursor = "not-allowed";
     attachSwapMaterialRewriteRule(input);
-    // If we came from the recycle flow (Android TV & ZTE IPTV), prefill based on serial.
+    // If we came from a recycle flow with a material preset, prefill based on serial.
     try { applyRecycleCategoryMaterialPreset(input); } catch (e) {}
     autoContinueSwapMaterialIfReady(root, input);
     if (maybeRedirectCamModulesEmptyMaterial(root, input)) return true;
+    const recycleMaterialFilter = normalizeSwapMaterialId(input.value)
+      ? null
+      : getSwapMaterialRecycleFilter(getSelectedRecycleEntryCategory());
 
     const panel = document.createElement("div");
     panel.className = "wifi-oss-swap-material-panel";
@@ -2311,6 +2331,7 @@
     catRow.appendChild(makeCatBtn("internet", "Интернет"));
     catRow.appendChild(makeCatBtn("tv", "Телевизия"));
     catRow.appendChild(makeCatBtn("other", "Други"));
+    if (recycleMaterialFilter) catRow.style.display = "none";
     panel.appendChild(catRow);
 
     const grid = document.createElement("div");
@@ -2344,7 +2365,25 @@
       }
     };
 
-    for (const m of swapMaterialModels) {
+    const modelsForButtons = (() => {
+      if (!recycleMaterialFilter) return swapMaterialModels;
+      const seen = new Set();
+      return swapMaterialModels
+        .filter(m => {
+          const id = normalizeSwapMaterialId(m.id);
+          if (!recycleMaterialFilter.idSet.has(id)) return false;
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .sort((a, b) => {
+          const ai = recycleMaterialFilter.order.get(normalizeSwapMaterialId(a.id));
+          const bi = recycleMaterialFilter.order.get(normalizeSwapMaterialId(b.id));
+          return ai - bi;
+        });
+    })();
+
+    for (const m of modelsForButtons) {
       const normalizedId = normalizeSwapMaterialId(m.id);
       const b = document.createElement("button");
       b.type = "button";
@@ -2373,6 +2412,7 @@
       }
       b.innerHTML = `${imgHtml}<div style="font-weight:600;font-size:12px;line-height:1.15;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:2.3em">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#e6e6e6;line-height:1.1">${escapeHtml(normalizedId)}</div>`;
       b.dataset.wifiOssSwapMaterialName = String(m.name || "").toLowerCase();
+      b.dataset.wifiOssSwapMaterialId = normalizedId;
       b.dataset.wifiOssSwapMaterialCategory = (m.category === "internet" || m.category === "tv" || m.category === "other")
         ? m.category
         : categorizeSwapMaterial(m.name);
@@ -2422,11 +2462,12 @@
       const buttons = grid.querySelectorAll("button");
       buttons.forEach(btn => {
         const n = (btn.dataset.wifiOssSwapMaterialName || "");
+        const id = (btn.dataset.wifiOssSwapMaterialId || "");
         const c = (btn.dataset.wifiOssSwapMaterialCategory || "other");
-        // Ако има текст в търсачката, търсим глобално (игнорираме категорията).
-        // Категориите действат само когато търсачката е празна.
-        const okCat = q ? true : ((activeCategory === "all") || (c === activeCategory));
-        const okQuery = !q || n.includes(q);
+        // Search stays scoped to the rendered button set; for the normal panel it ignores broad category chips.
+        // Category chips apply only when the search box is empty.
+        const okCat = recycleMaterialFilter ? true : (q ? true : ((activeCategory === "all") || (c === activeCategory)));
+        const okQuery = !q || n.includes(q) || id.includes(q);
         btn.style.display = (okCat && okQuery) ? "" : "none";
       });
     };
@@ -2798,17 +2839,10 @@
     if (pending !== "1") return false;
     if (!serial) return false;
 
-    const up = serial.toUpperCase();
-    const digitsOnly = /^\d+$/.test(serial);
     let sapId = "";
-    if (cat === "android_iptv") {
-      if (up.startsWith("BG")) sapId = "121678";
-      else if (digitsOnly && serial.length === 12) sapId = "114225";
-      else if (digitsOnly) sapId = "121679";
-      else return false;
-    } else if (cat === "austrian") {
+    if (cat === "austrian") {
       // Austrian: PI* => 1200017460, otherwise 1200017462
-      sapId = up.startsWith("PI") ? "1200017460" : "1200017462";
+      sapId = serial.toUpperCase().startsWith("PI") ? "1200017460" : "1200017462";
     } else {
       return false;
     }
