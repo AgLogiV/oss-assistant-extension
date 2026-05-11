@@ -193,9 +193,11 @@ Current categories:
 - `netbox` - `Netbox`
 - `routers` - `Рутери`
 - `gpon` - `GPON`
+- `cam_modules` - `CAM Модули`
 - `modems` - `Модеми`
 
 Each category has a card/button with an image from `images/categories/` except `modems`, which uses the Technicolor device image.
+`cam_modules` uses `Extension/images/categories/CAM_modules.webp`.
 
 ### Storage Keys
 
@@ -285,6 +287,9 @@ Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopIm
   - Must be at least 16 alphanumeric characters.
 - `dth_kaon_nagra`
   - Must be exactly 11 digits.
+- `cam_modules`
+  - Has no format validation.
+  - Only the shared empty-field guard applies: the user must enter some serial value before continuing.
 
 ## SAP/Material Quick Buttons
 
@@ -328,12 +333,25 @@ Constants:
 
 - If material input has a non-empty normalized value, it normalizes the field and clicks the save/continue button once.
 - This likely supports the case where OSS already found material history.
+- This behavior is intentionally preserved for `cam_modules` when OSS has already populated `MaterialId`.
 
 TBD to verify in real OSS:
 
 - Whether auto-click is always desired when OSS pre-fills material.
 - Whether extension-filled values and OSS-filled values can be distinguished reliably.
 - Whether the target continue button is always `_wflowSwapShopMaterial_save`.
+
+### CAM Modules Missing-Material Flow
+
+For recycle category `cam_modules`, empty material history is handled differently from the normal quick-button flow:
+
+- If `_wflowSwapShopMaterial_MaterialId` has a value, the existing material auto-continue behavior runs unchanged.
+- If `_wflowSwapShopMaterial_MaterialId` is empty, the extension waits briefly, checks the field again, then clicks the breadcrumb link back to the main `Рециклиране на устройство` operation.
+- The breadcrumb lookup uses the visible text `Рециклиране на устройство` and a `/wflow/<operationId>` URL pattern; the operation number is dynamic and must not be hardcoded.
+- Before clicking the breadcrumb, the extension stores the operation id in `sessionStorage` so the next page can identify this specific CAM missing-material scenario.
+- On the operation page, a red helper text is inserted next to `Служебно прекратяване`: `Не е открита история за този сериен номер в SAP. Опитайте с другия номер на CAM модула. При повторен неуспех предайте устройството на супервайзър.`
+- The helper is shown only when the stored CAM missing-material operation id matches the current `/wflow/<operationId>` page.
+- The extension does not click `Служебно прекратяване` and does not change the behavior of `Напред` or `Служебно прекратяване`.
 
 ### Models and Images
 
@@ -438,6 +456,7 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_category_date` - `localStorage`, selected category date.
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
+- `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
 - `obb_admin_token` - dashboard `sessionStorage`, admin token in dashboard UI only.
 
 ## Known Risks and Uncertainties
@@ -449,6 +468,7 @@ Fallback behavior:
 - GPON validation comment and implementation disagree.
 - SAP material auto-continue may be too aggressive if a value is present for reasons other than OSS history.
 - SAP/material quick buttons are not currently filtered by selected recycle category.
+- CAM modules intentionally bypass material quick buttons only when `MaterialId` is empty; do not make this behavior global for other categories.
 - Dashboard data can replace built-in material models.
 - Real OSS DOM can differ from assumptions; do not rely only on guessed selectors.
 - Some dashboard strings/category aliases show mojibake; verify before changing encoding-related behavior.
@@ -486,4 +506,4 @@ Before changing recycle/material behavior, verify:
 - Whether empty material input always means no SAP/material history.
 - Whether material input should be `readonly` or `disabled` for the business process.
 - Which exact material devices should be visible for each recycle category.
-- Whether future `CAM Модули` should have no serial validation, SAP-history-driven behavior, or automatic service termination behavior.
+- `CAM Модули` should have no serial format validation, should return to the main operation when material history is missing, and must not automatically click service termination.

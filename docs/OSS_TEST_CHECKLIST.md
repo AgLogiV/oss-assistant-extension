@@ -25,7 +25,9 @@ Use this checklist in the real/demo OSS environment after loading the extension 
   - `netbox`
   - `routers`
   - `gpon`
+  - `cam_modules`
   - `modems`
+- For `cam_modules`, confirm empty serial is blocked but non-empty values are not format-validated.
 - For invalid serials, confirm the page does not advance and the serial field keeps focus.
 - Press `RESET` and confirm the selected category and validation message disappear.
 - After reset, press Continue again. Expected: blocked until a category is selected.
@@ -38,6 +40,10 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm material input selector/attributes: `id`, `name`, `class`, `value`, `readonly`, `disabled`.
 - If the material input is prefilled by OSS, confirm whether the extension auto-continues and whether that is business-correct.
 - If the material input is empty, confirm the quick button panel appears and the input is locked for manual typing.
+- For `cam_modules`, confirm a prefilled `MaterialId` still auto-continues.
+- For `cam_modules`, confirm an empty `MaterialId` returns to the main `Рециклиране на устройство` operation through the breadcrumb instead of leaving the user in the quick-button flow.
+- On the returned operation page, confirm the red CAM helper text appears next to `Служебно прекратяване` and that `Служебно прекратяване` is not clicked automatically.
+- Open a normal `Рециклиране на устройство` operation manually and confirm the CAM helper text does not appear.
 - Click a quick material button and confirm the input receives the numeric material ID and fires the expected OSS behavior.
 - Check whether all devices are shown or only the expected group for the selected recycle category.
 - Use the search box and category chips (`Всички`, `Интернет`, `Телевизия`, `Други`) and confirm filtering behavior.
