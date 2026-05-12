@@ -335,6 +335,16 @@ Constants:
 - This likely supports the case where OSS already found material history.
 - This behavior is intentionally preserved for `cam_modules` when OSS has already populated `MaterialId`.
 
+Debug/test toggle:
+
+- `wifi_oss_debug_material_auto_continue_enabled` in `sessionStorage` controls a temporary test override.
+- Missing key/default state means material auto-continue is `ON`.
+- Value `"0"` means material auto-continue is `OFF` for the current tab/session.
+- The small `Debug: Material auto-continue ON/OFF` control is injected through the existing recycle entry and SAP/material panels, not through a separate global observer or floating panel.
+- When `OFF`, a prefilled `_wflowSwapShopMaterial_MaterialId` does not auto-click Continue, so the SAP/material page and filtered material grid can be inspected.
+- This is a debug/test helper for validating material filters, not a primary operator workflow.
+- `cam_modules` missing-material redirect flow is unchanged.
+
 TBD to verify in real OSS:
 
 - Whether auto-click is always desired when OSS pre-fills material.

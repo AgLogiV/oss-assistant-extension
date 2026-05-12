@@ -40,6 +40,10 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm material input selector/attributes: `id`, `name`, `class`, `value`, `readonly`, `disabled`.
 - If the material input is prefilled by OSS, confirm whether the extension auto-continues and whether that is business-correct.
 - If the material input is empty, confirm the quick button panel appears and the input is locked for manual typing.
+- Confirm the debug/test toggle defaults to `Debug: Material auto-continue ON`; with a prefilled `MaterialId`, the page should auto-continue.
+- Set the toggle to `OFF` before entering the material step and confirm a prefilled `MaterialId` leaves the SAP/material page visible.
+- With toggle `OFF` and a mapped recycle category, confirm the quick button grid is filtered to the selected recycle category.
+- Set the toggle back to `ON` and confirm following material pages with prefilled `MaterialId` auto-continue again.
 - For `cam_modules`, confirm a prefilled `MaterialId` still auto-continues.
 - For `cam_modules`, confirm an empty `MaterialId` returns to the main `Рециклиране на устройство` operation through the breadcrumb instead of leaving the user in the quick-button flow.
 - On the returned operation page, confirm the red CAM helper text appears next to `Служебно прекратяване` and that `Служебно прекратяване` is not clicked automatically.
