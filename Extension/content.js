@@ -2851,7 +2851,8 @@
       b.style.textAlign = "left";
       b.style.fontFamily = "inherit";
       b.style.appearance = "none";
-      b.style.transition = "transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease";
+      b.style.transition = "transform 180ms cubic-bezier(0.2, 0, 0.2, 1), border-color 180ms ease, box-shadow 180ms ease";
+      b.style.willChange = "transform";
 
       const media = document.createElement("div");
       media.style.position = "relative";
@@ -2861,6 +2862,7 @@
       media.style.boxSizing = "border-box";
       media.style.padding = featured ? "14px" : "8px";
       media.style.display = "flex";
+      media.style.flex = "1 1 auto";
       media.style.alignItems = "center";
       media.style.justifyContent = "center";
       media.style.overflow = "hidden";
@@ -2875,7 +2877,7 @@
         img.style.height = "100%";
         img.style.objectFit = "contain";
         img.style.display = "block";
-        img.style.transition = "transform 140ms ease";
+        img.style.transition = "transform 180ms cubic-bezier(0.2, 0, 0.2, 1)";
         media.appendChild(img);
       }
 
@@ -2907,6 +2909,8 @@
       titleBar.style.padding = featured ? "8px 14px" : "7px 10px";
       titleBar.style.background = featured ? red : "#3f3f3f";
       titleBar.style.display = "flex";
+      titleBar.style.flex = "0 0 auto";
+      titleBar.style.marginTop = "auto";
       titleBar.style.alignItems = "center";
       titleBar.style.justifyContent = "center";
 
@@ -2932,10 +2936,10 @@
         setSelected(c.id);
       });
       b.addEventListener("mouseenter", () => {
-        b.style.transform = "translateY(-2px)";
+        b.style.transform = featured ? "translateY(-1px)" : "translateY(-2px)";
         b.style.borderColor = red;
-        b.style.boxShadow = featured ? "0 10px 24px rgba(0,0,0,0.20)" : "0 8px 18px rgba(0,0,0,0.16)";
-        if (img) img.style.transform = "scale(1.035)";
+        b.style.boxShadow = featured ? "0 10px 24px rgba(0,0,0,0.18)" : "0 7px 18px rgba(0,0,0,0.18)";
+        if (img) img.style.transform = "scale(1.025)";
       });
       b.addEventListener("mouseleave", () => {
         b.style.transform = "";
