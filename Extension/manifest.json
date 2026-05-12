@@ -24,7 +24,8 @@
         "images/*.svg",
         "images/*.png",
         "images/devices/*.webp",
-        "images/categories/*.webp"
+        "images/categories/*.webp",
+        "images/categories/16x9/*.webp"
       ],
       "matches": [
         "https://oss.a1.bg/*",
@@ -50,4 +51,3 @@
     }
   ]
 }
-

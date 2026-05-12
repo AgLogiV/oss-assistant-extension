@@ -435,8 +435,10 @@
       const panel = root ? root.querySelector(".wifi-oss-recycle-category-panel") : null;
       if (panel) {
         panel.dataset.wifiOssRecycleSelected = "";
-        const buttons = Array.from(panel.querySelectorAll("button[data-wifi-oss-recycle-cat]"));
-        buttons.forEach(b => { b.style.background = "#585858"; });
+        if (!refreshRecycleEntryCategoryPanel(panel)) {
+          const buttons = Array.from(panel.querySelectorAll("button[data-wifi-oss-recycle-cat]"));
+          buttons.forEach(b => { b.style.background = "#585858"; });
+        }
       }
       const inlineMsg = document.getElementById("wifi-oss-recycle-serial-msg");
       if (inlineMsg && inlineMsg.style) { inlineMsg.textContent = ""; inlineMsg.style.display = "none"; }
@@ -2594,6 +2596,14 @@
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
 
+  function refreshRecycleEntryCategoryPanel(panel) {
+    if (!panel) return false;
+    const render = panel.__wifiOssRenderRecycleCategories;
+    if (typeof render !== "function") return false;
+    render();
+    return true;
+  }
+
   function localDateKey(d = new Date()) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -2742,33 +2752,38 @@
 
     const panel = document.createElement("div");
     panel.className = RECYCLE_ENTRY_PANEL_CLASS;
-    panel.style.marginTop = "10px";
+    panel.style.marginTop = "16px";
+    panel.style.paddingTop = "14px";
+    panel.style.borderTop = "1px solid #e5e5e5";
+    panel.style.maxWidth = "100%";
+    panel.style.boxSizing = "border-box";
 
     const title = document.createElement("div");
     title.textContent = "Категория:";
-    title.style.fontWeight = "600";
+    title.style.fontWeight = "700";
     title.style.color = "#333";
-    title.style.marginBottom = "6px";
+    title.style.fontSize = "16px";
+    title.style.marginBottom = "8px";
     panel.appendChild(title);
     ensureMaterialAutoContinueDebugToggle(panel);
 
     const grid = document.createElement("div");
     grid.style.display = "grid";
-    grid.style.gridTemplateColumns = "repeat(8, minmax(90px, 1fr))";
-    grid.style.gap = "6px";
+    grid.style.gap = "10px";
     grid.style.maxWidth = "100%";
-    grid.style.overflow = "hidden";
+    grid.style.overflow = "visible";
+    grid.style.boxSizing = "border-box";
 
     const categories = [
-      { id: "android_iptv", label: "Android TV & ZTE IPTV", hintModelName: "DV9161 (AndroidTV)", imagePath: "images/categories/android_iptv.webp" },
-      { id: "xplore_zapper", label: "XPLORE & Zapper", hintModelName: "Zapper", imagePath: "images/categories/xplore_zapper.webp" },
-      { id: "dth_kaon_nagra", label: "DTH Kaon & Nagra", hintModelName: "DTH Nagra DTS3460", imagePath: "images/categories/dth_nagra.webp" },
-      { id: "austrian", label: "Австрийски", hintModelName: "", imagePath: "images/categories/austria.webp" },
-      { id: "netbox", label: "Netbox", hintModelName: "", imagePath: "images/categories/netbox.webp" },
-      { id: "routers", label: "Рутери", hintModelName: "", imagePath: "images/categories/routers.webp" },
-      { id: "gpon", label: "GPON", hintModelName: "", imagePath: "images/categories/GPON.webp" },
-      { id: "cam_modules", label: "CAM Модули", hintModelName: "", imagePath: "images/categories/CAM_modules.webp" },
-      { id: "modems", label: "Модеми", hintModelName: "", imagePath: "images/devices/Modem_Technicolor7200D3WiFirefurbCROA-removebg-preview.webp" }
+      { id: "android_iptv", label: "Android TV & ZTE IPTV", hintModelName: "DV9161 (AndroidTV)", imagePath: "images/categories/16x9/android_iptv.webp" },
+      { id: "xplore_zapper", label: "XPLORE & Zapper", hintModelName: "Zapper", imagePath: "images/categories/16x9/xplore_zapper.webp" },
+      { id: "dth_kaon_nagra", label: "DTH Kaon & Nagra", hintModelName: "DTH Nagra DTS3460", imagePath: "images/categories/16x9/dth_nagra.webp" },
+      { id: "austrian", label: "Австрийски", hintModelName: "", imagePath: "images/categories/16x9/austria.webp" },
+      { id: "netbox", label: "Netbox", hintModelName: "", imagePath: "images/categories/16x9/netbox.webp" },
+      { id: "routers", label: "Рутери", hintModelName: "", imagePath: "images/categories/16x9/routers.webp" },
+      { id: "gpon", label: "GPON", hintModelName: "", imagePath: "images/categories/16x9/GPON.webp" },
+      { id: "cam_modules", label: "CAM Модули", hintModelName: "", imagePath: "images/categories/16x9/CAM_modules.webp" },
+      { id: "modems", label: "Модеми", hintModelName: "", imagePath: "images/categories/16x9/modems.webp" }
     ];
 
     let selected = "";
@@ -2797,74 +2812,177 @@
         localStorage.setItem(RECYCLE_ENTRY_SELECTED_DATE_KEY, localDateKey());
       } catch (e) {}
       panel.dataset.wifiOssRecycleSelected = id;
-      Array.from(grid.querySelectorAll("button")).forEach(b => {
-        const bid = b.dataset.wifiOssRecycleCat || "";
-        const on = (bid === selected);
-        b.style.background = on ? "#111" : "#585858";
-        b.style.borderColor = on ? "#111" : "#4a4a4a";
-        b.style.boxShadow = on ? "0 0 0 3px rgba(255,255,255,0.25), 0 10px 22px rgba(0,0,0,0.35)" : "";
-        const mark = b.querySelector("[data-wifi-oss-check]");
-        if (mark) {
-          mark.style.background = on ? "#22c55e" : "rgba(255,255,255,0.18)";
-          mark.textContent = on ? "✓" : "";
-        }
-      });
+      renderCategories();
       serialMsg.style.display = "none";
       serialMsg.textContent = "";
     };
 
-    for (const c of categories) {
+    const resolveCategoryImageUrl = (c) => {
+      const imgPath = c.imagePath ? String(c.imagePath) : deviceImageForModel(c.hintModelName);
+      return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+        ? chrome.runtime.getURL(imgPath)
+        : "";
+    };
+
+    const createCategoryCard = (c, featured) => {
+      const isSelected = (c.id === getSelected());
+      const red = "#e30613";
+      const baseBorder = featured ? red : "#d8d8d8";
+      const baseShadow = featured ? "0 8px 20px rgba(0,0,0,0.16)" : "0 2px 9px rgba(0,0,0,0.10)";
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.wifiOssRecycleCat = c.id;
-      b.style.textAlign = "left";
-      b.style.padding = "4px";
+      b.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      b.title = c.label;
+      b.style.position = "relative";
+      b.style.display = "flex";
+      b.style.flexDirection = "column";
+      b.style.width = "100%";
+      b.style.height = featured ? "auto" : "100%";
+      b.style.alignSelf = "start";
+      b.style.padding = "0";
+      b.style.border = `1px solid ${baseBorder}`;
       b.style.borderRadius = "6px";
-      b.style.border = "1px solid #4a4a4a";
-      const isOn = (c.id === selected);
-      b.style.background = isOn ? "#111" : "#585858";
-      b.style.borderColor = isOn ? "#111" : "#4a4a4a";
-      b.style.boxShadow = isOn ? "0 0 0 3px rgba(255,255,255,0.25), 0 10px 22px rgba(0,0,0,0.35)" : "";
+      b.style.background = "#fff";
+      b.style.boxShadow = baseShadow;
+      b.style.overflow = "hidden";
       b.style.color = "#fff";
       b.style.cursor = "pointer";
+      b.style.textAlign = "left";
+      b.style.fontFamily = "inherit";
+      b.style.appearance = "none";
+      b.style.transition = "transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease";
 
-      const imgPath = c.imagePath ? String(c.imagePath) : deviceImageForModel(c.hintModelName);
-      const imgUrl = imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
-        ? chrome.runtime.getURL(imgPath)
-        : null;
+      const media = document.createElement("div");
+      media.style.position = "relative";
+      media.style.width = "100%";
+      media.style.aspectRatio = "16 / 9";
+      media.style.background = "#fafafa";
+      media.style.boxSizing = "border-box";
+      media.style.padding = featured ? "14px" : "8px";
+      media.style.display = "flex";
+      media.style.alignItems = "center";
+      media.style.justifyContent = "center";
+      media.style.overflow = "hidden";
 
-      const imgHtml = imgUrl
-        ? `<img alt="" src="${escapeHtml(imgUrl)}" style="width:100%;object-fit:contain;background:#4f4f4f;border-radius:5px;display:block;margin-bottom:4px" />`
-        : "";
+      const imgUrl = resolveCategoryImageUrl(c);
+      let img = null;
+      if (imgUrl) {
+        img = document.createElement("img");
+        img.alt = "";
+        img.src = imgUrl;
+        img.style.width = "100%";
+        img.style.height = "100%";
+        img.style.objectFit = "contain";
+        img.style.display = "block";
+        img.style.transition = "transform 140ms ease";
+        media.appendChild(img);
+      }
 
-      const check = `<div data-wifi-oss-check="1" style="position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:999px;background:${isOn ? "#22c55e" : "rgba(255,255,255,0.18)"};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#111">${isOn ? "✓" : ""}</div>`;
-      b.style.position = "relative";
-      b.innerHTML = `${check}${imgHtml}<div style="font-weight:700;font-size:12px;line-height:1.15;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:2.3em">${escapeHtml(c.label)}</div>`;
+      if (featured) {
+        const check = document.createElement("div");
+        check.dataset.wifiOssCheck = "1";
+        check.textContent = "\u2713";
+        check.style.position = "absolute";
+        check.style.top = "10px";
+        check.style.right = "10px";
+        check.style.width = "24px";
+        check.style.height = "24px";
+        check.style.borderRadius = "999px";
+        check.style.background = red;
+        check.style.color = "#fff";
+        check.style.display = "flex";
+        check.style.alignItems = "center";
+        check.style.justifyContent = "center";
+        check.style.fontSize = "16px";
+        check.style.fontWeight = "900";
+        check.style.boxShadow = "0 2px 8px rgba(0,0,0,0.20)";
+        media.appendChild(check);
+      }
+
+      const titleBar = document.createElement("div");
+      titleBar.style.minHeight = featured ? "48px" : "38px";
+      titleBar.style.width = "100%";
+      titleBar.style.boxSizing = "border-box";
+      titleBar.style.padding = featured ? "8px 14px" : "7px 10px";
+      titleBar.style.background = featured ? red : "#3f3f3f";
+      titleBar.style.display = "flex";
+      titleBar.style.alignItems = "center";
+      titleBar.style.justifyContent = featured ? "center" : "flex-start";
+
+      const label = document.createElement("div");
+      label.textContent = c.label;
+      label.style.fontWeight = "800";
+      label.style.fontSize = featured ? "16px" : "13px";
+      label.style.lineHeight = "1.18";
+      label.style.letterSpacing = "0";
+      label.style.textTransform = "uppercase";
+      label.style.display = "-webkit-box";
+      label.style.webkitBoxOrient = "vertical";
+      label.style.webkitLineClamp = "2";
+      label.style.overflow = "hidden";
+      label.style.textAlign = featured ? "center" : "left";
+      titleBar.appendChild(label);
+
+      b.appendChild(media);
+      b.appendChild(titleBar);
       b.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         setSelected(c.id);
       });
       b.addEventListener("mouseenter", () => {
-        const on = (b.dataset.wifiOssRecycleCat === selected);
-        b.style.background = on ? "#111" : "#4a4a4a";
+        b.style.transform = "translateY(-2px)";
+        b.style.borderColor = red;
+        b.style.boxShadow = featured ? "0 10px 24px rgba(0,0,0,0.20)" : "0 8px 18px rgba(0,0,0,0.16)";
+        if (img) img.style.transform = "scale(1.035)";
       });
       b.addEventListener("mouseleave", () => {
-        const on = (b.dataset.wifiOssRecycleCat === selected);
-        b.style.background = on ? "#111" : "#585858";
-        b.style.borderColor = on ? "#111" : "#4a4a4a";
-        b.style.boxShadow = on ? "0 0 0 3px rgba(255,255,255,0.25), 0 10px 22px rgba(0,0,0,0.35)" : "";
-        const mark = b.querySelector("[data-wifi-oss-check]");
-        if (mark) {
-          mark.style.background = on ? "#22c55e" : "rgba(255,255,255,0.18)";
-          mark.textContent = on ? "✓" : "";
-        }
+        b.style.transform = "";
+        b.style.borderColor = baseBorder;
+        b.style.boxShadow = baseShadow;
+        if (img) img.style.transform = "";
       });
-      grid.appendChild(b);
-    }
 
+      return b;
+    };
+
+    const renderCategories = () => {
+      const activeId = getSelected();
+      const activeCategory = categories.find(c => c.id === activeId);
+      selected = activeCategory ? activeCategory.id : "";
+      grid.textContent = "";
+      grid.style.alignItems = "start";
+
+      if (!activeCategory) {
+        grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
+        categories.forEach(c => grid.appendChild(createCategoryCard(c, false)));
+        return;
+      }
+
+      const gridWidth = grid.getBoundingClientRect().width || fieldset.getBoundingClientRect().width || 0;
+      const stacked = gridWidth > 0 && gridWidth < 650;
+      grid.style.gridTemplateColumns = stacked ? "1fr" : "minmax(260px, 0.82fr) minmax(330px, 1.45fr)";
+
+      grid.appendChild(createCategoryCard(activeCategory, true));
+
+      const restGrid = document.createElement("div");
+      restGrid.style.display = "grid";
+      restGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(130px, 1fr))";
+      restGrid.style.gap = "10px";
+      restGrid.style.alignContent = "start";
+      restGrid.style.minWidth = "0";
+
+      categories
+        .filter(c => c.id !== activeCategory.id)
+        .forEach(c => restGrid.appendChild(createCategoryCard(c, false)));
+      grid.appendChild(restGrid);
+    };
+
+    panel.__wifiOssRenderRecycleCategories = renderCategories;
     panel.appendChild(grid);
     fieldset.appendChild(panel);
+    renderCategories();
 
     // Validate before continuing.
     const guardContinue = (e) => {
