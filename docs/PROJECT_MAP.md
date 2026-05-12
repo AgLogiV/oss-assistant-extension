@@ -387,16 +387,34 @@ Dashboard categories:
 
 If a dashboard model does not have one of these categories, `content.js` derives a category from the model name via `categorizeSwapMaterial`.
 
-### Why All Material Devices Can Show
+### Recycle-Specific Material Filtering
 
-The SAP/material panel has its own local filter state:
+The SAP/material quick-button grid can be scoped by the selected recycle category (`wifi_oss_recycle_entry_category`).
+The scoped filters are explicit allowlists of normalized material IDs, not broad dashboard categories.
 
-- `let activeCategory = "all"`
-- Filter buttons are `all`, `internet`, `tv`, `other`
-- Initial render calls `applyFilter()` while `activeCategory === "all"`
-- Search text overrides category filtering: when search has text, `okCat` is always true
+Mapped recycle categories:
 
-The selected recycle category (`wifi_oss_recycle_entry_category`) is not read by `injectSwapMaterialButtons` for filtering the grid. It is currently used only by `applyRecycleCategoryMaterialPreset`, and only for `android_iptv` and `austrian` auto-preset behavior. Therefore, after choosing a recycle group on the first page, the next material page can still show all material devices.
+- `xplore_zapper`
+- `dth_kaon_nagra`
+- `android_iptv`
+- `netbox`
+- `routers`
+- `gpon`
+
+Behavior for mapped categories:
+
+- Only allowlisted material buttons are rendered.
+- The button order follows the allowlist order.
+- The broad chips `all` / `internet` / `tv` / `other` are hidden.
+- Search stays scoped to the rendered allowlisted devices.
+- There is no fallback to all devices when a mapped category is active; if a dashboard-provided model is missing, the matching button will be absent.
+
+Unmapped categories keep the older full-list behavior.
+
+Known gap:
+
+- `austrian` is currently unmapped/TODO because the target material device still needs to be added or clarified.
+- `cam_modules` is a separate flow. With empty `MaterialId`, it redirects back to the operation page and does not use the quick-buttons grid.
 
 ### Likely Future Change Points for Recycle-Based Material Filtering
 
@@ -404,17 +422,9 @@ Most likely code areas:
 
 - Recycle category storage/constants around `RECYCLE_ENTRY_SELECTED_KEY`.
 - `injectSwapMaterialButtons`, especially the initial `activeCategory`, model button creation, and `applyFilter`.
-- `categorizeSwapMaterial` or a new mapping between recycle categories and material model IDs/categories.
+- `SWAP_MATERIAL_RECYCLE_FILTERS`, the explicit mapping between recycle categories and normalized material IDs.
 - `SWAP_MATERIAL_MODELS_DEFAULT` and/or dashboard model schema if more precise grouping is needed than `internet`/`tv`/`other`.
 - `applyRecycleCategoryMaterialPreset` if future category behavior should auto-fill, skip, or trigger another OSS action.
-
-Before implementation, confirm whether filtering should be by:
-
-- existing broad categories `internet`/`tv`/`other`;
-- exact recycle categories such as `routers`, `gpon`, `xplore_zapper`;
-- explicit material ID allowlists;
-- dashboard-provided category metadata;
-- serial-derived rules.
 
 ## Dashboard/API Dependency
 
@@ -467,6 +477,7 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
+- `wifi_oss_debug_material_auto_continue_enabled` - `sessionStorage`, temporary debug/test override for material auto-continue (`"0"` means off; missing key means on).
 - `obb_admin_token` - dashboard `sessionStorage`, admin token in dashboard UI only.
 
 ## Known Risks and Uncertainties
@@ -477,11 +488,23 @@ Fallback behavior:
 - Recycle guard may need stronger event blocking if OSS uses competing capture listeners.
 - GPON validation comment and implementation disagree.
 - SAP material auto-continue may be too aggressive if a value is present for reasons other than OSS history.
-- SAP/material quick buttons are not currently filtered by selected recycle category.
+- Material auto-continue debug toggle is a test helper, not a primary user workflow; if it causes OSS issues, it can be removed without changing the core material filtering behavior.
+- `austrian` material filtering is still unmapped/TODO until the target device/material is clarified.
 - CAM modules intentionally bypass material quick buttons only when `MaterialId` is empty; do not make this behavior global for other categories.
 - Dashboard data can replace built-in material models.
 - Real OSS DOM can differ from assumptions; do not rely only on guessed selectors.
 - Some dashboard strings/category aliases show mojibake; verify before changing encoding-related behavior.
+
+## Recent Regression Test Notes
+
+Latest confirmed real-OSS checks:
+
+- Clipboard SSID/password autofill works.
+- Label generation works.
+- Austrian label generation works.
+- CAM modules flow works.
+- Recycle-specific material filtering works for the mapped categories.
+- `Material auto-continue` debug toggle works and no longer freezes the page.
 
 ## Working with Real OSS Pages / Missing DOM Context
 

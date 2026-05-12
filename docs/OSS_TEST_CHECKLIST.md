@@ -44,6 +44,10 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Set the toggle to `OFF` before entering the material step and confirm a prefilled `MaterialId` leaves the SAP/material page visible.
 - With toggle `OFF` and a mapped recycle category, confirm the quick button grid is filtered to the selected recycle category.
 - Set the toggle back to `ON` and confirm following material pages with prefilled `MaterialId` auto-continue again.
+- For mapped categories (`xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, `gpon`), confirm only the expected allowlisted material buttons appear.
+- For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
+- For unmapped categories, confirm the older full-list behavior remains.
+- For `austrian`, treat material filtering as TODO/unmapped until the missing/unclear device is added.
 - For `cam_modules`, confirm a prefilled `MaterialId` still auto-continues.
 - For `cam_modules`, confirm an empty `MaterialId` returns to the main `Рециклиране на устройство` operation through the breadcrumb instead of leaving the user in the quick-button flow.
 - On the returned operation page, confirm the red CAM helper text appears next to `Служебно прекратяване` and that `Служебно прекратяване` is not clicked automatically.
@@ -67,6 +71,15 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Test `АВТОМАТИЧНО` with a recognized sample and then with unrelated clipboard text.
 - Confirm hidden/background tabs do not unexpectedly fill forms.
 - Confirm fields for ports, Wi-Fi test, SSID1/SSID2, PSK1/PSK2, and custom request update correctly.
+
+## Recent Regression Checks
+
+- Confirm clipboard SSID/password autofill still works.
+- Confirm label generation still works.
+- Confirm Austrian label generation still works.
+- Confirm CAM Modules flow still works.
+- Confirm material filtering by recycle category still works for the mapped categories.
+- Confirm the `Material auto-continue` debug toggle still works and does not freeze the OSS page.
 
 ## Evidence to Send Back to Codex
 
