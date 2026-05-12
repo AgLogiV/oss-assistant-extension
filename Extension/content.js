@@ -2776,7 +2776,7 @@
 
     const categories = [
       { id: "android_iptv", label: "Android TV & ZTE IPTV", hintModelName: "DV9161 (AndroidTV)", imagePath: "images/categories/16x9/android_iptv.webp" },
-      { id: "xplore_zapper", label: "XPLORE & Zapper", hintModelName: "Zapper", imagePath: "images/categories/16x9/xplore_zapper.webp" },
+      { id: "xplore_zapper", label: "5019/5020 & Zapper", hintModelName: "Zapper", imagePath: "images/categories/16x9/xplore_zapper.webp" },
       { id: "dth_kaon_nagra", label: "DTH Kaon & Nagra", hintModelName: "DTH Nagra DTS3460", imagePath: "images/categories/16x9/dth_nagra.webp" },
       { id: "austrian", label: "Австрийски", hintModelName: "", imagePath: "images/categories/16x9/austria.webp" },
       { id: "netbox", label: "Netbox", hintModelName: "", imagePath: "images/categories/16x9/netbox.webp" },
@@ -2826,14 +2826,14 @@
 
     const createCategoryCard = (c, featured) => {
       const isSelected = (c.id === getSelected());
-      const red = "#e30613";
+      const red = "#DA291C";
       const baseBorder = featured ? red : "#d8d8d8";
       const baseShadow = featured ? "0 8px 20px rgba(0,0,0,0.16)" : "0 2px 9px rgba(0,0,0,0.10)";
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.wifiOssRecycleCat = c.id;
       b.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      b.title = c.label;
+      b.setAttribute("aria-label", c.label);
       b.style.position = "relative";
       b.style.display = "flex";
       b.style.flexDirection = "column";
@@ -2908,7 +2908,7 @@
       titleBar.style.background = featured ? red : "#3f3f3f";
       titleBar.style.display = "flex";
       titleBar.style.alignItems = "center";
-      titleBar.style.justifyContent = featured ? "center" : "flex-start";
+      titleBar.style.justifyContent = "center";
 
       const label = document.createElement("div");
       label.textContent = c.label;
@@ -2921,7 +2921,7 @@
       label.style.webkitBoxOrient = "vertical";
       label.style.webkitLineClamp = "2";
       label.style.overflow = "hidden";
-      label.style.textAlign = featured ? "center" : "left";
+      label.style.textAlign = "center";
       titleBar.appendChild(label);
 
       b.appendChild(media);
