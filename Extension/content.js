@@ -2021,6 +2021,7 @@
   function autoContinueSwapMaterialIfReady(root, input) {
     if (!root || !input) return;
     if (root.dataset.wifiOssSwapAutoContinueDone === "1") return;
+    if (!isMaterialAutoContinueEnabled()) return;
     const raw = String(input.value || "").trim();
     const normalized = normalizeSwapMaterialId(raw);
     if (!normalized) return;
@@ -2034,6 +2035,68 @@
     if (raw !== normalized) setSwapMaterialInputValue(input, normalized);
     root.dataset.wifiOssSwapAutoContinueDone = "1";
     try { continueBtn.click(); } catch (e) {}
+  }
+
+  const MATERIAL_AUTO_CONTINUE_DEBUG_KEY = "wifi_oss_debug_material_auto_continue_enabled";
+  const MATERIAL_AUTO_CONTINUE_TOGGLE_CLASS = "wifi-oss-material-auto-debug-toggle";
+
+  function isMaterialAutoContinueEnabled() {
+    try { return sessionStorage.getItem(MATERIAL_AUTO_CONTINUE_DEBUG_KEY) !== "0"; } catch (e) {}
+    return true;
+  }
+
+  function setMaterialAutoContinueEnabled(enabled) {
+    try {
+      if (enabled) sessionStorage.removeItem(MATERIAL_AUTO_CONTINUE_DEBUG_KEY);
+      else sessionStorage.setItem(MATERIAL_AUTO_CONTINUE_DEBUG_KEY, "0");
+    } catch (e) {}
+    updateMaterialAutoContinueDebugToggles();
+  }
+
+  function updateMaterialAutoContinueDebugToggles() {
+    const enabled = isMaterialAutoContinueEnabled();
+    document.querySelectorAll(`.${MATERIAL_AUTO_CONTINUE_TOGGLE_CLASS} button[data-wifi-oss-material-auto-continue-toggle]`).forEach(btn => {
+      btn.textContent = `Debug: Material auto-continue ${enabled ? "ON" : "OFF"}`;
+      btn.style.background = enabled ? "#f3f3f3" : "#fff4e5";
+      btn.style.borderColor = enabled ? "#c9c9c9" : "#d28a1d";
+      btn.style.color = enabled ? "#333" : "#8a4b00";
+    });
+  }
+
+  function ensureMaterialAutoContinueDebugToggle(container) {
+    if (!container) return null;
+    const existing = container.querySelector(`.${MATERIAL_AUTO_CONTINUE_TOGGLE_CLASS}`);
+    if (existing) {
+      updateMaterialAutoContinueDebugToggles();
+      return existing;
+    }
+
+    const wrap = document.createElement("div");
+    wrap.className = MATERIAL_AUTO_CONTINUE_TOGGLE_CLASS;
+    wrap.style.margin = "4px 0 8px";
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "center";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.wifiOssMaterialAutoContinueToggle = "1";
+    btn.style.padding = "3px 8px";
+    btn.style.border = "1px solid #c9c9c9";
+    btn.style.borderRadius = "999px";
+    btn.style.fontSize = "11px";
+    btn.style.lineHeight = "1.4";
+    btn.style.cursor = "pointer";
+    btn.style.boxShadow = "none";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMaterialAutoContinueEnabled(!isMaterialAutoContinueEnabled());
+    });
+
+    wrap.appendChild(btn);
+    container.appendChild(wrap);
+    updateMaterialAutoContinueDebugToggles();
+    return wrap;
   }
 
   function getSelectedRecycleEntryCategory() {
@@ -2188,9 +2251,10 @@
     try { applyRecycleCategoryMaterialPreset(input); } catch (e) {}
     autoContinueSwapMaterialIfReady(root, input);
     if (maybeRedirectCamModulesEmptyMaterial(root, input)) return true;
-    const recycleMaterialFilter = normalizeSwapMaterialId(input.value)
-      ? null
-      : getSwapMaterialRecycleFilter(getSelectedRecycleEntryCategory());
+    const autoContinueEnabled = isMaterialAutoContinueEnabled();
+    const recycleMaterialFilter = (!normalizeSwapMaterialId(input.value) || !autoContinueEnabled)
+      ? getSwapMaterialRecycleFilter(getSelectedRecycleEntryCategory())
+      : null;
 
     const panel = document.createElement("div");
     panel.className = "wifi-oss-swap-material-panel";
@@ -2203,6 +2267,7 @@
     title.style.fontWeight = "600";
     title.style.marginBottom = "8px";
     panel.appendChild(title);
+    ensureMaterialAutoContinueDebugToggle(panel);
 
     const searchWrap = document.createElement("div");
     searchWrap.style.marginBottom = "8px";
@@ -2655,6 +2720,7 @@
     title.style.color = "#333";
     title.style.marginBottom = "6px";
     panel.appendChild(title);
+    ensureMaterialAutoContinueDebugToggle(panel);
 
     const grid = document.createElement("div");
     grid.style.display = "grid";
