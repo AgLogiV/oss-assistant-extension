@@ -16,6 +16,10 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm the serial input attributes: `id`, `name`, `class`, `value`, `readonly`, `disabled`.
 - Without choosing a category, enter a serial and press Continue. Expected: blocked with an inline message.
 - Test Continue by mouse click and by pressing Enter in the serial field.
+- Scan barcode `ABCDEFGHIJKLMNOPQRSTUVWXYZ:` with ENG layout. Expected: input remains `ABCDEFGHIJKLMNOPQRSTUVWXYZ:`.
+- Scan the same barcode with BG Phonetic/BGPT and BG/BDS layouts. Expected: input is normalized to `ABCDEFGHIJKLMNOPQRSTUVWXYZ:`.
+- Paste Cyrillic into the serial input. Expected: warning is shown and Continue is blocked.
+- Confirm `Backspace`, `Delete`, arrows, `Ctrl+A`, `Ctrl+C`, `Ctrl+V`, and `Enter` still behave normally in the serial input.
 - Choose each category and confirm the selected visual state is obvious.
 - For each category, test at least one valid and one invalid serial:
   - `android_iptv`

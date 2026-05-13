@@ -257,6 +257,13 @@ Behavior:
 - If the serial is invalid for the category, prevents continuing, shows the validation message, focuses/selects the serial input.
 - If valid, stores `wifi_oss_recycle_entry_last_serial` and sets `wifi_oss_recycle_entry_pending_material` to `1` for the next material step.
 
+### Serial Keyboard Layout Protection
+
+- `_wflowEnterDeviceDataForRecycle_SerialNo` protects scanner input from active BG keyboard layouts.
+- Trusted `keydown` events with a single Cyrillic `event.key` and known `KeyboardEvent.code` are normalized only for clear cases: `KeyA`..`KeyZ` -> `A`..`Z`, and `Semicolon` + `Shift` -> `:`.
+- Normal Latin/digit input is left unchanged. Paste or unknown Cyrillic input is not auto-corrected; it keeps the warning/block fallback.
+- Opt-in serial keyboard diagnostics use `sessionStorage.setItem("wifi_oss_serial_keyboard_debug", "1")` and expose `window.__wifiOssSerialDebugEvents` plus `wifi_oss_serial_keyboard_debug_events`.
+
 Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopImmediatePropagation()`. If OSS has other capture listeners on the same element, verify that invalid entries truly cannot continue.
 
 ### Validation Rules by Category
@@ -478,6 +485,7 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
 - `wifi_oss_debug_material_auto_continue_enabled` - `sessionStorage`, temporary debug/test override for material auto-continue (`"0"` means off; missing key means on).
+- `wifi_oss_serial_keyboard_debug` - `sessionStorage`, opt-in serial keyboard diagnostic logging (`"1"` means on).
 - `obb_admin_token` - dashboard `sessionStorage`, admin token in dashboard UI only.
 
 ## Known Risks and Uncertainties

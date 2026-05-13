@@ -2636,6 +2636,12 @@
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
+  const RECYCLE_SERIAL_CYRILLIC_WARNING = "\u0417\u0430\u0441\u0435\u0447\u0435\u043d\u0430 \u0435 \u043a\u0438\u0440\u0438\u043b\u0438\u0446\u0430 \u0432 \u0441\u0435\u0440\u0438\u0439\u043d\u0438\u044f \u043d\u043e\u043c\u0435\u0440. \u0421\u043c\u0435\u043d\u0438 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430\u0442\u0430 \u043d\u0430 EN \u0438 \u0441\u043a\u0430\u043d\u0438\u0440\u0430\u0439 \u043e\u0442\u043d\u043e\u0432\u043e.";
+  const RECYCLE_SERIAL_KEYBOARD_DEBUG_KEY = "wifi_oss_serial_keyboard_debug";
+  const RECYCLE_SERIAL_KEYBOARD_DEBUG_EVENTS_KEY = "wifi_oss_serial_keyboard_debug_events";
+  const RECYCLE_SERIAL_KEYBOARD_DEBUG_LIMIT = 500;
+  let recycleSerialDebugLastTs = 0;
+  let recycleSerialDebugNoticeShown = false;
   const recycleInlineAlertAnimations = new WeakMap();
 
   function stopRecycleInlineAlertAnimation(el) {
@@ -2737,6 +2743,216 @@
     el.textContent = "";
     el.style.display = "none";
     el.removeAttribute("role");
+    delete el.dataset.wifiOssRecycleSerialAlertKind;
+  }
+
+  function hasRecycleSerialCyrillic(value) {
+    return /[\u0400-\u04FF]/.test(String(value || ""));
+  }
+
+  function getRecycleSerialCyrillicValidation(serialRaw) {
+    if (!hasRecycleSerialCyrillic(serialRaw)) return { ok: true, msg: "" };
+    return {
+      ok: false,
+      msg: RECYCLE_SERIAL_CYRILLIC_WARNING,
+      variant: "warning",
+      kind: "cyrillic"
+    };
+  }
+
+  function getRecycleSerialCodeNormalizationChar(e) {
+    if (!e || !e.isTrusted) return "";
+    if (e.ctrlKey || e.altKey || e.metaKey) return "";
+
+    const key = String(e.key || "");
+    if ([...key].length !== 1 || !hasRecycleSerialCyrillic(key)) return "";
+
+    const code = String(e.code || "");
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+    if (code === "Semicolon" && e.shiftKey) return ":";
+    return "";
+  }
+
+  function setRecycleSerialInputValue(input, value) {
+    const proto = Object.getPrototypeOf(input);
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (typeof setter === "function") setter.call(input, value);
+    else input.value = value;
+  }
+
+  function dispatchRecycleSerialInputEvent(input, data) {
+    try {
+      input.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data
+      }));
+    } catch (e) {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  function normalizeRecycleSerialKeydown(input, e) {
+    if (!input || !e || e.target !== input || e.defaultPrevented) return false;
+    if (input.disabled || input.readOnly) return false;
+
+    const replacement = getRecycleSerialCodeNormalizationChar(e);
+    if (!replacement) return false;
+
+    let start = null;
+    let end = null;
+    try {
+      start = input.selectionStart;
+      end = input.selectionEnd;
+    } catch (e2) {}
+
+    const value = String(input.value || "");
+    if (typeof start !== "number" || typeof end !== "number") {
+      start = value.length;
+      end = value.length;
+    }
+
+    e.preventDefault();
+    const next = `${value.slice(0, start)}${replacement}${value.slice(end)}`;
+    setRecycleSerialInputValue(input, next);
+    const caret = start + replacement.length;
+    try { input.setSelectionRange(caret, caret); } catch (e2) {}
+    e.__wifiOssSerialNormalized = replacement;
+    dispatchRecycleSerialInputEvent(input, replacement);
+    return true;
+  }
+
+  function isRecycleSerialKeyboardDebugEnabled() {
+    try { return sessionStorage.getItem(RECYCLE_SERIAL_KEYBOARD_DEBUG_KEY) === "1"; } catch (e) {}
+    return false;
+  }
+
+  function getRecycleSerialDebugEvents() {
+    if (!Array.isArray(window.__wifiOssSerialDebugEvents)) {
+      let saved = [];
+      try {
+        const parsed = JSON.parse(sessionStorage.getItem(RECYCLE_SERIAL_KEYBOARD_DEBUG_EVENTS_KEY) || "[]");
+        if (Array.isArray(parsed)) saved = parsed;
+      } catch (e) {}
+      window.__wifiOssSerialDebugEvents = saved;
+    }
+    return window.__wifiOssSerialDebugEvents;
+  }
+
+  function persistRecycleSerialDebugEvents(events) {
+    try { sessionStorage.setItem(RECYCLE_SERIAL_KEYBOARD_DEBUG_EVENTS_KEY, JSON.stringify(events)); } catch (e) {}
+  }
+
+  function getRecycleSerialSelection(input) {
+    const selection = { start: null, end: null, direction: "" };
+    try {
+      selection.start = input.selectionStart;
+      selection.end = input.selectionEnd;
+      selection.direction = input.selectionDirection || "";
+    } catch (e) {}
+    return selection;
+  }
+
+  function getRecycleSerialDebugDecision(e, input) {
+    if (!e) return "observed";
+    const key = String(e.key || "");
+    const code = String(e.code || "");
+    const data = String(e.data || "");
+    if (e.type === "keydown") {
+      const normalized = e.__wifiOssSerialNormalized || (e.defaultPrevented ? getRecycleSerialCodeNormalizationChar(e) : "");
+      if (normalized) return `normalized-to-${normalized}`;
+      if (key === "Enter") return "enter-guard";
+      if (e.ctrlKey || e.metaKey || e.altKey) return "modifier-shortcut";
+      if (/^Arrow/.test(key) || ["Backspace", "Delete", "Tab", "Escape", "Home", "End"].includes(key)) return "navigation-or-edit-key";
+      if (hasRecycleSerialCyrillic(key)) return code ? "observed-cyrillic-key-with-code-no-normalization" : "observed-cyrillic-key-no-normalization";
+      return "observed-no-change";
+    }
+    if (e.type === "beforeinput") {
+      if (hasRecycleSerialCyrillic(data)) return "observed-cyrillic-beforeinput-no-normalization";
+      return "observed-beforeinput";
+    }
+    if (e.type === "input") {
+      if (hasRecycleSerialCyrillic(input?.value)) return "warn-cyrillic";
+      return "observed-input";
+    }
+    if (e.type === "paste") return "observed-paste-no-normalization";
+    if (e.type === "keyup") return "observed-keyup";
+    return "observed";
+  }
+
+  function pushRecycleSerialDebugEvent(input, e, valueBefore, decision) {
+    if (!isRecycleSerialKeyboardDebugEnabled() || !input || !e) return;
+    const now = (typeof performance !== "undefined" && typeof performance.now === "function")
+      ? performance.now()
+      : Date.now();
+    const deltaMs = recycleSerialDebugLastTs ? Math.round((now - recycleSerialDebugLastTs) * 1000) / 1000 : null;
+    recycleSerialDebugLastTs = now;
+
+    const entry = {
+      type: e.type,
+      key: typeof e.key === "string" ? e.key : "",
+      code: typeof e.code === "string" ? e.code : "",
+      inputType: typeof e.inputType === "string" ? e.inputType : "",
+      data: typeof e.data === "string" ? e.data : "",
+      shiftKey: !!e.shiftKey,
+      ctrlKey: !!e.ctrlKey,
+      altKey: !!e.altKey,
+      metaKey: !!e.metaKey,
+      repeat: !!e.repeat,
+      isTrusted: !!e.isTrusted,
+      defaultPrevented: !!e.defaultPrevented,
+      timestamp: new Date().toISOString(),
+      timeMs: Math.round(now * 1000) / 1000,
+      deltaMs,
+      selection: getRecycleSerialSelection(input),
+      valueBefore: String(valueBefore || ""),
+      valueAfter: String(input.value || ""),
+      decision
+    };
+
+    const events = getRecycleSerialDebugEvents();
+    events.push(entry);
+    if (events.length > RECYCLE_SERIAL_KEYBOARD_DEBUG_LIMIT) {
+      events.splice(0, events.length - RECYCLE_SERIAL_KEYBOARD_DEBUG_LIMIT);
+    }
+    persistRecycleSerialDebugEvents(events);
+  }
+
+  function logRecycleSerialDebugEvent(input, e, valueBefore) {
+    if (!isRecycleSerialKeyboardDebugEnabled()) return;
+    const before = valueBefore === undefined ? String(input?.value || "") : String(valueBefore || "");
+    setTimeout(() => {
+      const decision = getRecycleSerialDebugDecision(e, input);
+      pushRecycleSerialDebugEvent(input, e, before, decision);
+    }, 0);
+  }
+
+  function attachRecycleSerialDebug(input) {
+    if (!input) return;
+    if (input.dataset.wifiOssSerialDebugAttached === "1") return;
+    input.dataset.wifiOssSerialDebugAttached = "1";
+
+    if (isRecycleSerialKeyboardDebugEnabled()) {
+      window.__wifiOssSerialDebugEvents = [];
+      persistRecycleSerialDebugEvents(window.__wifiOssSerialDebugEvents);
+      recycleSerialDebugLastTs = 0;
+      if (!recycleSerialDebugNoticeShown) {
+        recycleSerialDebugNoticeShown = true;
+        console.info("[recycleSerialDebug] enabled. Copy with copy(JSON.stringify(window.__wifiOssSerialDebugEvents, null, 2)) or copy(sessionStorage.getItem(\"wifi_oss_serial_keyboard_debug_events\")).");
+      }
+    }
+
+    let lastValue = String(input.value || "");
+    ["keydown", "keyup", "beforeinput", "paste"].forEach(type => {
+      input.addEventListener(type, (e) => {
+        logRecycleSerialDebugEvent(input, e, String(input.value || ""));
+      }, true);
+    });
+    input.addEventListener("input", (e) => {
+      const before = lastValue;
+      logRecycleSerialDebugEvent(input, e, before);
+      setTimeout(() => { lastValue = String(input.value || ""); }, 0);
+    }, true);
   }
 
   function refreshRecycleEntryCategoryPanel(panel) {
@@ -2773,6 +2989,8 @@
   function validateRecycleSerial(categoryId, serialRaw) {
     const s = String(serialRaw || "").trim();
     if (!s) return { ok: false, msg: "Въведи сериен номер." };
+    const cyrillicCheck = getRecycleSerialCyrillicValidation(s);
+    if (!cyrillicCheck.ok) return cyrillicCheck;
     if (categoryId === "cam_modules") return { ok: true, msg: "" };
     const upper = s.toUpperCase();
     const macWithSeparators = /^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/.test(upper);
@@ -2890,6 +3108,14 @@
       serialRow.appendChild(serialMsg);
     }
 
+    const setSerialInlineAlert = (message, variant, kind) => {
+      if (kind) serialMsg.dataset.wifiOssRecycleSerialAlertKind = kind;
+      else delete serialMsg.dataset.wifiOssRecycleSerialAlertKind;
+      setRecycleInlineAlert(serialMsg, message, variant);
+    };
+    const clearSerialInlineAlert = () => clearRecycleInlineAlert(serialMsg);
+    attachRecycleSerialDebug(serialInput);
+
     const panel = document.createElement("div");
     panel.className = RECYCLE_ENTRY_PANEL_CLASS;
     panel.style.marginTop = "16px";
@@ -2952,7 +3178,7 @@
       } catch (e) {}
       panel.dataset.wifiOssRecycleSelected = id;
       renderCategories();
-      clearRecycleInlineAlert(serialMsg);
+      clearSerialInlineAlert();
     };
 
     const resolveCategoryImageUrl = (c) => {
@@ -3165,7 +3391,7 @@
       if (!r.ok) {
         e.preventDefault();
         e.stopPropagation();
-        setRecycleInlineAlert(serialMsg, r.msg, "error");
+        setSerialInlineAlert(r.msg, r.variant === "warning" ? "warning" : "error", r.kind || "validation");
         try { serialInput.focus(); serialInput.select?.(); } catch (e2) {}
         return;
       }
@@ -3182,14 +3408,29 @@
     const form = root.querySelector("form");
     if (form) form.addEventListener("submit", guardContinue, true);
     serialInput.addEventListener("keydown", (e) => {
+      if (normalizeRecycleSerialKeydown(serialInput, e)) return;
       if (e.key === "Enter") guardContinue(e);
     }, true);
     serialInput.addEventListener("input", () => {
-      if (!serialMsg.textContent) return;
+      const cyrillicCheck = getRecycleSerialCyrillicValidation(serialInput.value);
+      if (!cyrillicCheck.ok) {
+        setSerialInlineAlert(cyrillicCheck.msg, "warning", cyrillicCheck.kind);
+        return;
+      }
+
+      const hadCyrillicAlert = serialMsg.dataset.wifiOssRecycleSerialAlertKind === "cyrillic";
+      if (!serialMsg.textContent && !hadCyrillicAlert) return;
       const cat = getSelected();
-      if (!cat) return;
+      if (!cat) {
+        if (hadCyrillicAlert) clearSerialInlineAlert();
+        return;
+      }
       const r = validateRecycleSerial(cat, serialInput.value);
-      if (r.ok) clearRecycleInlineAlert(serialMsg);
+      if (r.ok) {
+        clearSerialInlineAlert();
+      } else if (hadCyrillicAlert) {
+        setSerialInlineAlert(r.msg, r.variant === "warning" ? "warning" : "error", r.kind || "validation");
+      }
     });
 
     return true;
