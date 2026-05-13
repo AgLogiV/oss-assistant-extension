@@ -2635,6 +2635,52 @@
   const RECYCLE_ENTRY_SELECTED_DATE_KEY = "wifi_oss_recycle_entry_category_date";
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
+  const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
+  const recycleInlineAlertAnimations = new WeakMap();
+
+  function stopRecycleInlineAlertAnimation(el) {
+    const animation = recycleInlineAlertAnimations.get(el);
+    if (!animation) return;
+    try { animation.cancel(); } catch (e) {}
+    recycleInlineAlertAnimations.delete(el);
+  }
+
+  function playRecycleInlineAlertShake(el) {
+    if (!el) return;
+    if (typeof el.animate !== "function") return;
+    try {
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+    } catch (e) {}
+
+    stopRecycleInlineAlertAnimation(el);
+    const animation = el.animate([
+      { transform: "translateX(0)" },
+      { transform: "translateX(-7px)" },
+      { transform: "translateX(7px)" },
+      { transform: "translateX(-5px)" },
+      { transform: "translateX(5px)" },
+      { transform: "translateX(0)" }
+    ], {
+      duration: 220,
+      easing: "ease-out"
+    });
+    recycleInlineAlertAnimations.set(el, animation);
+
+    const cleanup = () => {
+      if (recycleInlineAlertAnimations.get(el) === animation) {
+        recycleInlineAlertAnimations.delete(el);
+      }
+    };
+    try {
+      animation.addEventListener("finish", cleanup, { once: true });
+      animation.addEventListener("cancel", cleanup, { once: true });
+    } catch (e) {}
+  }
+
+  function playRecycleSerialErrorShake(el) {
+    if (!el || el.id !== RECYCLE_SERIAL_ALERT_ID) return;
+    playRecycleInlineAlertShake(el);
+  }
 
   function setRecycleInlineAlert(el, message, variant) {
     if (!el) return;
@@ -2677,10 +2723,17 @@
 
     el.appendChild(icon);
     el.appendChild(text);
+
+    if (warning) {
+      playRecycleInlineAlertShake(el);
+    } else {
+      playRecycleSerialErrorShake(el);
+    }
   }
 
   function clearRecycleInlineAlert(el) {
     if (!el) return;
+    stopRecycleInlineAlertAnimation(el);
     el.textContent = "";
     el.style.display = "none";
     el.removeAttribute("role");
