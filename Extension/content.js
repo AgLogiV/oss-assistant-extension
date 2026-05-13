@@ -2759,13 +2759,12 @@
     panel.style.boxSizing = "border-box";
 
     const title = document.createElement("div");
-    title.textContent = "Категория:";
+    title.textContent = "Избери на каква категория си днес:";
     title.style.fontWeight = "700";
     title.style.color = "#333";
     title.style.fontSize = "16px";
     title.style.marginBottom = "8px";
     panel.appendChild(title);
-    ensureMaterialAutoContinueDebugToggle(panel);
 
     const grid = document.createElement("div");
     grid.style.display = "grid";
@@ -2985,8 +2984,34 @@
 
     panel.__wifiOssRenderRecycleCategories = renderCategories;
     panel.appendChild(grid);
+    const debugToggle = ensureMaterialAutoContinueDebugToggle(panel);
+    if (debugToggle) {
+      debugToggle.style.margin = "8px 0 0";
+      debugToggle.style.justifyContent = "flex-start";
+      debugToggle.style.opacity = "0.65";
+      const debugBtn = debugToggle.querySelector("button[data-wifi-oss-material-auto-continue-toggle]");
+      if (debugBtn) {
+        debugBtn.style.padding = "2px 6px";
+        debugBtn.style.fontSize = "10px";
+        debugBtn.style.lineHeight = "1.25";
+      }
+    }
     fieldset.appendChild(panel);
     renderCategories();
+
+    const focusSerialInputOnce = () => {
+      const active = document.activeElement;
+      const canTakeFocus = !active || active === document.body || active === document.documentElement;
+      if (!canTakeFocus || !document.contains(serialInput) || serialInput.disabled) return;
+      try { serialInput.focus({ preventScroll: true }); } catch (e) {
+        try { serialInput.focus(); } catch (e2) {}
+      }
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => setTimeout(focusSerialInputOnce, 0));
+    } else {
+      setTimeout(focusSerialInputOnce, 0);
+    }
 
     // Validate before continuing.
     const guardContinue = (e) => {
