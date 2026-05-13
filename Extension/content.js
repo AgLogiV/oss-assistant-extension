@@ -442,6 +442,7 @@
       }
       const inlineMsg = document.getElementById("wifi-oss-recycle-serial-msg");
       clearRecycleInlineAlert(inlineMsg);
+      hideRecycleSerialHelp();
     });
     autoButtonRef = autoBtn;
 
@@ -2636,12 +2637,35 @@
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
+  const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
+  const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
   const RECYCLE_SERIAL_CYRILLIC_WARNING = "\u0417\u0430\u0441\u0435\u0447\u0435\u043d\u0430 \u0435 \u043a\u0438\u0440\u0438\u043b\u0438\u0446\u0430 \u0432 \u0441\u0435\u0440\u0438\u0439\u043d\u0438\u044f \u043d\u043e\u043c\u0435\u0440. \u0421\u043c\u0435\u043d\u0438 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430\u0442\u0430 \u043d\u0430 EN \u0438 \u0441\u043a\u0430\u043d\u0438\u0440\u0430\u0439 \u043e\u0442\u043d\u043e\u0432\u043e.";
+  const RECYCLE_SERIAL_HELP_BY_CATEGORY = {
+    android_iptv: [
+      {
+        title: "B866V2F02 (AndroidTV)",
+        imagePath: "images/recycle-help/android_iptv-zte-zxv10-b866v2f02-richmedia-box.webp",
+        alt: "Правилен barcode за ZTE ZXV10 B866V2F02 / RichMedia Box"
+      },
+      {
+        title: "DV9161 (AndroidTV)",
+        imagePath: "images/recycle-help/android_iptv-a1-sdmc-dv9161.webp",
+        alt: "Правилен barcode за A1 / SDMC DV9161"
+      },
+      {
+        title: "STB ZXV B700v5",
+        imagePath: "images/recycle-help/android_iptv-zte-zxv10-b700v5-iptv.webp",
+        alt: "Правилен barcode за ZTE ZXV10 B700V5 IPTV"
+      }
+    ]
+  };
   const RECYCLE_SERIAL_KEYBOARD_DEBUG_KEY = "wifi_oss_serial_keyboard_debug";
   const RECYCLE_SERIAL_KEYBOARD_DEBUG_EVENTS_KEY = "wifi_oss_serial_keyboard_debug_events";
   const RECYCLE_SERIAL_KEYBOARD_DEBUG_LIMIT = 500;
   let recycleSerialDebugLastTs = 0;
   let recycleSerialDebugNoticeShown = false;
+  let recycleSerialHelpUi = null;
+  let recycleSerialHelpCloseTimer = 0;
   const recycleInlineAlertAnimations = new WeakMap();
 
   function stopRecycleInlineAlertAnimation(el) {
@@ -2744,6 +2768,345 @@
     el.style.display = "none";
     el.removeAttribute("role");
     delete el.dataset.wifiOssRecycleSerialAlertKind;
+  }
+
+  function isRecycleReducedMotionPreferred() {
+    try { return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches; } catch (e) {}
+    return false;
+  }
+
+  function getRecycleSerialHelpItems(categoryId) {
+    const items = RECYCLE_SERIAL_HELP_BY_CATEGORY[String(categoryId || "").trim()];
+    return Array.isArray(items) ? items : [];
+  }
+
+  function resolveRecycleSerialHelpImageUrl(imagePath) {
+    const path = String(imagePath || "");
+    if (!path) return "";
+    return (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+      ? chrome.runtime.getURL(path)
+      : path;
+  }
+
+  function setRecycleSerialHelpButtonVisible(ui, visible) {
+    if (!ui?.button) return;
+    const btn = ui.button;
+    if (visible) {
+      const wasHidden = btn.style.display === "none" || btn.getAttribute("aria-hidden") === "true";
+      btn.style.display = "inline-flex";
+      btn.setAttribute("aria-hidden", "false");
+      if (isRecycleReducedMotionPreferred()) {
+        btn.style.opacity = "1";
+        btn.style.transform = "none";
+      } else if (wasHidden) {
+        btn.style.opacity = "0";
+        btn.style.transform = "translateX(14px)";
+        requestAnimationFrame(() => {
+          if (btn.style.display !== "none") {
+            btn.style.opacity = "1";
+            btn.style.transform = "translateX(0)";
+          }
+        });
+      } else {
+        btn.style.opacity = "1";
+        btn.style.transform = "translateX(0)";
+      }
+      return;
+    }
+    btn.style.opacity = "0";
+    btn.style.transform = isRecycleReducedMotionPreferred() ? "none" : "translateX(14px)";
+    btn.style.display = "none";
+    btn.setAttribute("aria-hidden", "true");
+  }
+
+  function renderRecycleSerialHelpContent(ui, categoryId) {
+    const items = getRecycleSerialHelpItems(categoryId);
+    if (!ui?.content || !items.length) return false;
+    if (ui.categoryId === categoryId && ui.content.childElementCount) return true;
+
+    ui.categoryId = categoryId;
+    ui.panel.dataset.wifiOssRecycleHelpCategory = categoryId;
+    ui.content.textContent = "";
+
+    items.forEach(item => {
+      const card = document.createElement("section");
+      card.style.boxSizing = "border-box";
+      card.style.padding = "10px";
+      card.style.border = "1px solid #e6bd2f";
+      card.style.borderRadius = "6px";
+      card.style.background = "#fffdf0";
+      card.style.boxShadow = "0 2px 8px rgba(122, 87, 0, 0.12)";
+
+      const title = document.createElement("div");
+      title.textContent = item.title;
+      title.style.marginBottom = "8px";
+      title.style.color = "#4d3a00";
+      title.style.fontSize = "13px";
+      title.style.fontWeight = "800";
+      title.style.lineHeight = "1.25";
+
+      const img = document.createElement("img");
+      img.src = resolveRecycleSerialHelpImageUrl(item.imagePath);
+      img.alt = item.alt || item.title || "";
+      img.loading = "lazy";
+      img.style.display = "block";
+      img.style.width = "100%";
+      img.style.height = "auto";
+      img.style.maxHeight = "360px";
+      img.style.objectFit = "contain";
+      img.style.borderRadius = "4px";
+      img.style.background = "#fff";
+
+      card.appendChild(title);
+      card.appendChild(img);
+      ui.content.appendChild(card);
+    });
+
+    return true;
+  }
+
+  function ensureRecycleSerialHelpUi() {
+    if (recycleSerialHelpUi && document.body?.contains(recycleSerialHelpUi.panel)) {
+      return recycleSerialHelpUi;
+    }
+    const parent = document.body || document.documentElement;
+    if (!parent) return null;
+
+    const button = document.createElement("button");
+    button.id = RECYCLE_SERIAL_HELP_BUTTON_ID;
+    button.type = "button";
+    button.title = "Покажи помощ за правилния barcode";
+    button.setAttribute("aria-label", "Покажи помощ за правилния barcode");
+    button.setAttribute("aria-hidden", "true");
+    button.style.position = "fixed";
+    button.style.top = "154px";
+    button.style.right = "18px";
+    button.style.zIndex = "2147483000";
+    button.style.width = "48px";
+    button.style.height = "48px";
+    button.style.boxSizing = "border-box";
+    button.style.padding = "0";
+    button.style.border = "1px solid #cda100";
+    button.style.borderRadius = "6px";
+    button.style.background = "#f6d33a";
+    button.style.boxShadow = "0 3px 10px rgba(93, 67, 0, 0.22)";
+    button.style.cursor = "pointer";
+    button.style.display = "none";
+    button.style.alignItems = "center";
+    button.style.justifyContent = "center";
+    button.style.opacity = "0";
+    button.style.transform = "translateX(14px)";
+    button.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), box-shadow 160ms ease";
+
+    const icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.position = "relative";
+    icon.style.width = "28px";
+    icon.style.height = "22px";
+    icon.style.borderRadius = "3px";
+    icon.style.border = "2px solid #4b3a00";
+    icon.style.background = "linear-gradient(90deg, #4b3a00 0 7%, transparent 7% 13%, #4b3a00 13% 20%, transparent 20% 28%, #4b3a00 28% 32%, transparent 32% 40%, #4b3a00 40% 50%, transparent 50% 58%, #4b3a00 58% 64%, transparent 64% 74%, #4b3a00 74% 82%, transparent 82% 90%, #4b3a00 90% 100%)";
+
+    const question = document.createElement("span");
+    question.textContent = "?";
+    question.setAttribute("aria-hidden", "true");
+    question.style.position = "absolute";
+    question.style.right = "-8px";
+    question.style.top = "-10px";
+    question.style.width = "18px";
+    question.style.height = "18px";
+    question.style.borderRadius = "999px";
+    question.style.background = "#fff7bf";
+    question.style.border = "1px solid #cda100";
+    question.style.color = "#4b3a00";
+    question.style.display = "inline-flex";
+    question.style.alignItems = "center";
+    question.style.justifyContent = "center";
+    question.style.fontSize = "13px";
+    question.style.fontWeight = "900";
+    question.style.lineHeight = "1";
+    icon.appendChild(question);
+    button.appendChild(icon);
+
+    button.addEventListener("mouseenter", () => {
+      button.style.boxShadow = "0 5px 14px rgba(93, 67, 0, 0.30)";
+    });
+    button.addEventListener("mouseleave", () => {
+      button.style.boxShadow = "0 3px 10px rgba(93, 67, 0, 0.22)";
+    });
+
+    const panel = document.createElement("aside");
+    panel.id = RECYCLE_SERIAL_HELP_PANEL_ID;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Помощ за правилния barcode");
+    panel.setAttribute("aria-hidden", "true");
+    panel.style.position = "fixed";
+    panel.style.top = "176px";
+    panel.style.right = "16px";
+    panel.style.bottom = "70px";
+    panel.style.zIndex = "2147483001";
+    panel.style.width = "min(360px, calc(100vw - 32px))";
+    panel.style.boxSizing = "border-box";
+    panel.style.display = "none";
+    panel.style.flexDirection = "column";
+    panel.style.padding = "12px";
+    panel.style.border = "2px solid #dfaa19";
+    panel.style.borderRadius = "6px";
+    panel.style.background = "#fff4b8";
+    panel.style.boxShadow = "0 10px 28px rgba(80, 59, 0, 0.28)";
+    panel.style.opacity = "0";
+    panel.style.transform = "translateX(110%)";
+    panel.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "opacity 220ms ease, transform 220ms cubic-bezier(0.2, 0, 0.2, 1)";
+
+    const header = document.createElement("div");
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.justifyContent = "space-between";
+    header.style.gap = "8px";
+    header.style.flex = "0 0 auto";
+    header.style.marginBottom = "10px";
+
+    const heading = document.createElement("div");
+    heading.textContent = "Кой barcode да сканирам?";
+    heading.style.color = "#4d3a00";
+    heading.style.fontSize = "15px";
+    heading.style.fontWeight = "900";
+    heading.style.lineHeight = "1.2";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "x";
+    closeBtn.setAttribute("aria-label", "Затвори помощта");
+    closeBtn.style.flex = "0 0 auto";
+    closeBtn.style.width = "28px";
+    closeBtn.style.height = "28px";
+    closeBtn.style.padding = "0";
+    closeBtn.style.border = "1px solid #cda100";
+    closeBtn.style.borderRadius = "4px";
+    closeBtn.style.background = "#ffe680";
+    closeBtn.style.color = "#4b3a00";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.fontSize = "16px";
+    closeBtn.style.fontWeight = "900";
+    closeBtn.style.lineHeight = "1";
+
+    const content = document.createElement("div");
+    content.style.display = "grid";
+    content.style.gap = "10px";
+    content.style.flex = "1 1 auto";
+    content.style.minHeight = "0";
+    content.style.overflowY = "auto";
+    content.style.paddingRight = "3px";
+
+    header.appendChild(heading);
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+    panel.appendChild(content);
+    parent.appendChild(button);
+    parent.appendChild(panel);
+
+    recycleSerialHelpUi = { button, panel, content, closeBtn, categoryId: "" };
+
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRecycleSerialHelpPanelOpen(true);
+    });
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRecycleSerialHelpPanelOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && panel.dataset.wifiOssRecycleHelpOpen === "1") {
+        setRecycleSerialHelpPanelOpen(false);
+      }
+    }, true);
+
+    return recycleSerialHelpUi;
+  }
+
+  function setRecycleSerialHelpPanelOpen(open, options = {}) {
+    const ui = ensureRecycleSerialHelpUi();
+    if (!ui) return;
+    const keepButton = options.keepButton !== false;
+    if (recycleSerialHelpCloseTimer) {
+      clearTimeout(recycleSerialHelpCloseTimer);
+      recycleSerialHelpCloseTimer = 0;
+    }
+
+    if (open) {
+      if (!getRecycleSerialHelpItems(ui.categoryId).length) return;
+      ui.panel.dataset.wifiOssRecycleHelpOpen = "1";
+      ui.panel.style.display = "flex";
+      ui.panel.setAttribute("aria-hidden", "false");
+      setRecycleSerialHelpButtonVisible(ui, false);
+      if (isRecycleReducedMotionPreferred()) {
+        ui.panel.style.opacity = "1";
+        ui.panel.style.transform = "none";
+      } else {
+        ui.panel.style.opacity = "0";
+        ui.panel.style.transform = "translateX(110%)";
+        requestAnimationFrame(() => {
+          if (ui.panel.dataset.wifiOssRecycleHelpOpen === "1") {
+            ui.panel.style.opacity = "1";
+            ui.panel.style.transform = "translateX(0)";
+          }
+        });
+      }
+      return;
+    }
+
+    ui.panel.dataset.wifiOssRecycleHelpOpen = "";
+    ui.panel.setAttribute("aria-hidden", "true");
+    if (keepButton && getRecycleSerialHelpItems(ui.categoryId).length) {
+      setRecycleSerialHelpButtonVisible(ui, true);
+    } else {
+      setRecycleSerialHelpButtonVisible(ui, false);
+    }
+
+    if (isRecycleReducedMotionPreferred()) {
+      ui.panel.style.display = "none";
+      ui.panel.style.opacity = "0";
+      ui.panel.style.transform = "translateX(110%)";
+      return;
+    }
+
+    ui.panel.style.opacity = "0";
+    ui.panel.style.transform = "translateX(110%)";
+    recycleSerialHelpCloseTimer = setTimeout(() => {
+      if (ui.panel.dataset.wifiOssRecycleHelpOpen !== "1") {
+        ui.panel.style.display = "none";
+      }
+    }, 230);
+  }
+
+  function showRecycleSerialHelp(categoryId) {
+    const items = getRecycleSerialHelpItems(categoryId);
+    if (!items.length) {
+      hideRecycleSerialHelp();
+      return false;
+    }
+    const ui = ensureRecycleSerialHelpUi();
+    if (!ui) return false;
+    if (!renderRecycleSerialHelpContent(ui, categoryId)) return false;
+
+    if (ui.panel.dataset.wifiOssRecycleHelpOpen === "1") {
+      setRecycleSerialHelpPanelOpen(true);
+    } else {
+      setRecycleSerialHelpButtonVisible(ui, true);
+    }
+    return true;
+  }
+
+  function hideRecycleSerialHelp() {
+    const ui = recycleSerialHelpUi;
+    if (!ui) return;
+    setRecycleSerialHelpPanelOpen(false, { keepButton: false });
   }
 
   function hasRecycleSerialCyrillic(value) {
@@ -3113,7 +3476,10 @@
       else delete serialMsg.dataset.wifiOssRecycleSerialAlertKind;
       setRecycleInlineAlert(serialMsg, message, variant);
     };
-    const clearSerialInlineAlert = () => clearRecycleInlineAlert(serialMsg);
+    const clearSerialInlineAlert = () => {
+      clearRecycleInlineAlert(serialMsg);
+      hideRecycleSerialHelp();
+    };
     attachRecycleSerialDebug(serialInput);
 
     const panel = document.createElement("div");
@@ -3384,6 +3750,7 @@
       if (!cat) {
         e.preventDefault();
         e.stopPropagation();
+        hideRecycleSerialHelp();
         setRecycleInlineAlert(serialMsg, "Избери категория преди да продължиш.", "error");
         return;
       }
@@ -3392,10 +3759,13 @@
         e.preventDefault();
         e.stopPropagation();
         setSerialInlineAlert(r.msg, r.variant === "warning" ? "warning" : "error", r.kind || "validation");
+        if (String(serialInput.value || "").trim()) showRecycleSerialHelp(cat);
+        else hideRecycleSerialHelp();
         try { serialInput.focus(); serialInput.select?.(); } catch (e2) {}
         return;
       }
 
+      hideRecycleSerialHelp();
       // Store context for the next step (Material Id page).
       try {
         sessionStorage.setItem(RECYCLE_ENTRY_LAST_SERIAL_KEY, String(serialInput.value || "").trim());
@@ -3437,10 +3807,14 @@
   }
 
   function startRecycleEntryObserver() {
-    const tryInject = () => injectRecycleEntryCategoryPanel();
-    if (tryInject()) return;
+    const tryInject = () => {
+      const injected = injectRecycleEntryCategoryPanel();
+      if (!document.getElementById(RECYCLE_ENTRY_ROOT_ID)) hideRecycleSerialHelp();
+      return injected;
+    };
     const obs = new MutationObserver(() => { tryInject(); });
     obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    tryInject();
   }
 
   function applyRecycleCategoryMaterialPreset(inputEl) {

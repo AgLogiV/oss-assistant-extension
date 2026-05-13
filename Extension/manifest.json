@@ -25,7 +25,8 @@
         "images/*.png",
         "images/devices/*.webp",
         "images/categories/*.webp",
-        "images/categories/16x9/*.webp"
+        "images/categories/16x9/*.webp",
+        "images/recycle-help/*.webp"
       ],
       "matches": [
         "https://oss.a1.bg/*",
