@@ -1787,6 +1787,13 @@
   const CAM_MODULES_MISSING_MATERIAL_OPERATION_KEY = "wifi_oss_cam_modules_missing_material_operation_id";
   const CAM_MODULES_MISSING_MATERIAL_HINT_ID = "wifi-oss-cam-modules-missing-material-hint";
   const CAM_MODULES_MISSING_MATERIAL_HINT_TEXT = "Не е открита история за този сериен номер в SAP. Опитайте с другия номер на CAM модула. При повторен неуспех предайте устройството на супервайзър.";
+  const SWAP_MATERIAL_SIMILAR_WARNING_ID = "wifi-oss-swap-material-similar-warning";
+  const SWAP_MATERIAL_SIMILAR_WARNINGS = {
+    "1000059633": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
+    "1000055165": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
+    "123580": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
+    "121561": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството."
+  };
 
   const SWAP_MATERIAL_MODELS_DEFAULT = [
     { id: "1-000-055-165", name: "TP Link NX220v" },
@@ -2287,6 +2294,40 @@
     panel.style.paddingTop = "10px";
     panel.style.borderTop = "1px solid #ddd";
 
+    const materialWarning = document.createElement("span");
+    materialWarning.id = SWAP_MATERIAL_SIMILAR_WARNING_ID;
+    materialWarning.style.display = "none";
+    materialWarning.style.flex = "0 1 520px";
+    materialWarning.style.alignSelf = "center";
+    materialWarning.style.minWidth = "260px";
+    materialWarning.style.maxWidth = "520px";
+    materialWarning.style.marginLeft = "12px";
+
+    const showSimilarMaterialWarning = (materialId) => {
+      const msg = SWAP_MATERIAL_SIMILAR_WARNINGS[normalizeSwapMaterialId(materialId)] || "";
+      if (!msg) {
+        clearRecycleInlineAlert(materialWarning);
+        return;
+      }
+      setRecycleInlineAlert(materialWarning, msg, "warning");
+    };
+
+    const inputParent = input.parentElement;
+    let materialWarningHost = null;
+    if (inputParent) {
+      materialWarningHost = document.createElement("span");
+      materialWarningHost.style.display = "inline-flex";
+      materialWarningHost.style.alignItems = "center";
+      materialWarningHost.style.flexWrap = "nowrap";
+      materialWarningHost.style.gap = "0";
+      materialWarningHost.style.maxWidth = "none";
+      materialWarningHost.style.verticalAlign = "middle";
+      inputParent.insertBefore(materialWarningHost, input);
+      input.style.flex = "0 0 auto";
+      materialWarningHost.appendChild(input);
+      materialWarningHost.appendChild(materialWarning);
+    }
+
     const title = document.createElement("div");
     title.textContent = "Бърз избор на Material Id";
     title.style.fontWeight = "600";
@@ -2296,6 +2337,11 @@
 
     const searchWrap = document.createElement("div");
     searchWrap.style.marginBottom = "8px";
+    if (!materialWarningHost) {
+      materialWarning.style.margin = "0 0 8px";
+      materialWarning.style.maxWidth = "520px";
+      panel.appendChild(materialWarning);
+    }
 
     const search = document.createElement("input");
     search.type = "text";
@@ -2509,6 +2555,7 @@
       b.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        showSimilarMaterialWarning(normalizedId);
         setSwapMaterialInputValue(input, normalizedId);
         try { input.focus(); input.select?.(); } catch (e2) {}
       });
