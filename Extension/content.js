@@ -441,7 +441,7 @@
         }
       }
       const inlineMsg = document.getElementById("wifi-oss-recycle-serial-msg");
-      if (inlineMsg && inlineMsg.style) { inlineMsg.textContent = ""; inlineMsg.style.display = "none"; }
+      clearRecycleInlineAlert(inlineMsg);
     });
     autoButtonRef = autoBtn;
 
@@ -2239,18 +2239,11 @@
 
     const hint = document.createElement("span");
     hint.id = CAM_MODULES_MISSING_MATERIAL_HINT_ID;
-    hint.textContent = CAM_MODULES_MISSING_MATERIAL_HINT_TEXT;
-    hint.style.display = "inline-block";
     hint.style.flex = "1 1 auto";
     hint.style.minWidth = "0";
     hint.style.marginLeft = "0";
-    hint.style.verticalAlign = "middle";
-    hint.style.color = "#b00020";
-    hint.style.fontWeight = "600";
-    hint.style.fontSize = "13px";
-    hint.style.lineHeight = "1.25";
     hint.style.maxWidth = "none";
-    hint.style.padding = "4px 0";
+    setRecycleInlineAlert(hint, CAM_MODULES_MISSING_MATERIAL_HINT_TEXT, "warning");
 
     target.insertAdjacentElement("afterend", hint);
     return true;
@@ -2596,6 +2589,56 @@
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
 
+  function setRecycleInlineAlert(el, message, variant) {
+    if (!el) return;
+    const warning = variant === "warning";
+    el.textContent = "";
+    el.style.display = "inline-flex";
+    el.style.alignItems = "center";
+    el.style.gap = "8px";
+    el.style.boxSizing = "border-box";
+    el.style.padding = "7px 10px";
+    el.style.borderRadius = "6px";
+    el.style.border = warning ? "1px solid #d28a1d" : "1px solid #DA291C";
+    el.style.background = warning ? "#fff7e6" : "#fff1f0";
+    el.style.color = warning ? "#7a4300" : "#9f1d14";
+    el.style.fontWeight = "700";
+    el.style.fontSize = "13px";
+    el.style.lineHeight = "1.25";
+    el.style.verticalAlign = "middle";
+    el.setAttribute("role", warning ? "status" : "alert");
+
+    const icon = document.createElement("span");
+    icon.textContent = "!";
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.flex = "0 0 auto";
+    icon.style.width = "18px";
+    icon.style.height = "18px";
+    icon.style.borderRadius = "999px";
+    icon.style.border = warning ? "2px solid #d28a1d" : "2px solid #DA291C";
+    icon.style.color = warning ? "#b46500" : "#DA291C";
+    icon.style.display = "inline-flex";
+    icon.style.alignItems = "center";
+    icon.style.justifyContent = "center";
+    icon.style.fontSize = "13px";
+    icon.style.fontWeight = "900";
+    icon.style.lineHeight = "1";
+
+    const text = document.createElement("span");
+    text.textContent = message;
+    text.style.minWidth = "0";
+
+    el.appendChild(icon);
+    el.appendChild(text);
+  }
+
+  function clearRecycleInlineAlert(el) {
+    if (!el) return;
+    el.textContent = "";
+    el.style.display = "none";
+    el.removeAttribute("role");
+  }
+
   function refreshRecycleEntryCategoryPanel(panel) {
     if (!panel) return false;
     const render = panel.__wifiOssRenderRecycleCategories;
@@ -2738,9 +2781,6 @@
     const serialMsg = document.createElement("div");
     serialMsg.id = "wifi-oss-recycle-serial-msg";
     serialMsg.style.marginLeft = "10px";
-    serialMsg.style.fontWeight = "600";
-    serialMsg.style.color = "#b00020";
-    serialMsg.style.fontSize = "13px";
     serialMsg.style.display = "none";
     if (serialRow) {
       // Keep layout on one line when possible.
@@ -2812,8 +2852,7 @@
       } catch (e) {}
       panel.dataset.wifiOssRecycleSelected = id;
       renderCategories();
-      serialMsg.style.display = "none";
-      serialMsg.textContent = "";
+      clearRecycleInlineAlert(serialMsg);
     };
 
     const resolveCategoryImageUrl = (c) => {
@@ -3019,16 +3058,14 @@
       if (!cat) {
         e.preventDefault();
         e.stopPropagation();
-        serialMsg.textContent = "Избери категория преди да продължиш.";
-        serialMsg.style.display = "";
+        setRecycleInlineAlert(serialMsg, "Избери категория преди да продължиш.", "error");
         return;
       }
       const r = validateRecycleSerial(cat, serialInput.value);
       if (!r.ok) {
         e.preventDefault();
         e.stopPropagation();
-        serialMsg.textContent = r.msg;
-        serialMsg.style.display = "";
+        setRecycleInlineAlert(serialMsg, r.msg, "error");
         try { serialInput.focus(); serialInput.select?.(); } catch (e2) {}
         return;
       }
@@ -3052,7 +3089,7 @@
       const cat = getSelected();
       if (!cat) return;
       const r = validateRecycleSerial(cat, serialInput.value);
-      if (r.ok) { serialMsg.textContent = ""; serialMsg.style.display = "none"; }
+      if (r.ok) clearRecycleInlineAlert(serialMsg);
     });
 
     return true;
