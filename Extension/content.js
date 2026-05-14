@@ -3359,14 +3359,11 @@
     const macWithSeparators = /^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/.test(upper);
     // Important: do NOT treat 12 digits-only as MAC.
     const macPlainHex = /^[0-9A-F]{12}$/.test(upper) && /[A-F]/.test(upper);
-    const macPlainLettersCount = (upper.match(/[A-F]/g) || []).length;
 
-    // XPLORE & Zapper: must be MAC (concatenated, no separators), must contain letters, and >2 letters.
+    // XPLORE & Zapper: must be MAC (concatenated, no separators).
     if (categoryId === "xplore_zapper") {
       if (macWithSeparators) return { ok: false, msg: "MAC адресът трябва да е слят (без ':' или '-')." };
       if (!/^[0-9A-F]{12}$/.test(upper)) return { ok: false, msg: "Серийният номер трябва да е MAC адрес." };
-      if (!/[A-F]/.test(upper)) return { ok: false, msg: "MAC адресът трябва да съдържа букви (A-F), не може да е само цифри." };
-      if (macPlainLettersCount <= 2) return { ok: false, msg: "MAC адресът трябва да има повече от 2 букви (A-F)." };
       return { ok: true, msg: "" };
     }
 
@@ -3411,6 +3408,7 @@
     if (categoryId === "android_iptv") {
       // Reject MAC addresses (with separators or plain 12 hex chars with A-F letters).
       if (macWithSeparators || macPlainHex) return { ok: false, msg: "Серийният номер не може да е MAC адрес." };
+      if (s.length < 12 || s.length > 17) return { ok: false, msg: "Серийният номер за Android TV & ZTE IPTV трябва да е между 12 и 17 символа." };
       // Letters are allowed ONLY if the serial starts with "BG".
       if (!upper.startsWith("BG")) {
         if (/[A-Za-z]/.test(s)) return { ok: false, msg: "Букви в серийния номер не са позволени" };
