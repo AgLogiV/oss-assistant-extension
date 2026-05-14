@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Tightened recycle serial validation: `android_iptv` now requires 12-17 characters while keeping the existing empty/Cyrillic/special-character/MAC-like/BG-prefix guards; `xplore_zapper` now accepts any valid 12-hex MAC case-insensitively, without requiring A-F letters or more than 2 A-F letters.
 - Added recycle serial keyboard layout normalization for scanner input using trusted `KeyboardEvent.code`, with Cyrillic warning/block fallback and opt-in diagnostics.
 - Added recycle-specific SAP/material quick-button filtering for `xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, and `gpon`.
 - Material filtering uses normalized material ID allowlists; mapped categories hide the broad chips and keep search scoped to the allowed devices.

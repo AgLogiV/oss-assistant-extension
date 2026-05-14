@@ -31,6 +31,8 @@ Use this checklist in the real/demo OSS environment after loading the extension 
   - `gpon`
   - `cam_modules`
   - `modems`
+- For `android_iptv`, confirm the existing guards still apply and length must be 12-17 characters: valid examples include `450056000451`, `2420011067008933`, and `BG460823040142009`; invalid examples include `12345`, `BG`, `BG123`, and `123456789012345678`.
+- For `xplore_zapper`, confirm MAC validation accepts exactly 12 hex characters case-insensitively and does not require A-F letters: valid examples include `840112168CB1`, `001122334455`, `AABBCCDDEEFF`, and `aabbccddeeff`; invalid examples include `840112168CB`, `840112168CB12`, `840112168CG1`, `84:01:12:16:8C:B1`, `84-01-12-16-8C-B1`, and `123 456 789 012`.
 - For `cam_modules`, confirm empty serial is blocked but non-empty values are not format-validated.
 - For invalid serials, confirm the page does not advance and the serial field keeps focus.
 - Press `RESET` and confirm the selected category and validation message disappear.

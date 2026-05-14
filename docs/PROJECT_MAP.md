@@ -269,15 +269,15 @@ Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopIm
 ### Validation Rules by Category
 
 - `xplore_zapper`
-  - Must be 12 hex characters.
+  - Must be exactly 12 hex characters, case-insensitive.
   - Separators `:` or `-` are rejected.
-  - Must contain A-F letters.
-  - Must contain more than 2 letters A-F.
+  - Digits-only MAC values are accepted; there is no minimum A-F letter count.
 - `modems`
   - `0099...` accepted only if all digits.
   - `SAAP...` or `SAPP...` accepted as alphanumeric, with optional single dash only at character index 5.
   - Other modem serials are accepted only if they have a dash at character index 5 and match `^[A-Za-z0-9]{5}-[A-Za-z0-9]+$`.
 - `android_iptv`
+  - Must be 12-17 characters long.
   - Rejects MAC-like values.
   - If it does not start with `BG`, it must be digits only.
   - If it starts with `BG`, letters are allowed.
