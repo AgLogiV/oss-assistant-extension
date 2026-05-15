@@ -6,6 +6,8 @@
 
 The project also contains older/secondary workflows for clipboard-based Wi-Fi autofill and label/barcode printing. They are not the current focus, but they are active runtime behavior and should be protected from regressions.
 
+For future recycle redesign/device catalog work, read `docs/RECYCLE_DEVICE_CATALOG_CONCEPT_EN.md` before planning changes. It is a concept/roadmap document and must not be treated as current implemented behavior.
+
 ## Project Structure
 
 - `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, background service worker, content script, and web-accessible image assets.
