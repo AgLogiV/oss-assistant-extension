@@ -3591,6 +3591,13 @@
         : "";
     };
 
+    const resolveDeviceImageUrl = (device) => {
+      const imgPath = getRecycleDeviceImagePath(device);
+      return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+        ? chrome.runtime.getURL(imgPath)
+        : "";
+    };
+
     const createCategoryCard = (c, featured) => {
       const isSelected = (c.id === getSelected());
       const red = "#DA291C";
@@ -3718,6 +3725,126 @@
       return b;
     };
 
+    const createDeviceCard = (device) => {
+      const red = "#DA291C";
+      const materialId = normalizeSwapMaterialId(device?.materialId);
+      const displayName = String(device?.displayName || materialId || "").trim();
+      const card = document.createElement("div");
+      card.dataset.wifiOssRecycleDevice = String(device?.deviceId || "");
+      card.style.position = "relative";
+      card.style.display = "flex";
+      card.style.flexDirection = "column";
+      card.style.width = "100%";
+      card.style.height = "100%";
+      card.style.alignSelf = "start";
+      card.style.padding = "0";
+      card.style.border = "1px solid #d8d8d8";
+      card.style.borderRadius = "6px";
+      card.style.background = "#fff";
+      card.style.boxShadow = "0 2px 9px rgba(0,0,0,0.10)";
+      card.style.overflow = "hidden";
+      card.style.color = "#fff";
+      card.style.textAlign = "left";
+      card.style.fontFamily = "inherit";
+
+      const media = document.createElement("div");
+      media.style.position = "relative";
+      media.style.width = "100%";
+      media.style.aspectRatio = "16 / 9";
+      media.style.background = "#fafafa";
+      media.style.boxSizing = "border-box";
+      media.style.padding = "8px";
+      media.style.display = "flex";
+      media.style.flex = "1 1 auto";
+      media.style.alignItems = "center";
+      media.style.justifyContent = "center";
+      media.style.overflow = "hidden";
+
+      const imgUrl = resolveDeviceImageUrl(device);
+      if (imgUrl) {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = imgUrl;
+        img.loading = "lazy";
+        img.style.width = "100%";
+        img.style.height = "100%";
+        img.style.objectFit = "contain";
+        img.style.display = "block";
+        media.appendChild(img);
+      } else {
+        const fallback = document.createElement("div");
+        fallback.textContent = materialId ? `SAP ${materialId}` : displayName;
+        fallback.style.boxSizing = "border-box";
+        fallback.style.width = "100%";
+        fallback.style.padding = "8px";
+        fallback.style.color = "#595959";
+        fallback.style.fontSize = "12px";
+        fallback.style.fontWeight = "800";
+        fallback.style.lineHeight = "1.2";
+        fallback.style.textAlign = "center";
+        fallback.style.overflowWrap = "anywhere";
+        media.appendChild(fallback);
+      }
+
+      const titleBar = document.createElement("div");
+      titleBar.style.minHeight = "46px";
+      titleBar.style.width = "100%";
+      titleBar.style.boxSizing = "border-box";
+      titleBar.style.padding = "7px 10px";
+      titleBar.style.background = "#3f3f3f";
+      titleBar.style.display = "flex";
+      titleBar.style.flex = "0 0 auto";
+      titleBar.style.marginTop = "auto";
+      titleBar.style.flexDirection = "column";
+      titleBar.style.alignItems = "center";
+      titleBar.style.justifyContent = "center";
+      titleBar.style.gap = "3px";
+
+      const label = document.createElement("div");
+      label.textContent = displayName;
+      label.style.fontWeight = "800";
+      label.style.fontSize = "12px";
+      label.style.lineHeight = "1.16";
+      label.style.letterSpacing = "0";
+      label.style.textTransform = "uppercase";
+      label.style.display = "-webkit-box";
+      label.style.webkitBoxOrient = "vertical";
+      label.style.webkitLineClamp = "2";
+      label.style.overflow = "hidden";
+      label.style.textAlign = "center";
+      titleBar.appendChild(label);
+
+      if (materialId) {
+        const sap = document.createElement("div");
+        sap.textContent = materialId;
+        sap.style.color = "#e6e6e6";
+        sap.style.fontSize = "11px";
+        sap.style.fontWeight = "700";
+        sap.style.lineHeight = "1.1";
+        sap.style.letterSpacing = "0";
+        sap.style.textAlign = "center";
+        titleBar.appendChild(sap);
+      }
+
+      const strip = document.createElement("div");
+      strip.style.position = "absolute";
+      strip.style.left = "0";
+      strip.style.right = "0";
+      strip.style.bottom = "0";
+      strip.style.height = "3px";
+      strip.style.background = red;
+      card.appendChild(media);
+      card.appendChild(titleBar);
+      card.appendChild(strip);
+      return card;
+    };
+
+    const renderLegacyCategorySwitcher = (target, activeCategory) => {
+      categories
+        .filter(c => c.id !== activeCategory.id)
+        .forEach(c => target.appendChild(createCategoryCard(c, false)));
+    };
+
     const renderCategories = () => {
       const activeId = getSelected();
       const activeCategory = categories.find(c => c.id === activeId);
@@ -3744,9 +3871,12 @@
       restGrid.style.alignContent = "start";
       restGrid.style.minWidth = "0";
 
-      categories
-        .filter(c => c.id !== activeCategory.id)
-        .forEach(c => restGrid.appendChild(createCategoryCard(c, false)));
+      const devices = getRecycleDevicesByCategory(activeCategory.id);
+      if (devices.length) {
+        devices.forEach(device => restGrid.appendChild(createDeviceCard(device)));
+      } else {
+        renderLegacyCategorySwitcher(restGrid, activeCategory);
+      }
       grid.appendChild(restGrid);
     };
 
