@@ -24,6 +24,7 @@
         "images/*.svg",
         "images/*.png",
         "images/devices/*.webp",
+        "images/devices/16x9/*.webp",
         "images/categories/*.webp",
         "images/categories/16x9/*.webp",
         "images/recycle-help/*.webp"

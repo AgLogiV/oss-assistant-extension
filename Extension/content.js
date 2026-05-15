@@ -2173,6 +2173,12 @@
   }
 
   function getRecycleDeviceImagePath(device) {
+    const legacyPath = deviceImageForModel(device?.displayName);
+    const fileName = String(legacyPath || "").split("/").pop();
+    return fileName ? `images/devices/16x9/${fileName}` : null;
+  }
+
+  function getRecycleDeviceFallbackImagePath(device) {
     return deviceImageForModel(device?.displayName);
   }
 
@@ -3598,6 +3604,13 @@
         : "";
     };
 
+    const resolveDeviceFallbackImageUrl = (device) => {
+      const imgPath = getRecycleDeviceFallbackImagePath(device);
+      return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+        ? chrome.runtime.getURL(imgPath)
+        : "";
+    };
+
     const createCategoryCard = (c, featured) => {
       const isSelected = (c.id === getSelected());
       const red = "#DA291C";
@@ -3760,19 +3773,10 @@
       media.style.justifyContent = "center";
       media.style.overflow = "hidden";
 
-      const imgUrl = resolveDeviceImageUrl(device);
-      if (imgUrl) {
-        const img = document.createElement("img");
-        img.alt = "";
-        img.src = imgUrl;
-        img.loading = "lazy";
-        img.style.width = "100%";
-        img.style.height = "100%";
-        img.style.objectFit = "contain";
-        img.style.display = "block";
-        media.appendChild(img);
-      } else {
+      const appendTextFallback = () => {
+        if (media.querySelector("[data-wifi-oss-recycle-device-text-fallback]")) return;
         const fallback = document.createElement("div");
+        fallback.dataset.wifiOssRecycleDeviceTextFallback = "1";
         fallback.textContent = materialId ? `SAP ${materialId}` : displayName;
         fallback.style.boxSizing = "border-box";
         fallback.style.width = "100%";
@@ -3784,6 +3788,31 @@
         fallback.style.textAlign = "center";
         fallback.style.overflowWrap = "anywhere";
         media.appendChild(fallback);
+      };
+
+      const imgUrl = resolveDeviceImageUrl(device);
+      if (imgUrl) {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = imgUrl;
+        img.loading = "lazy";
+        img.style.width = "100%";
+        img.style.height = "100%";
+        img.style.objectFit = "contain";
+        img.style.display = "block";
+        img.addEventListener("error", () => {
+          const fallbackUrl = resolveDeviceFallbackImageUrl(device);
+          if (fallbackUrl && img.dataset.wifiOssRecycleFallbackTried !== "1") {
+            img.dataset.wifiOssRecycleFallbackTried = "1";
+            img.src = fallbackUrl;
+            return;
+          }
+          try { img.remove(); } catch (e) {}
+          appendTextFallback();
+        });
+        media.appendChild(img);
+      } else {
+        appendTextFallback();
       }
 
       const titleBar = document.createElement("div");
