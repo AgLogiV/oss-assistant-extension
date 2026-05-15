@@ -2114,41 +2114,80 @@
     return "";
   }
 
-  const SWAP_MATERIAL_RECYCLE_FILTERS = {
-    android_iptv: ["114225", "121679", "121678"],
-    xplore_zapper: ["118542", "118543", "118544"],
-    dth_kaon_nagra: ["114915", "121961"],
-    netbox: [
-      "123580",
-      "123451",
-      "121561",
-      "119442",
-      "118857",
-      "118831",
-      "116081",
-      "115763",
-      "111732",
-      "1000057334",
-      "1000059633",
-      "1000055165"
-    ],
-    routers: [
-      "1200014914",
-      "118551",
-      "118552",
-      "121150",
-      "121376",
-      "123357"
-    ],
-    gpon: [
-      "1200014928",
-      "118560",
-      "118563",
-      "118564",
-      "122933",
-      "122944"
-    ]
-  };
+  const RECYCLE_DEVICE_CATALOG = [
+    { deviceId: "stb_zxv_b700v5", categoryId: "android_iptv", displayName: "STB ZXV B700v5", materialId: "114225" },
+    { deviceId: "stb_sdmc_dv9161_androidtv", categoryId: "android_iptv", displayName: "DV9161 (AndroidTV)", materialId: "121679" },
+    { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678" },
+
+    { deviceId: "kaon_kstb5019_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5019 XploreTV", materialId: "118542" },
+    { deviceId: "kaon_kstb6106_zapper", categoryId: "xplore_zapper", displayName: "KSTB6106 Zapper", materialId: "118543" },
+    { deviceId: "kaon_kstb5020_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5020 XploreTV", materialId: "118544" },
+
+    { deviceId: "dth_kaon_kstb1001", categoryId: "dth_kaon_nagra", displayName: "DTH STB KAON KSTB1001", materialId: "114915" },
+    { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961" },
+
+    { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "123580" },
+    { deviceId: "zte_mf296r", categoryId: "netbox", displayName: "ZTE MF296R", materialId: "123451" },
+    { deviceId: "zte_mc888a", categoryId: "netbox", displayName: "ZTE MC888A", materialId: "121561" },
+    { deviceId: "zte_mf293n", categoryId: "netbox", displayName: "ZTE MF293N", materialId: "119442" },
+    { deviceId: "cube_zte_801a", categoryId: "netbox", displayName: "Cube ZTE 801A", materialId: "118857" },
+    { deviceId: "zte_mf283u", categoryId: "netbox", displayName: "ZTE MF283U", materialId: "118831" },
+    { deviceId: "huawei_b311_black", categoryId: "netbox", displayName: "Huawei B311 Black", materialId: "116081" },
+    { deviceId: "huawei_b311_white", categoryId: "netbox", displayName: "Huawei B311 White", materialId: "115763" },
+    { deviceId: "huawei_b310s", categoryId: "netbox", displayName: "Huawei B310s", materialId: "111732" },
+    { deviceId: "zte_g5ts", categoryId: "netbox", displayName: "ZTE G5TS", materialId: "1000057334" },
+    { deviceId: "tp_link_nx520", categoryId: "netbox", displayName: "TP-Link NX520", materialId: "1000059633" },
+    { deviceId: "tp_link_nx220v", categoryId: "netbox", displayName: "TP Link NX220v", materialId: "1000055165" },
+
+    { deviceId: "tp_link_hx520_home", categoryId: "routers", displayName: "HX520 Home", materialId: "1200014914" },
+    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4, AC1200, 2xGbE, MU-MIMO", materialId: "118551" },
+    { deviceId: "tp_link_archer_a6", categoryId: "routers", displayName: "Archer A6/AC1200/DB LVA", materialId: "118552" },
+    { deviceId: "tp_link_ex220", categoryId: "routers", displayName: "TP-Link EX220", materialId: "121150" },
+    { deviceId: "tp_link_ex220_home", categoryId: "routers", displayName: "TP-Link EX220 Home", materialId: "121376" },
+    { deviceId: "zte_zxhn_h3601p", categoryId: "routers", displayName: "ZTE ZXHN H3601P", materialId: "123357" },
+
+    { deviceId: "huawei_k562e_10_home", categoryId: "gpon", displayName: "K562E-10 Home", materialId: "1200014928" },
+    { deviceId: "huawei_gpon_hg8145v5", categoryId: "gpon", displayName: "Huawei GPON HG8145V5", materialId: "118560" },
+    { deviceId: "zte_gpon_zxhn_f670v", categoryId: "gpon", displayName: "GPON CPE ZXHN F670V", materialId: "118563" },
+    { deviceId: "zte_gpon_zxhn_f660", categoryId: "gpon", displayName: "GPON CPE ZXHN F660", materialId: "118564" },
+    { deviceId: "zte_gpon_zxhn_f660op", categoryId: "gpon", displayName: "GPON CPE ZXHN F660OP", materialId: "122933" },
+    { deviceId: "zte_gpon_zxhn_f6600r", categoryId: "gpon", displayName: "GPON ONT ZXHN F6600R", materialId: "122944" }
+  ];
+
+  function getRecycleDeviceById(deviceId) {
+    const id = String(deviceId || "").trim();
+    if (!id) return null;
+    return RECYCLE_DEVICE_CATALOG.find(d => d.deviceId === id) || null;
+  }
+
+  function getRecycleDevicesByCategory(categoryId) {
+    const id = String(categoryId || "").trim();
+    if (!id) return [];
+    return RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id);
+  }
+
+  function getRecycleDeviceMaterialIdsByCategory(categoryId) {
+    return getRecycleDevicesByCategory(categoryId)
+      .map(d => normalizeSwapMaterialId(d.materialId))
+      .filter(Boolean);
+  }
+
+  function getRecycleDeviceImagePath(device) {
+    return deviceImageForModel(device?.displayName);
+  }
+
+  function buildSwapMaterialRecycleFiltersFromDeviceCatalog() {
+    return RECYCLE_DEVICE_CATALOG.reduce((filters, device) => {
+      const categoryId = String(device?.categoryId || "").trim();
+      const materialId = normalizeSwapMaterialId(device?.materialId);
+      if (!categoryId || !materialId) return filters;
+      if (!filters[categoryId]) filters[categoryId] = [];
+      filters[categoryId].push(materialId);
+      return filters;
+    }, {});
+  }
+
+  const SWAP_MATERIAL_RECYCLE_FILTERS = buildSwapMaterialRecycleFiltersFromDeviceCatalog();
 
   function getSwapMaterialRecycleFilter(categoryId) {
     const ids = SWAP_MATERIAL_RECYCLE_FILTERS[categoryId];
