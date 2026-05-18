@@ -1,7 +1,7 @@
 # Recycle Device Validation Rules
 
 **Status:** Human-authored input for future validation profiles  
-**Current runtime behavior:** Not implemented from this file yet  
+**Current runtime behavior:** Partially implemented through predefined local profiles when concrete devices are selected
 **Scope:** Future category/device validation rules for recycle device entry
 
 ## Important Notes
@@ -11,7 +11,7 @@
 - Device names here come from labels/names visible in the interface.
 - This file has no `austrian` devices yet.
 - This file has no `modems` devices yet.
-- Do not treat this file as current extension behavior.
+- Do not treat every rule in this file as current extension behavior; only profiles implemented in `Extension/content.js` are active.
 - Do not add missing devices to the catalog only because they are mentioned here.
 - Do not change `validateRecycleSerial(...)` only because a rule is described here.
 
@@ -21,7 +21,7 @@ In the future, every concrete device should be able to have its own `validationP
 
 The extension should use standardized predefined validation profiles so that new devices can be added safely and consistently. The dashboard or any future config layer may choose only from predefined profiles. It must not provide arbitrary JavaScript, arbitrary regex, or unreviewed validation logic.
 
-Device-level validation profiles should activate only when there is a selected device or selected devices.
+Device-level validation profiles activate only when there is a selected device or selected devices.
 
 If the user selected only a category and did not select a concrete device, the extension should keep falling back to the current category-level validation behavior.
 
@@ -34,6 +34,18 @@ multiple selected devices -> serial must match at least one selected device prof
 ```
 
 This keeps the first implementation safe: category behavior remains stable until the operator selects concrete device cards.
+
+Currently implemented selected-device profiles include:
+
+- `android_b866v2f02_bg_plus_15_digits`
+- `android_dv9161_16_digits`
+- `android_zxv_b700v5_12_digits`
+- `xplore_zapper_mac12_hex_plain`
+- `dth_11_digits_prefix_00`
+- `imei15_luhn`
+- `router_13_alnum`
+- `router_zte_h3601p_zte_prefix_15_alnum`
+- `gpon_16_alnum`
 
 Future custom categories should be supported in the architecture. A custom category should be able to own devices in the same way as current categories. This is a future architecture goal, not a runtime task now.
 
@@ -93,7 +105,7 @@ Future device-level rule:
 - serial is exactly 16 characters;
 - letters and digits are allowed.
 
-Confirmed future catalog entry, not implemented yet:
+Confirmed current catalog entry:
 
 ```js
 {
@@ -105,7 +117,7 @@ Confirmed future catalog entry, not implemented yet:
 }
 ```
 
-Do not add this to `Extension/content.js` in a validation-only patch.
+Do not duplicate this entry in `Extension/content.js`; update it only in a dedicated catalog patch if business data changes.
 
 ### GPON CPE ZXHN F670V
 
@@ -130,11 +142,11 @@ Future device-level rule:
 
 Confirmed display-name correction:
 
-- current label/catalog text says `GPON CPE ZXHN F660OP`;
-- this should be corrected to `GPON CPE ZXHN F6600P`;
+- older label/catalog text said `GPON CPE ZXHN F660OP`;
+- current catalog text is `GPON CPE ZXHN F6600P`;
 - the issue is an `O` versus `0` confusion.
 
-Do not rename it in `Extension/content.js` in a validation-only patch.
+Do not rename it again in a validation-only patch.
 
 Possible future profile for the listed GPON devices:
 

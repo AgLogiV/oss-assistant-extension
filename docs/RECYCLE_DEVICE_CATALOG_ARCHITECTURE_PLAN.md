@@ -87,40 +87,50 @@ Future state should still be local-first and should avoid introducing storage ke
 - last valid serial for the next material step;
 - pending material context only when needed for the next OSS step.
 
+Implemented state note:
+
+- selected category is now shared across OSS tabs/windows through `localStorage`;
+- selected device IDs are stored in `wifi_oss_recycle_entry_selected_devices` as a JSON array of `deviceId` strings;
+- selected devices are cleared when the category changes, on Reset, and on daily reset;
+- `sessionStorage` remains for transient flow state such as last valid serial and pending material context;
+- clipboard SSID/password autofill storage is separate from recycle selection storage.
+
 State rules:
 
 - category selection remains required before Continue;
 - selected devices should be cleared when the category changes;
 - daily reset should clear selected category and selected devices;
 - Reset should clear visible selection, validation messages, help menu state, and safe pending recycle context;
-- state should not be shared globally across unrelated OSS tabs unless that behavior is explicitly chosen.
+- shared state is intentionally scoped to OSS tabs/windows for the same browser origin.
 
 ## 4. Future multi-select behavior
 
 After a category is selected, the right-side card area should represent concrete devices in that category. The user should be able to select one or more devices.
 
-Initial multi-select behavior should be conservative:
+Implemented multi-select behavior is conservative:
 
-- multi-select changes only local UI state;
-- category-level validation remains active;
+- device cards can be visually multi-selected;
+- selection is shared across OSS tabs/windows for the same browser origin;
+- no selected devices keeps category-level validation active;
+- selected devices activate predefined local validation profiles when implemented;
 - SAP/material behavior remains unchanged until a later milestone;
-- help menu can later use selected devices, but does not need to in the first multi-select patch;
+- help menu can later use selected devices, but currently remains category-level;
 - selecting no concrete device should either keep category-level behavior or show all devices for that category on the material step, depending on the final UX decision.
 
 Recommended first rule:
 
 ```text
 category selected, no devices selected -> category-level behavior
-category selected, one or more devices selected -> selected-device context is available for later filtering/help
+category selected, one or more devices selected -> selected-device validation profiles can apply; SAP/material/help still stay category-level
 ```
 
-This keeps the first multi-select patch low risk.
+This keeps selected-device state useful while avoiding SAP/material and help-menu behavior changes.
 
 ## 5. Validation profiles and OR logic
 
 Validation should become declarative but remain locally controlled. The dashboard must not send arbitrary JavaScript, arbitrary regex, or unreviewed logic that can block operators unexpectedly.
 
-`docs/RECYCLE_DEVICE_VALIDATION_RULES.md` is the human-authored source/input for future validation profiles. It may mention devices that are not yet in `RECYCLE_DEVICE_CATALOG_RAW`, and it does not represent current runtime behavior until a validation profile engine is deliberately implemented.
+`docs/RECYCLE_DEVICE_VALIDATION_RULES.md` is the human-authored source/input for validation profiles. It may mention devices that are not yet in `RECYCLE_DEVICE_CATALOG_RAW`; only predefined local profiles implemented in `Extension/content.js` are runtime behavior.
 
 Recommended model:
 
@@ -155,6 +165,16 @@ Common rules:
 - special characters should be rejected where applicable;
 - serial input should keep focus when invalid;
 - invalid values should block Continue by click, Enter, and form submit.
+
+Current selected-device runtime behavior:
+
+- no selected devices -> current category-level `validateRecycleSerial(...)` fallback;
+- one selected device -> use the device's implemented predefined `validationProfileId`;
+- multiple selected devices -> OR logic, where at least one selected device profile must pass;
+- selected device with no implemented profile -> safe category-level fallback;
+- empty serial and Cyrillic checks remain common guards and must not be bypassed.
+
+Currently implemented predefined profiles include Android B866 `BG` + 15 digits, Android DV9161 16 digits, STB ZXV B700v5 12 digits, Xplore/Zapper plain 12-hex MAC, DTH 11 digits with `00` prefix, Netbox IMEI 15 + Luhn, selected GPON 16 alphanumeric, selected TP-Link/Deco/HX520 routers 13 alphanumeric, and ZTE H3601P `ZTE` prefix + 15 characters.
 
 Specific rules:
 
@@ -463,7 +483,7 @@ Do not implement yet:
 - moving CAM flow, auto-continue, clipboard parsers, keyboard normalization, or label/barcode generation into dashboard config;
 - new storage keys without a dedicated state design;
 - `manifest.json` changes for local JSON/assets until the schema and loading model are approved;
-- SAP/material behavior changes as part of the first multi-select UI patch;
-- device-level validation before business rules are confirmed;
+- SAP/material behavior changes as part of selected-device validation work;
+- new device-level validation profiles before business rules are confirmed;
 - broad refactors of `Extension/content.js`;
 - dashboard deployment/security work before local extension behavior is stable.

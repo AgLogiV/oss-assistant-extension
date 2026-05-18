@@ -12,7 +12,7 @@ For future device catalog architecture, validation profiles, multi-select, SAP/m
 
 When adding new local recycle devices to the catalog, read `docs/RECYCLE_DEVICE_ADDING_GUIDE.md` first. It documents required fields, optional contract fields, naming rules, image rules, and test gates for safe catalog additions.
 
-For future device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_RULES.md`. It is a human-authored input file for future validation profiles, not current runtime behavior.
+For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_RULES.md`. It is a human-authored input file for predefined local validation profiles; part of it is now implemented only when concrete recycle devices are selected.
 
 ## Project Structure
 
@@ -207,16 +207,36 @@ Current categories:
 Each category has a card/button with an image from `images/categories/` except `modems`, which uses the Technicolor device image.
 `cam_modules` uses `Extension/images/categories/CAM_modules.webp`.
 
+### Local Device Catalog and Device Cards
+
+`RECYCLE_DEVICE_CATALOG_RAW` is the local source list for recycle devices. `RECYCLE_DEVICE_CATALOG` is the normalized catalog produced by `normalizeRecycleDeviceCatalogEntry`.
+
+The normalized contract supports:
+
+- `deviceId`
+- `categoryId`
+- `displayName`
+- `materialId`
+- `legacyMaterialIds`
+- `imagePath`
+- `helpImagePath`
+- `warningText`
+- `validationProfileId`
+- `enabled`
+
+After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context only; SAP/material filtering and help menu behavior remain category-level.
+
 ### Storage Keys
 
 Recycle entry storage:
 
-- `wifi_oss_recycle_entry_category` in `sessionStorage`
+- `wifi_oss_recycle_entry_category` in `localStorage`
 - `wifi_oss_recycle_entry_category_date` in `localStorage`
+- `wifi_oss_recycle_entry_selected_devices` in `localStorage`, JSON array of selected `deviceId` strings
 - `wifi_oss_recycle_entry_last_serial` in `sessionStorage`
 - `wifi_oss_recycle_entry_pending_material` in `sessionStorage`
 
-The selected category itself is session-scoped, while the date is local-scoped so the extension can detect a stale workday selection across page reloads/tabs.
+The selected category and selected devices are shared across OSS tabs/windows for the same browser origin. `sessionStorage` remains for transient recycle flow state such as the last valid serial and pending material context. Clipboard SSID/password autofill has its own storage and is not part of this recycle selection flow.
 
 ### Daily Reset Logic
 
@@ -227,9 +247,11 @@ During `injectRecycleEntryCategoryPanel`:
 - Reads today with `localDateKey()`.
 - Reads `wifi_oss_recycle_entry_category_date` from `localStorage`.
 - If a saved date exists and differs from today:
-  - removes `wifi_oss_recycle_entry_category` from `sessionStorage`
+  - removes `wifi_oss_recycle_entry_category` from `localStorage`
   - removes `wifi_oss_recycle_entry_category_date` from `localStorage`
-- Reads the selected category from `sessionStorage`.
+  - removes `wifi_oss_recycle_entry_selected_devices` from `localStorage`
+  - removes the legacy `wifi_oss_recycle_entry_category` from `sessionStorage`
+- Reads the selected category and selected devices from shared `localStorage`.
 
 Risk/TBD: this reset happens when the panel injects/renders. If an OSS tab stays open across midnight without reload/navigation/reinjection, the already-rendered panel may keep its old `panel.dataset.wifiOssRecycleSelected`.
 
@@ -241,6 +263,8 @@ On click it:
 
 - removes `wifi_oss_recycle_entry_category`
 - removes `wifi_oss_recycle_entry_category_date`
+- removes `wifi_oss_recycle_entry_selected_devices`
+- removes the legacy category value from `sessionStorage`
 - clears `panel.dataset.wifiOssRecycleSelected`
 - sets category button backgrounds back to `#585858`
 - clears `wifi-oss-recycle-serial-msg`
@@ -262,8 +286,16 @@ Risks:
 Behavior:
 
 - If no category is selected, prevents continuing and shows `Избери категория преди да продължиш.`
-- If the serial is invalid for the category, prevents continuing, shows the validation message, focuses/selects the serial input.
+- If the serial is invalid for the current category/device context, prevents continuing, shows the validation message, focuses/selects the serial input.
 - If valid, stores `wifi_oss_recycle_entry_last_serial` and sets `wifi_oss_recycle_entry_pending_material` to `1` for the next material step.
+
+Validation behavior:
+
+- no selected devices -> current category-level `validateRecycleSerial(...)` fallback;
+- one selected device -> implemented predefined local `validationProfileId` is used when available;
+- multiple selected devices -> OR logic, where the serial is valid if at least one selected device profile accepts it;
+- selected device with no implemented profile -> safe fallback to category-level validation;
+- empty serial and Cyrillic checks are common guards and are not bypassed by OR logic.
 
 ### Serial Keyboard Layout Protection
 
@@ -305,6 +337,20 @@ Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopIm
 - `cam_modules`
   - Has no format validation.
   - Only the shared empty-field guard applies: the user must enter some serial value before continuing.
+
+### Selected-Device Validation Profiles
+
+Implemented predefined local profiles currently include:
+
+- `android_b866v2f02_bg_plus_15_digits` - `BG` plus exactly 15 digits.
+- `android_dv9161_16_digits` - exactly 16 digits.
+- `android_zxv_b700v5_12_digits` - exactly 12 digits.
+- `xplore_zapper_mac12_hex_plain` - plain 12-hex MAC, no `:` or `-`.
+- `dth_11_digits_prefix_00` - exactly 11 digits starting with `00`.
+- `imei15_luhn` - 15 digits plus Luhn check.
+- `gpon_16_alnum` - 16 alphanumeric characters for confirmed selected GPON devices.
+- `router_13_alnum` - 13 alphanumeric characters for confirmed TP-Link/Deco/HX520 devices.
+- `router_zte_h3601p_zte_prefix_15_alnum` - `ZTE` prefix and 15 total alphanumeric characters.
 
 ## SAP/Material Quick Buttons
 
@@ -487,8 +533,9 @@ Fallback behavior:
 
 - `wifi_oss_auto_mode_enabled` - `localStorage`, clipboard auto mode.
 - `wifi_oss_last_clipboard_text` - `localStorage`, clipboard baseline.
-- `wifi_oss_recycle_entry_category` - `sessionStorage`, selected recycle category.
+- `wifi_oss_recycle_entry_category` - `localStorage`, selected recycle category shared across OSS tabs/windows.
 - `wifi_oss_recycle_entry_category_date` - `localStorage`, selected category date.
+- `wifi_oss_recycle_entry_selected_devices` - `localStorage`, JSON array of selected recycle `deviceId` values shared across OSS tabs/windows.
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
@@ -500,7 +547,7 @@ Fallback behavior:
 
 - `content.js` is large and multi-purpose; broad edits can break unrelated flows.
 - Recycle daily reset is injection-time only, not a live midnight timer.
-- Recycle reset button does not fully clear all recycle-related keys.
+- Recycle reset clears shared category/device selection, but intentionally does not clear transient last-serial/pending-material keys.
 - Recycle guard may need stronger event blocking if OSS uses competing capture listeners.
 - GPON validation comment and implementation disagree.
 - SAP material auto-continue may be too aggressive if a value is present for reasons other than OSS history.

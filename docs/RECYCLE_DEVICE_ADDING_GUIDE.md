@@ -247,22 +247,31 @@ For this guide, do not add images. Add images only in a separate asset-focused p
 
 ## 9. Validation profile notes
 
-`validationProfileId` is future contract metadata. It should point to a predefined local profile, not dashboard-provided arbitrary logic.
+`validationProfileId` points to a predefined local profile. It must not point to dashboard-provided arbitrary logic, arbitrary JavaScript, or arbitrary regex.
 
-Current validation behavior is still controlled by:
+Current validation behavior is:
 
 ```js
-validateRecycleSerial(categoryId, serialRaw)
+no selected device -> validateRecycleSerial(categoryId, serialRaw)
+selected device(s) -> implemented predefined validationProfileId profiles with OR logic
 ```
 
-Do not add device-level validation just because a device entry has `validationProfileId`.
+Do not add a new `validationProfileId` to a device unless the profile exists locally and the business rule is confirmed. Devices without an implemented profile safely fall back to category-level validation when selected.
 
-Adding a device to `RECYCLE_DEVICE_CATALOG_RAW` does not automatically activate device-level validation. Device-specific rules from `docs/RECYCLE_DEVICE_VALIDATION_RULES.md` should remain documentation/input until the validation profile engine is implemented.
+Adding a device to `RECYCLE_DEVICE_CATALOG_RAW` does not automatically require device-level validation. Device-specific rules from `docs/RECYCLE_DEVICE_VALIDATION_RULES.md` are input for predefined local profiles; only profiles implemented in `Extension/content.js` are active.
 
 Current common examples:
 
 ```text
 imei15_luhn
+android_b866v2f02_bg_plus_15_digits
+android_dv9161_16_digits
+android_zxv_b700v5_12_digits
+xplore_zapper_mac12_hex_plain
+dth_11_digits_prefix_00
+gpon_16_alnum
+router_13_alnum
+router_zte_h3601p_zte_prefix_15_alnum
 category_android_iptv_current
 category_xplore_zapper_mac12
 category_dth_kaon_nagra_11_digits

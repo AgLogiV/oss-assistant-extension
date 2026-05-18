@@ -21,6 +21,9 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Paste Cyrillic into the serial input. Expected: warning is shown and Continue is blocked.
 - Confirm `Backspace`, `Delete`, arrows, `Ctrl+A`, `Ctrl+C`, `Ctrl+V`, and `Enter` still behave normally in the serial input.
 - Choose each category and confirm the selected visual state is obvious.
+- Open the same recycle step in two OSS tabs/windows. Select a category in one tab and confirm the other tab updates to the same category.
+- In a mapped category with device cards, select one or more device cards and confirm the selected cards are shared across tabs/windows.
+- Change the category and confirm selected device cards are cleared.
 - For each category, test at least one valid and one invalid serial:
   - `android_iptv`
   - `xplore_zapper`
@@ -34,10 +37,24 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - For `android_iptv`, confirm the existing guards still apply and length must be 12-17 characters: valid examples include `450056000451`, `2420011067008933`, and `BG460823040142009`; invalid examples include `12345`, `BG`, `BG123`, and `123456789012345678`.
 - For `xplore_zapper`, confirm MAC validation accepts exactly 12 hex characters case-insensitively and does not require A-F letters: valid examples include `840112168CB1`, `001122334455`, `AABBCCDDEEFF`, and `aabbccddeeff`; invalid examples include `840112168CB`, `840112168CB12`, `840112168CG1`, `84:01:12:16:8C:B1`, `84-01-12-16-8C-B1`, and `123 456 789 012`.
 - For `cam_modules`, confirm empty serial is blocked but non-empty values are not format-validated.
+- With no selected device cards, confirm validation remains category-level for the selected category.
+- Select one device card and confirm the selected-device validation profile applies.
+- Select multiple device cards and confirm OR validation: a serial accepted by any selected device profile can continue.
+- Select a device with no implemented profile, if available in that category, and confirm category-level fallback remains acceptable.
+- For selected-device profiles, spot-check:
+  - Android B866: `BG` plus exactly 15 digits.
+  - Android DV9161: exactly 16 digits.
+  - STB ZXV B700v5: exactly 12 digits.
+  - Xplore/Zapper: plain 12-hex MAC, no `:` or `-`.
+  - DTH: 11 digits starting with `00`.
+  - Netbox: 15-digit IMEI with Luhn check.
+  - GPON confirmed devices: 16 alphanumeric characters.
+  - Routers: confirmed TP-Link/Deco/HX520 devices use 13 alphanumeric characters; ZTE H3601P uses `ZTE` prefix and 15 total characters.
 - For invalid serials, confirm the page does not advance and the serial field keeps focus.
-- Press `RESET` and confirm the selected category and validation message disappear.
+- Press `RESET` and confirm the selected category, selected devices, and validation message disappear in all open OSS tabs/windows.
 - After reset, press Continue again. Expected: blocked until a category is selected.
 - If possible, reload or reopen the page on the next workday and confirm the old category is not retained.
+- If possible, reload or reopen the page on the next workday and confirm old selected devices are not retained.
 
 ## SAP/Material Step
 
@@ -85,6 +102,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm Austrian label generation still works.
 - Confirm CAM Modules flow still works.
 - Confirm material filtering by recycle category still works for the mapped categories.
+- Confirm selected device cards do not change SAP/material quick-button filtering yet.
 - Confirm the `Material auto-continue` debug toggle still works and does not freeze the OSS page.
 
 ## Evidence to Send Back to Codex
