@@ -10,6 +10,8 @@ For future recycle redesign/device catalog work, read `docs/RECYCLE_DEVICE_CATAL
 
 For future device catalog architecture, validation profiles, multi-select, SAP/material mapping, help menu, or dashboard config layer work, also read `docs/RECYCLE_DEVICE_CATALOG_ARCHITECTURE_PLAN.md`. It is the current bridge between the concept document and future implementation tasks.
 
+When adding new local recycle devices to the catalog, read `docs/RECYCLE_DEVICE_ADDING_GUIDE.md` first. It documents required fields, optional contract fields, naming rules, image rules, and test gates for safe catalog additions.
+
 ## Project Structure
 
 - `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, background service worker, content script, and web-accessible image assets.
