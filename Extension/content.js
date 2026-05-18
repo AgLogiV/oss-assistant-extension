@@ -2164,9 +2164,9 @@
   }
 
   const RECYCLE_DEVICE_CATALOG_RAW = [
-    { deviceId: "stb_zxv_b700v5", categoryId: "android_iptv", displayName: "STB ZXV B700v5", materialId: "114225", validationProfileId: "android_zxv_b700v5_12_digits" },
-    { deviceId: "stb_sdmc_dv9161_androidtv", categoryId: "android_iptv", displayName: "DV9161 (AndroidTV)", materialId: "121679", validationProfileId: "android_dv9161_16_digits" },
-    { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678", validationProfileId: "android_b866v2f02_bg_plus_15_digits" },
+    { deviceId: "stb_zxv_b700v5", categoryId: "android_iptv", displayName: "STB ZXV B700v5", materialId: "114225", helpImagePath: "images/recycle-help/android_iptv-zte-zxv10-b700v5-iptv.webp", validationProfileId: "android_zxv_b700v5_12_digits" },
+    { deviceId: "stb_sdmc_dv9161_androidtv", categoryId: "android_iptv", displayName: "DV9161 (AndroidTV)", materialId: "121679", helpImagePath: "images/recycle-help/android_iptv-a1-sdmc-dv9161.webp", validationProfileId: "android_dv9161_16_digits" },
+    { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678", helpImagePath: "images/recycle-help/android_iptv-zte-zxv10-b866v2f02-richmedia-box.webp", validationProfileId: "android_b866v2f02_bg_plus_15_digits" },
 
     { deviceId: "kaon_kstb5019_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5019 XploreTV", materialId: "118542", validationProfileId: "xplore_zapper_mac12_hex_plain" },
     { deviceId: "kaon_kstb6106_zapper", categoryId: "xplore_zapper", displayName: "KSTB6106 Zapper", materialId: "118543", validationProfileId: "xplore_zapper_mac12_hex_plain" },
@@ -2965,6 +2965,26 @@
     return Array.isArray(items) ? items : [];
   }
 
+  function getSelectedRecycleDeviceHelpItems(categoryId) {
+    const category = String(categoryId || "").trim();
+    if (!category) return [];
+    const selectedIds = readSelectedRecycleDeviceIdsStorage();
+    if (!selectedIds.length) return [];
+    return selectedIds
+      .map(id => getRecycleDeviceById(id))
+      .filter(device => device && device.categoryId === category && String(device.helpImagePath || "").trim())
+      .map(device => ({
+        title: String(device.displayName || device.materialId || device.deviceId || "").trim(),
+        imagePath: String(device.helpImagePath || "").trim(),
+        alt: `Правилен barcode за ${String(device.displayName || device.deviceId || "").trim()}`
+      }));
+  }
+
+  function getRecycleSerialHelpItemsForContext(categoryId) {
+    const deviceItems = getSelectedRecycleDeviceHelpItems(categoryId);
+    return deviceItems.length ? deviceItems : getRecycleSerialHelpItems(categoryId);
+  }
+
   function resolveRecycleSerialHelpImageUrl(imagePath) {
     const path = String(imagePath || "");
     if (!path) return "";
@@ -3005,11 +3025,13 @@
   }
 
   function renderRecycleSerialHelpContent(ui, categoryId) {
-    const items = getRecycleSerialHelpItems(categoryId);
+    const items = getRecycleSerialHelpItemsForContext(categoryId);
     if (!ui?.content || !items.length) return false;
-    if (ui.categoryId === categoryId && ui.content.childElementCount) return true;
+    const contextKey = JSON.stringify(items.map(item => [item.title, item.imagePath]));
+    if (ui.categoryId === categoryId && ui.helpContextKey === contextKey && ui.content.childElementCount) return true;
 
     ui.categoryId = categoryId;
+    ui.helpContextKey = contextKey;
     ui.panel.dataset.wifiOssRecycleHelpCategory = categoryId;
     ui.content.textContent = "";
 
@@ -3194,7 +3216,7 @@
     parent.appendChild(button);
     parent.appendChild(panel);
 
-    recycleSerialHelpUi = { button, panel, content, closeBtn, categoryId: "" };
+    recycleSerialHelpUi = { button, panel, content, closeBtn, categoryId: "", helpContextKey: "" };
 
     button.addEventListener("click", (e) => {
       e.preventDefault();
@@ -3225,7 +3247,7 @@
     }
 
     if (open) {
-      if (!getRecycleSerialHelpItems(ui.categoryId).length) return;
+      if (!getRecycleSerialHelpItemsForContext(ui.categoryId).length) return;
       ui.panel.dataset.wifiOssRecycleHelpOpen = "1";
       ui.panel.style.display = "flex";
       ui.panel.setAttribute("aria-hidden", "false");
@@ -3248,7 +3270,7 @@
 
     ui.panel.dataset.wifiOssRecycleHelpOpen = "";
     ui.panel.setAttribute("aria-hidden", "true");
-    if (keepButton && getRecycleSerialHelpItems(ui.categoryId).length) {
+    if (keepButton && getRecycleSerialHelpItemsForContext(ui.categoryId).length) {
       setRecycleSerialHelpButtonVisible(ui, true);
     } else {
       setRecycleSerialHelpButtonVisible(ui, false);
@@ -3270,8 +3292,8 @@
     }, 230);
   }
 
-  function showRecycleSerialHelp(categoryId) {
-    const items = getRecycleSerialHelpItems(categoryId);
+  function showRecycleSerialHelp(categoryId, options = {}) {
+    const items = getRecycleSerialHelpItemsForContext(categoryId);
     if (!items.length) {
       hideRecycleSerialHelp();
       return false;
@@ -3280,6 +3302,23 @@
     if (!ui) return false;
     if (!renderRecycleSerialHelpContent(ui, categoryId)) return false;
 
+    if (options.autoOpen === true || ui.panel.dataset.wifiOssRecycleHelpOpen === "1") {
+      setRecycleSerialHelpPanelOpen(true);
+    } else {
+      setRecycleSerialHelpButtonVisible(ui, true);
+    }
+    return true;
+  }
+
+  function refreshRecycleSerialHelpAvailability(categoryId) {
+    const category = String(categoryId || "").trim();
+    if (!category || !getRecycleSerialHelpItemsForContext(category).length) {
+      hideRecycleSerialHelp();
+      return false;
+    }
+    const ui = ensureRecycleSerialHelpUi();
+    if (!ui) return false;
+    if (!renderRecycleSerialHelpContent(ui, category)) return false;
     if (ui.panel.dataset.wifiOssRecycleHelpOpen === "1") {
       setRecycleSerialHelpPanelOpen(true);
     } else {
@@ -3822,8 +3861,8 @@
       selected = id;
       writeSelectedRecycleEntryCategory(id);
       panel.dataset.wifiOssRecycleSelected = id;
-      renderCategories();
       clearSerialInlineAlert();
+      renderCategories();
     };
 
     const resolveCategoryImageUrl = (c) => {
@@ -3870,6 +3909,7 @@
       else selectedRecycleDeviceIds.add(id);
       saveSelectedRecycleDeviceIds();
       applyRecycleDeviceSelectedState(card, selectedRecycleDeviceIds.has(id));
+      refreshRecycleSerialHelpAvailability(getSelected());
     };
 
     const createCategoryCard = (c, featured) => {
@@ -4178,6 +4218,7 @@
 
       if (!activeCategory) {
         clearSelectedRecycleDeviceIds();
+        refreshRecycleSerialHelpAvailability("");
         grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
         categories.forEach(c => grid.appendChild(createCategoryCard(c, false)));
         return;
@@ -4213,6 +4254,7 @@
         renderLegacyCategorySwitcher(restGrid, activeCategory);
       }
       grid.appendChild(restGrid);
+      refreshRecycleSerialHelpAvailability(activeCategory.id);
     };
 
     panel.__wifiOssRenderRecycleCategories = renderCategories;
@@ -4261,7 +4303,7 @@
         e.preventDefault();
         e.stopPropagation();
         setSerialInlineAlert(r.msg, r.variant === "warning" ? "warning" : "error", r.kind || "validation");
-        if (String(serialInput.value || "").trim()) showRecycleSerialHelp(cat);
+        if (String(serialInput.value || "").trim()) showRecycleSerialHelp(cat, { autoOpen: true });
         else hideRecycleSerialHelp();
         try { serialInput.focus(); serialInput.select?.(); } catch (e2) {}
         return;
