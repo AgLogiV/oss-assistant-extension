@@ -2200,8 +2200,8 @@
     { deviceId: "huawei_k562e_10_home", categoryId: "gpon", displayName: "K562E-10 Home", materialId: "1200014928" },
     { deviceId: "huawei_gpon_hg8145v5", categoryId: "gpon", displayName: "Huawei GPON HG8145V5", materialId: "118560" },
     { deviceId: "zte_gpon_zxhn_f670v", categoryId: "gpon", displayName: "GPON CPE ZXHN F670V", materialId: "118563" },
-    { deviceId: "zte_gpon_zxhn_f660", categoryId: "gpon", displayName: "GPON CPE ZXHN F660", materialId: "118564" },
-    { deviceId: "zte_gpon_zxhn_f660op", categoryId: "gpon", displayName: "GPON CPE ZXHN F660OP", materialId: "122933" },
+    { deviceId: "zte_zxhn_f600", categoryId: "gpon", displayName: "ZTE ZXHN F600", materialId: "118564", imagePath: "images/devices/16x9/ZTE_ZXHN_F600.webp", validationProfileId: "gpon_16_alnum" },
+    { deviceId: "zte_gpon_zxhn_f6600p", categoryId: "gpon", displayName: "GPON CPE ZXHN F6600P", materialId: "122933", imagePath: "images/devices/16x9/GPON_CPE_ZXHN_F6600P_V9.0-removebg-preview.webp", validationProfileId: "gpon_16_alnum" },
     { deviceId: "zte_gpon_zxhn_f6600r", categoryId: "gpon", displayName: "GPON ONT ZXHN F6600R", materialId: "122944" }
   ];
 
