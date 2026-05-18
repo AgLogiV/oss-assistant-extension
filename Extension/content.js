@@ -2164,16 +2164,16 @@
   }
 
   const RECYCLE_DEVICE_CATALOG_RAW = [
-    { deviceId: "stb_zxv_b700v5", categoryId: "android_iptv", displayName: "STB ZXV B700v5", materialId: "114225" },
-    { deviceId: "stb_sdmc_dv9161_androidtv", categoryId: "android_iptv", displayName: "DV9161 (AndroidTV)", materialId: "121679" },
-    { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678" },
+    { deviceId: "stb_zxv_b700v5", categoryId: "android_iptv", displayName: "STB ZXV B700v5", materialId: "114225", validationProfileId: "android_zxv_b700v5_12_digits" },
+    { deviceId: "stb_sdmc_dv9161_androidtv", categoryId: "android_iptv", displayName: "DV9161 (AndroidTV)", materialId: "121679", validationProfileId: "android_dv9161_16_digits" },
+    { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678", validationProfileId: "android_b866v2f02_bg_plus_15_digits" },
 
-    { deviceId: "kaon_kstb5019_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5019 XploreTV", materialId: "118542" },
-    { deviceId: "kaon_kstb6106_zapper", categoryId: "xplore_zapper", displayName: "KSTB6106 Zapper", materialId: "118543" },
-    { deviceId: "kaon_kstb5020_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5020 XploreTV", materialId: "118544" },
+    { deviceId: "kaon_kstb5019_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5019 XploreTV", materialId: "118542", validationProfileId: "xplore_zapper_mac12_hex_plain" },
+    { deviceId: "kaon_kstb6106_zapper", categoryId: "xplore_zapper", displayName: "KSTB6106 Zapper", materialId: "118543", validationProfileId: "xplore_zapper_mac12_hex_plain" },
+    { deviceId: "kaon_kstb5020_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5020 XploreTV", materialId: "118544", validationProfileId: "xplore_zapper_mac12_hex_plain" },
 
-    { deviceId: "dth_kaon_kstb1001", categoryId: "dth_kaon_nagra", displayName: "DTH STB KAON KSTB1001", materialId: "114915" },
-    { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961" },
+    { deviceId: "dth_kaon_kstb1001", categoryId: "dth_kaon_nagra", displayName: "DTH STB KAON KSTB1001", materialId: "114915", validationProfileId: "dth_11_digits_prefix_00" },
+    { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961", validationProfileId: "dth_11_digits_prefix_00" },
 
     { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "123580" },
     { deviceId: "zte_mf296r", categoryId: "netbox", displayName: "ZTE MF296R", materialId: "123451" },
@@ -2188,16 +2188,16 @@
     { deviceId: "tp_link_nx520", categoryId: "netbox", displayName: "TP-Link NX520", materialId: "1000059633" },
     { deviceId: "tp_link_nx220v", categoryId: "netbox", displayName: "TP Link NX220v", materialId: "1000055165" },
 
-    { deviceId: "tp_link_hx520_home", categoryId: "routers", displayName: "HX520 Home", materialId: "1200014914" },
-    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4, AC1200, 2xGbE, MU-MIMO", materialId: "118551" },
+    { deviceId: "tp_link_hx520_home", categoryId: "routers", displayName: "HX520 Home", materialId: "1200014914", validationProfileId: "router_13_alnum" },
+    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4, AC1200, 2xGbE, MU-MIMO", materialId: "118551", validationProfileId: "router_13_alnum" },
     { deviceId: "tp_link_archer_a6", categoryId: "routers", displayName: "Archer A6/AC1200/DB LVA", materialId: "118552" },
-    { deviceId: "tp_link_ex220", categoryId: "routers", displayName: "TP-Link EX220", materialId: "121150" },
-    { deviceId: "tp_link_ex220_home", categoryId: "routers", displayName: "TP-Link EX220 Home", materialId: "121376" },
-    { deviceId: "zte_zxhn_h3601p", categoryId: "routers", displayName: "ZTE ZXHN H3601P", materialId: "123357" },
+    { deviceId: "tp_link_ex220", categoryId: "routers", displayName: "TP-Link EX220", materialId: "121150", validationProfileId: "router_13_alnum" },
+    { deviceId: "tp_link_ex220_home", categoryId: "routers", displayName: "TP-Link EX220 Home", materialId: "121376", validationProfileId: "router_13_alnum" },
+    { deviceId: "zte_zxhn_h3601p", categoryId: "routers", displayName: "ZTE ZXHN H3601P", materialId: "123357", validationProfileId: "router_zte_h3601p_zte_prefix_15_alnum" },
 
     { deviceId: "huawei_k562e_10_home", categoryId: "gpon", displayName: "K562E-10 Home", materialId: "1200014928" },
-    { deviceId: "huawei_gpon_hg8145v5", categoryId: "gpon", displayName: "Huawei GPON HG8145V5", materialId: "118560" },
-    { deviceId: "zte_gpon_zxhn_f670v", categoryId: "gpon", displayName: "GPON CPE ZXHN F670V", materialId: "118563" },
+    { deviceId: "huawei_gpon_hg8145v5", categoryId: "gpon", displayName: "Huawei GPON HG8145V5", materialId: "118560", validationProfileId: "gpon_16_alnum" },
+    { deviceId: "zte_gpon_zxhn_f670v", categoryId: "gpon", displayName: "GPON CPE ZXHN F670V", materialId: "118563", validationProfileId: "gpon_16_alnum" },
     { deviceId: "zte_zxhn_f600", categoryId: "gpon", displayName: "ZTE ZXHN F600", materialId: "118564", imagePath: "images/devices/16x9/ZTE_ZXHN_F600.webp", validationProfileId: "gpon_16_alnum" },
     { deviceId: "zte_gpon_zxhn_f6600p", categoryId: "gpon", displayName: "GPON CPE ZXHN F6600P", materialId: "122933", imagePath: "images/devices/16x9/GPON_CPE_ZXHN_F6600P_V9.0-removebg-preview.webp", validationProfileId: "gpon_16_alnum" },
     { deviceId: "zte_gpon_zxhn_f6600r", categoryId: "gpon", displayName: "GPON ONT ZXHN F6600R", materialId: "122944" }
@@ -3555,6 +3555,79 @@
     return (sum % 10) === 0;
   }
 
+  const RECYCLE_SELECTED_DEVICE_SERIAL_INVALID_MSG = "\u041d\u0435\u0432\u0430\u043b\u0438\u0434\u0435\u043d \u0441\u0435\u0440\u0438\u0435\u043d \u043d\u043e\u043c\u0435\u0440 \u0437\u0430 \u0438\u0437\u0431\u0440\u0430\u043d\u043e\u0442\u043e \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e.";
+  const recycleProfileOk = () => ({ ok: true, msg: "" });
+  const recycleProfileInvalid = () => ({ ok: false, msg: RECYCLE_SELECTED_DEVICE_SERIAL_INVALID_MSG });
+
+  const RECYCLE_SERIAL_VALIDATION_PROFILES = {
+    android_b866v2f02_bg_plus_15_digits: (s) => (/^BG\d{15}$/i.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    android_dv9161_16_digits: (s) => (/^\d{16}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    android_zxv_b700v5_12_digits: (s) => (/^\d{12}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    xplore_zapper_mac12_hex_plain: (s) => (/^[0-9A-F]{12}$/i.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    dth_11_digits_prefix_00: (s) => (/^00\d{9}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    imei15_luhn: (s) => (/^\d{15}$/.test(s) && isValidImeiLuhn(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    router_13_alnum: (s) => (/^[A-Za-z0-9]{13}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    router_zte_h3601p_zte_prefix_15_alnum: (s) => (/^ZTE[A-Za-z0-9]{12}$/i.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    gpon_16_alnum: (s) => (/^[A-Za-z0-9]{16}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid())
+  };
+
+  function getRecycleSerialCommonInvalidResult(serialRaw) {
+    const s = String(serialRaw || "").trim();
+    if (!s) return { ok: false, msg: "\u0412\u044a\u0432\u0435\u0434\u0438 \u0441\u0435\u0440\u0438\u0435\u043d \u043d\u043e\u043c\u0435\u0440." };
+    const cyrillicCheck = getRecycleSerialCyrillicValidation(s);
+    if (!cyrillicCheck.ok) return cyrillicCheck;
+    return null;
+  }
+
+  function getSelectedRecycleDevicesForValidation(categoryId) {
+    const category = String(categoryId || "").trim();
+    if (!category) return [];
+    const selectedIds = readSelectedRecycleDeviceIdsStorage();
+    if (!selectedIds.length) return [];
+    const activeDeviceIds = new Set(getRecycleDevicesByCategory(category).map(device => String(device?.deviceId || "").trim()).filter(Boolean));
+    return selectedIds
+      .map(id => getRecycleDeviceById(id))
+      .filter(device => device && device.categoryId === category && activeDeviceIds.has(device.deviceId));
+  }
+
+  function isRecycleValidationProfileImplemented(profileId) {
+    const id = String(profileId || "").trim();
+    return Boolean(id && typeof RECYCLE_SERIAL_VALIDATION_PROFILES[id] === "function");
+  }
+
+  function validateRecycleSerialWithProfile(profileId, serialRaw) {
+    const id = String(profileId || "").trim();
+    const validator = RECYCLE_SERIAL_VALIDATION_PROFILES[id];
+    if (typeof validator !== "function") return null;
+    const commonInvalid = getRecycleSerialCommonInvalidResult(serialRaw);
+    if (commonInvalid) return commonInvalid;
+    return validator(String(serialRaw || "").trim());
+  }
+
+  function validateRecycleSerialForSelection(categoryId, serialRaw) {
+    const selectedDevices = getSelectedRecycleDevicesForValidation(categoryId);
+    if (!selectedDevices.length) return validateRecycleSerial(categoryId, serialRaw);
+
+    const profileDevices = selectedDevices.filter(device => isRecycleValidationProfileImplemented(device.validationProfileId));
+    const hasFallbackDevice = profileDevices.length !== selectedDevices.length;
+    if (!profileDevices.length) return validateRecycleSerial(categoryId, serialRaw);
+
+    const commonInvalid = getRecycleSerialCommonInvalidResult(serialRaw);
+    if (commonInvalid) return commonInvalid;
+
+    for (const device of profileDevices) {
+      const result = validateRecycleSerialWithProfile(device.validationProfileId, serialRaw);
+      if (result?.ok) return result;
+    }
+
+    if (hasFallbackDevice) {
+      const fallback = validateRecycleSerial(categoryId, serialRaw);
+      if (fallback.ok) return fallback;
+    }
+
+    return recycleProfileInvalid();
+  }
+
   function validateRecycleSerial(categoryId, serialRaw) {
     const s = String(serialRaw || "").trim();
     if (!s) return { ok: false, msg: "Въведи сериен номер." };
@@ -4183,7 +4256,7 @@
         setRecycleInlineAlert(serialMsg, "Избери категория преди да продължиш.", "error");
         return;
       }
-      const r = validateRecycleSerial(cat, serialInput.value);
+      const r = validateRecycleSerialForSelection(cat, serialInput.value);
       if (!r.ok) {
         e.preventDefault();
         e.stopPropagation();
@@ -4224,7 +4297,7 @@
         if (hadCyrillicAlert) clearSerialInlineAlert();
         return;
       }
-      const r = validateRecycleSerial(cat, serialInput.value);
+      const r = validateRecycleSerialForSelection(cat, serialInput.value);
       if (r.ok) {
         clearSerialInlineAlert();
       } else if (hadCyrillicAlert) {
