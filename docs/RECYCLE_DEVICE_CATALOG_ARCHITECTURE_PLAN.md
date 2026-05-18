@@ -120,6 +120,8 @@ This keeps the first multi-select patch low risk.
 
 Validation should become declarative but remain locally controlled. The dashboard must not send arbitrary JavaScript, arbitrary regex, or unreviewed logic that can block operators unexpectedly.
 
+`docs/RECYCLE_DEVICE_VALIDATION_RULES.md` is the human-authored source/input for future validation profiles. It may mention devices that are not yet in `RECYCLE_DEVICE_CATALOG_RAW`, and it does not represent current runtime behavior until a validation profile engine is deliberately implemented.
+
 Recommended model:
 
 ```js

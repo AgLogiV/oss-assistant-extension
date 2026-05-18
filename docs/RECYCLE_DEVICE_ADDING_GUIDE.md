@@ -257,6 +257,8 @@ validateRecycleSerial(categoryId, serialRaw)
 
 Do not add device-level validation just because a device entry has `validationProfileId`.
 
+Adding a device to `RECYCLE_DEVICE_CATALOG_RAW` does not automatically activate device-level validation. Device-specific rules from `docs/RECYCLE_DEVICE_VALIDATION_RULES.md` should remain documentation/input until the validation profile engine is implemented.
+
 Current common examples:
 
 ```text

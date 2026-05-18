@@ -12,6 +12,8 @@ For future device catalog architecture, validation profiles, multi-select, SAP/m
 
 When adding new local recycle devices to the catalog, read `docs/RECYCLE_DEVICE_ADDING_GUIDE.md` first. It documents required fields, optional contract fields, naming rules, image rules, and test gates for safe catalog additions.
 
+For future device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_RULES.md`. It is a human-authored input file for future validation profiles, not current runtime behavior.
+
 ## Project Structure
 
 - `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, background service worker, content script, and web-accessible image assets.
