@@ -3615,6 +3615,7 @@
     ];
 
     let selected = "";
+    let selectedRecycleDeviceIds = new Set();
     try {
       const today = localDateKey();
       const savedDate = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DATE_KEY) || "");
@@ -3634,6 +3635,8 @@
     };
 
     const setSelected = (id) => {
+      const previous = getSelected();
+      if (previous !== id) selectedRecycleDeviceIds.clear();
       selected = id;
       try {
         sessionStorage.setItem(RECYCLE_ENTRY_SELECTED_KEY, id);
@@ -3663,6 +3666,30 @@
       return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
         ? chrome.runtime.getURL(imgPath)
         : "";
+    };
+
+    const applyRecycleDeviceSelectedState = (card, isSelected) => {
+      if (!card) return;
+      card.dataset.wifiOssRecycleDeviceSelected = isSelected ? "1" : "0";
+      card.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      card.style.borderColor = isSelected ? "#DA291C" : "#d8d8d8";
+      card.style.outline = "none";
+      card.style.outlineOffset = "0";
+      card.style.boxShadow = isSelected ? "0 8px 20px rgba(218,41,28,0.22)" : "0 2px 9px rgba(0,0,0,0.10)";
+
+      const titleBar = card.querySelector("[data-wifi-oss-recycle-device-title]");
+      if (titleBar) titleBar.style.background = isSelected ? "#DA291C" : "#3f3f3f";
+
+      const check = card.querySelector("[data-wifi-oss-recycle-device-check]");
+      if (check) check.style.display = isSelected ? "flex" : "none";
+    };
+
+    const toggleRecycleDeviceSelection = (deviceId, card) => {
+      const id = String(deviceId || "").trim();
+      if (!id) return;
+      if (selectedRecycleDeviceIds.has(id)) selectedRecycleDeviceIds.delete(id);
+      else selectedRecycleDeviceIds.add(id);
+      applyRecycleDeviceSelectedState(card, selectedRecycleDeviceIds.has(id));
     };
 
     const createCategoryCard = (c, featured) => {
@@ -3796,8 +3823,11 @@
       const red = "#DA291C";
       const materialId = normalizeSwapMaterialId(device?.materialId);
       const displayName = String(device?.displayName || materialId || "").trim();
-      const card = document.createElement("div");
-      card.dataset.wifiOssRecycleDevice = String(device?.deviceId || "");
+      const deviceId = String(device?.deviceId || "").trim();
+      const card = document.createElement("button");
+      card.type = "button";
+      card.dataset.wifiOssRecycleDevice = deviceId;
+      card.setAttribute("aria-label", `${displayName}${materialId ? ` SAP ${materialId}` : ""}`);
       card.style.position = "relative";
       card.style.display = "flex";
       card.style.flexDirection = "column";
@@ -3813,6 +3843,9 @@
       card.style.color = "#fff";
       card.style.textAlign = "left";
       card.style.fontFamily = "inherit";
+      card.style.appearance = "none";
+      card.style.cursor = "pointer";
+      card.style.transition = "border-color 160ms ease, box-shadow 160ms ease";
 
       const media = document.createElement("div");
       media.style.position = "relative";
@@ -3869,7 +3902,27 @@
         appendTextFallback();
       }
 
+      const check = document.createElement("div");
+      check.dataset.wifiOssRecycleDeviceCheck = "1";
+      check.textContent = "\u2713";
+      check.style.position = "absolute";
+      check.style.top = "8px";
+      check.style.right = "8px";
+      check.style.width = "22px";
+      check.style.height = "22px";
+      check.style.borderRadius = "999px";
+      check.style.background = red;
+      check.style.color = "#fff";
+      check.style.display = "none";
+      check.style.alignItems = "center";
+      check.style.justifyContent = "center";
+      check.style.fontSize = "15px";
+      check.style.fontWeight = "900";
+      check.style.boxShadow = "0 2px 8px rgba(0,0,0,0.20)";
+      media.appendChild(check);
+
       const titleBar = document.createElement("div");
+      titleBar.dataset.wifiOssRecycleDeviceTitle = "1";
       titleBar.style.minHeight = "46px";
       titleBar.style.width = "100%";
       titleBar.style.boxSizing = "border-box";
@@ -3919,6 +3972,12 @@
       card.appendChild(media);
       card.appendChild(titleBar);
       card.appendChild(strip);
+      card.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleRecycleDeviceSelection(deviceId, card);
+      });
+      applyRecycleDeviceSelectedState(card, selectedRecycleDeviceIds.has(deviceId));
       return card;
     };
 
@@ -3936,6 +3995,7 @@
       grid.style.alignItems = "start";
 
       if (!activeCategory) {
+        selectedRecycleDeviceIds.clear();
         grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
         categories.forEach(c => grid.appendChild(createCategoryCard(c, false)));
         return;
@@ -3956,8 +4016,11 @@
 
       const devices = getRecycleDevicesByCategory(activeCategory.id);
       if (devices.length) {
+        const activeDeviceIds = new Set(devices.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
+        selectedRecycleDeviceIds.forEach(id => { if (!activeDeviceIds.has(id)) selectedRecycleDeviceIds.delete(id); });
         devices.forEach(device => restGrid.appendChild(createDeviceCard(device)));
       } else {
+        selectedRecycleDeviceIds.clear();
         renderLegacyCategorySwitcher(restGrid, activeCategory);
       }
       grid.appendChild(restGrid);
