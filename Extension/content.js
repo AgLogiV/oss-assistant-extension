@@ -2114,7 +2114,58 @@
     return "";
   }
 
-  const RECYCLE_DEVICE_CATALOG = [
+  const RECYCLE_DEVICE_CATEGORY_VALIDATION_PROFILES = {
+    android_iptv: "category_android_iptv_current",
+    xplore_zapper: "category_xplore_zapper_mac12",
+    dth_kaon_nagra: "category_dth_kaon_nagra_11_digits",
+    austrian: "category_austrian_min16_alnum",
+    netbox: "imei15_luhn",
+    routers: "category_routers_current",
+    gpon: "category_gpon_current",
+    cam_modules: "category_cam_modules_non_empty",
+    modems: "category_modems_current"
+  };
+
+  function getRecycleDeviceDefaultImagePath(device) {
+    const legacyPath = deviceImageForModel(device?.displayName);
+    const fileName = String(legacyPath || "").split("/").pop();
+    return fileName ? `images/devices/16x9/${fileName}` : "";
+  }
+
+  function normalizeRecycleDeviceLegacyMaterialIds(ids) {
+    const list = Array.isArray(ids) ? ids : [];
+    const seen = new Set();
+    return list
+      .map(id => String(id || "").trim())
+      .filter(id => {
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+  }
+
+  function normalizeRecycleDeviceCatalogEntry(device) {
+    const categoryId = String(device?.categoryId || "").trim();
+    const materialId = normalizeSwapMaterialId(device?.materialId);
+    return {
+      deviceId: String(device?.deviceId || "").trim(),
+      categoryId,
+      displayName: String(device?.displayName || "").trim(),
+      materialId,
+      legacyMaterialIds: normalizeRecycleDeviceLegacyMaterialIds(device?.legacyMaterialIds),
+      imagePath: String(device?.imagePath || getRecycleDeviceDefaultImagePath(device)).trim(),
+      helpImagePath: String(device?.helpImagePath || "").trim(),
+      warningText: String(device?.warningText || "").trim(),
+      validationProfileId: String(device?.validationProfileId || RECYCLE_DEVICE_CATEGORY_VALIDATION_PROFILES[categoryId] || "").trim(),
+      enabled: device?.enabled !== false
+    };
+  }
+
+  function isRecycleDeviceEnabled(device) {
+    return device?.enabled !== false;
+  }
+
+  const RECYCLE_DEVICE_CATALOG_RAW = [
     { deviceId: "stb_zxv_b700v5", categoryId: "android_iptv", displayName: "STB ZXV B700v5", materialId: "114225" },
     { deviceId: "stb_sdmc_dv9161_androidtv", categoryId: "android_iptv", displayName: "DV9161 (AndroidTV)", materialId: "121679" },
     { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678" },
@@ -2154,16 +2205,18 @@
     { deviceId: "zte_gpon_zxhn_f6600r", categoryId: "gpon", displayName: "GPON ONT ZXHN F6600R", materialId: "122944" }
   ];
 
+  const RECYCLE_DEVICE_CATALOG = RECYCLE_DEVICE_CATALOG_RAW.map(normalizeRecycleDeviceCatalogEntry);
+
   function getRecycleDeviceById(deviceId) {
     const id = String(deviceId || "").trim();
     if (!id) return null;
-    return RECYCLE_DEVICE_CATALOG.find(d => d.deviceId === id) || null;
+    return RECYCLE_DEVICE_CATALOG.find(d => d.deviceId === id && isRecycleDeviceEnabled(d)) || null;
   }
 
   function getRecycleDevicesByCategory(categoryId) {
     const id = String(categoryId || "").trim();
     if (!id) return [];
-    return RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id);
+    return RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id && isRecycleDeviceEnabled(d));
   }
 
   function getRecycleDeviceMaterialIdsByCategory(categoryId) {
@@ -2173,9 +2226,9 @@
   }
 
   function getRecycleDeviceImagePath(device) {
-    const legacyPath = deviceImageForModel(device?.displayName);
-    const fileName = String(legacyPath || "").split("/").pop();
-    return fileName ? `images/devices/16x9/${fileName}` : null;
+    const imagePath = String(device?.imagePath || "").trim();
+    if (imagePath) return imagePath;
+    return getRecycleDeviceDefaultImagePath(device) || null;
   }
 
   function getRecycleDeviceFallbackImagePath(device) {
@@ -2184,6 +2237,7 @@
 
   function buildSwapMaterialRecycleFiltersFromDeviceCatalog() {
     return RECYCLE_DEVICE_CATALOG.reduce((filters, device) => {
+      if (!isRecycleDeviceEnabled(device)) return filters;
       const categoryId = String(device?.categoryId || "").trim();
       const materialId = normalizeSwapMaterialId(device?.materialId);
       if (!categoryId || !materialId) return filters;
