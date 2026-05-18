@@ -429,8 +429,7 @@
     autoBtn.addEventListener("click", (e) => { e.preventDefault(); setAutoMode(!autoMode); });
     resetBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      try { sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY); } catch (e2) {}
-      try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DATE_KEY); } catch (e2) {}
+      clearRecycleEntrySelectionStorage();
       const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
       const panel = root ? root.querySelector(".wifi-oss-recycle-category-panel") : null;
       if (panel) {
@@ -2110,8 +2109,7 @@
   }
 
   function getSelectedRecycleEntryCategory() {
-    try { return String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
-    return "";
+    return readSelectedRecycleEntryCategory();
   }
 
   const RECYCLE_DEVICE_CATEGORY_VALIDATION_PROFILES = {
@@ -2733,11 +2731,99 @@
   const RECYCLE_ENTRY_PANEL_CLASS = "wifi-oss-recycle-category-panel";
   const RECYCLE_ENTRY_SELECTED_KEY = "wifi_oss_recycle_entry_category";
   const RECYCLE_ENTRY_SELECTED_DATE_KEY = "wifi_oss_recycle_entry_category_date";
+  const RECYCLE_ENTRY_SELECTED_DEVICES_KEY = "wifi_oss_recycle_entry_selected_devices";
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
+
+  function clearRecycleEntrySelectedDevicesStorage() {
+    try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY); } catch (e) {}
+  }
+
+  function clearRecycleEntrySelectionStorage() {
+    try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY); } catch (e) {}
+    try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DATE_KEY); } catch (e) {}
+    clearRecycleEntrySelectedDevicesStorage();
+    try { sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY); } catch (e) {}
+  }
+
+  function isRecycleEntrySelectionDateExpired() {
+    try {
+      const savedDate = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DATE_KEY) || "");
+      return Boolean(savedDate && savedDate !== localDateKey());
+    } catch (e) {}
+    return false;
+  }
+
+  function readSelectedRecycleEntryCategory() {
+    if (isRecycleEntrySelectionDateExpired()) {
+      clearRecycleEntrySelectionStorage();
+      return "";
+    }
+
+    try {
+      const selected = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim();
+      if (selected) return selected;
+    } catch (e) {}
+
+    try {
+      const legacy = String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim();
+      if (legacy) {
+        writeSelectedRecycleEntryCategory(legacy);
+        return legacy;
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  function writeSelectedRecycleEntryCategory(id) {
+    const selected = String(id || "").trim();
+    if (!selected) {
+      clearRecycleEntrySelectionStorage();
+      return;
+    }
+    try {
+      localStorage.setItem(RECYCLE_ENTRY_SELECTED_DATE_KEY, localDateKey());
+      localStorage.setItem(RECYCLE_ENTRY_SELECTED_KEY, selected);
+      sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY);
+    } catch (e) {}
+  }
+
+  function readSelectedRecycleDeviceIdsStorage() {
+    try {
+      const parsed = JSON.parse(String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY) || "[]"));
+      if (!Array.isArray(parsed)) return [];
+      const clean = [];
+      const seen = new Set();
+      parsed.forEach(id => {
+        const value = String(id || "").trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        clean.push(value);
+      });
+      return clean;
+    } catch (e) {}
+    return [];
+  }
+
+  function writeSelectedRecycleDeviceIdsStorage(ids) {
+    const clean = [];
+    const seen = new Set();
+    Array.from(ids || []).forEach(id => {
+      const value = String(id || "").trim();
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      clean.push(value);
+    });
+    try {
+      if (clean.length) localStorage.setItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY, JSON.stringify(clean));
+      else localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY);
+    } catch (e) {}
+  }
+
   const RECYCLE_SERIAL_CYRILLIC_WARNING = "\u0417\u0430\u0441\u0435\u0447\u0435\u043d\u0430 \u0435 \u043a\u0438\u0440\u0438\u043b\u0438\u0446\u0430 \u0432 \u0441\u0435\u0440\u0438\u0439\u043d\u0438\u044f \u043d\u043e\u043c\u0435\u0440. \u0421\u043c\u0435\u043d\u0438 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430\u0442\u0430 \u043d\u0430 EN \u0438 \u0441\u043a\u0430\u043d\u0438\u0440\u0430\u0439 \u043e\u0442\u043d\u043e\u0432\u043e.";
   const RECYCLE_SERIAL_HELP_BY_CATEGORY = {
     android_iptv: [
@@ -3425,6 +3511,27 @@
     return true;
   }
 
+  let recycleEntryStorageSyncInstalled = false;
+  function installRecycleEntryStorageSync() {
+    if (recycleEntryStorageSyncInstalled) return;
+    recycleEntryStorageSyncInstalled = true;
+
+    window.addEventListener("storage", (event) => {
+      const key = event?.key;
+      if (
+        key !== RECYCLE_ENTRY_SELECTED_KEY &&
+        key !== RECYCLE_ENTRY_SELECTED_DATE_KEY &&
+        key !== RECYCLE_ENTRY_SELECTED_DEVICES_KEY
+      ) {
+        return;
+      }
+
+      const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
+      const panel = root ? root.querySelector(`.${RECYCLE_ENTRY_PANEL_CLASS}`) : null;
+      if (panel) refreshRecycleEntryCategoryPanel(panel);
+    });
+  }
+
   function localDateKey(d = new Date()) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -3614,34 +3721,33 @@
       { id: "modems", label: "Модеми", hintModelName: "", imagePath: "images/categories/16x9/modems.webp" }
     ];
 
-    let selected = "";
-    let selectedRecycleDeviceIds = new Set();
-    try {
-      const today = localDateKey();
-      const savedDate = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DATE_KEY) || "");
-      if (savedDate && savedDate !== today) {
-        sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY);
-        localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DATE_KEY);
-      }
-      selected = String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "");
-    } catch (e) {}
+    let selected = readSelectedRecycleEntryCategory();
+    let selectedRecycleDeviceIds = new Set(readSelectedRecycleDeviceIdsStorage());
 
     panel.dataset.wifiOssRecycleSelected = selected;
     const getSelected = () => {
-      const d = String(panel.dataset.wifiOssRecycleSelected || "").trim();
-      if (d) return d;
-      try { return String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
-      return "";
+      selected = readSelectedRecycleEntryCategory();
+      return selected;
+    };
+
+    const loadSelectedRecycleDeviceIds = () => {
+      selectedRecycleDeviceIds = new Set(readSelectedRecycleDeviceIdsStorage());
+    };
+
+    const saveSelectedRecycleDeviceIds = () => {
+      writeSelectedRecycleDeviceIdsStorage(selectedRecycleDeviceIds);
+    };
+
+    const clearSelectedRecycleDeviceIds = () => {
+      selectedRecycleDeviceIds.clear();
+      clearRecycleEntrySelectedDevicesStorage();
     };
 
     const setSelected = (id) => {
       const previous = getSelected();
-      if (previous !== id) selectedRecycleDeviceIds.clear();
+      if (previous !== id) clearSelectedRecycleDeviceIds();
       selected = id;
-      try {
-        sessionStorage.setItem(RECYCLE_ENTRY_SELECTED_KEY, id);
-        localStorage.setItem(RECYCLE_ENTRY_SELECTED_DATE_KEY, localDateKey());
-      } catch (e) {}
+      writeSelectedRecycleEntryCategory(id);
       panel.dataset.wifiOssRecycleSelected = id;
       renderCategories();
       clearSerialInlineAlert();
@@ -3689,6 +3795,7 @@
       if (!id) return;
       if (selectedRecycleDeviceIds.has(id)) selectedRecycleDeviceIds.delete(id);
       else selectedRecycleDeviceIds.add(id);
+      saveSelectedRecycleDeviceIds();
       applyRecycleDeviceSelectedState(card, selectedRecycleDeviceIds.has(id));
     };
 
@@ -3991,11 +4098,13 @@
       const activeId = getSelected();
       const activeCategory = categories.find(c => c.id === activeId);
       selected = activeCategory ? activeCategory.id : "";
+      panel.dataset.wifiOssRecycleSelected = selected;
+      loadSelectedRecycleDeviceIds();
       grid.textContent = "";
       grid.style.alignItems = "start";
 
       if (!activeCategory) {
-        selectedRecycleDeviceIds.clear();
+        clearSelectedRecycleDeviceIds();
         grid.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
         categories.forEach(c => grid.appendChild(createCategoryCard(c, false)));
         return;
@@ -4017,10 +4126,17 @@
       const devices = getRecycleDevicesByCategory(activeCategory.id);
       if (devices.length) {
         const activeDeviceIds = new Set(devices.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
-        selectedRecycleDeviceIds.forEach(id => { if (!activeDeviceIds.has(id)) selectedRecycleDeviceIds.delete(id); });
+        let changed = false;
+        selectedRecycleDeviceIds.forEach(id => {
+          if (!activeDeviceIds.has(id)) {
+            selectedRecycleDeviceIds.delete(id);
+            changed = true;
+          }
+        });
+        if (changed) saveSelectedRecycleDeviceIds();
         devices.forEach(device => restGrid.appendChild(createDeviceCard(device)));
       } else {
-        selectedRecycleDeviceIds.clear();
+        clearSelectedRecycleDeviceIds();
         renderLegacyCategorySwitcher(restGrid, activeCategory);
       }
       grid.appendChild(restGrid);
@@ -4120,6 +4236,7 @@
   }
 
   function startRecycleEntryObserver() {
+    installRecycleEntryStorageSync();
     const tryInject = () => {
       const injected = injectRecycleEntryCategoryPanel();
       if (!document.getElementById(RECYCLE_ENTRY_ROOT_ID)) hideRecycleSerialHelp();
@@ -4141,7 +4258,7 @@
     let serial = "";
     try {
       pending = String(sessionStorage.getItem(RECYCLE_ENTRY_PENDING_MATERIAL_KEY) || "");
-      cat = String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim();
+      cat = readSelectedRecycleEntryCategory();
       serial = String(sessionStorage.getItem(RECYCLE_ENTRY_LAST_SERIAL_KEY) || "").trim();
     } catch (e) {}
     if (pending !== "1") return false;
