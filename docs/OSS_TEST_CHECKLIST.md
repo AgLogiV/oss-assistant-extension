@@ -51,6 +51,14 @@ Use this checklist in the real/demo OSS environment after loading the extension 
   - GPON confirmed devices: 16 alphanumeric characters.
   - Routers: confirmed TP-Link/Deco/HX520 devices use 13 alphanumeric characters; ZTE H3601P uses `ZTE` prefix and 15 total characters.
 - For invalid serials, confirm the page does not advance and the serial field keeps focus.
+- For invalid non-empty serials with help content, confirm the floating help preview appears on the right side and hides after about 5 seconds.
+- Click outside the floating help preview and confirm it hides without changing serial, category, selected devices, or OSS navigation.
+- In `android_iptv` with one selected device, confirm the floating help preview shows only that device help image.
+- In `android_iptv` with multiple selected devices, confirm the floating help preview shows only selected-device help images and can scroll when needed.
+- In `android_iptv` with no selected devices, confirm help falls back to all available Android/IPTV category help images.
+- Click the yellow help button and confirm the full manual help menu opens separately from the automatic floating preview.
+- Close the full manual help menu with `X` and confirm the yellow help button remains usable.
+- Confirm help UI does not fill serial, change SAP/material values, change validation outcome, or navigate OSS.
 - Press `RESET` and confirm the selected category, selected devices, and validation message disappear in all open OSS tabs/windows.
 - After reset, press Continue again. Expected: blocked until a category is selected.
 - If possible, reload or reopen the page on the next workday and confirm the old category is not retained.

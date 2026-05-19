@@ -224,7 +224,21 @@ The normalized contract supports:
 - `validationProfileId`
 - `enabled`
 
-After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context only; SAP/material filtering and help menu behavior remain category-level.
+After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context and recycle help context only; SAP/material filtering remains category-level.
+
+### Recycle Help UI
+
+Recycle serial help is visual guidance only. It must not fill serial values, change SAP/material selection, change validation decisions, or navigate OSS.
+
+Current behavior:
+
+- invalid non-empty serial input opens a floating help preview when help content exists;
+- the floating preview uses selected-device `helpImagePath` images first;
+- if no device is selected, or selected devices have no help images, help falls back to category-level help content;
+- the floating preview auto-hides after about 5 seconds and also hides on outside click;
+- the yellow help button opens the full manual help menu;
+- the full manual help menu is separate from the automatic floating preview;
+- Android/IPTV currently has device-level help images for its implemented help entries.
 
 ### Storage Keys
 

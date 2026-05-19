@@ -263,24 +263,28 @@ Invariants:
 
 ## 9. Help menu by selected device
 
-The help menu should evolve from category-based help to selected-device help.
+The help UI now has two separate modes:
 
-Recommended behavior:
+- automatic floating preview after invalid non-empty serial input;
+- manual full help menu opened from the yellow help button.
+
+Both modes are visual guidance only. They must not dynamically alter serial values, SAP/material values, validation behavior, or OSS navigation.
+
+Implemented behavior:
 
 - each device may have `helpImagePath`;
-- help images should show the correct barcode visually inside the image;
-- the extension should not dynamically alter serial values or OSS navigation from the help menu;
-- when multiple devices are selected, show only help images for selected devices;
-- if no device is selected, show category-level help or no help, depending on available data;
-- fallback to current category help should remain until device help images are complete.
+- Android/IPTV currently has device-level help images;
+- selected devices with `helpImagePath` are preferred;
+- when multiple selected devices have help images, show only those selected-device help images;
+- if no device is selected, or selected devices have no help images, fall back to category-level help content;
+- the floating preview auto-hides after about 5 seconds and hides on outside click;
+- the manual full help menu stays separate and opens only from the help button.
 
-Possible UI models:
+Future work:
 
-- simple vertical list of help cards;
-- tabs by selected device;
-- carousel for multiple selected devices.
-
-The first implementation should prefer the simplest list/card model.
+- add more `helpImagePath` entries as packaged help assets become available;
+- preserve category fallback until device help coverage is complete;
+- keep the UI as simple help cards unless a stronger reason appears for tabs or carousel behavior.
 
 ## 10. Dashboard as optional config layer
 

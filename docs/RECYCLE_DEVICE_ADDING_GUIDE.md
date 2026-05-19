@@ -98,13 +98,15 @@ If omitted, the code derives a 16:9 image path from the existing packaged image 
 
 ### `helpImagePath`
 
-Future help menu image for the selected device.
+Optional help image for selected-device recycle help UI.
 
 ```js
 helpImagePath: "images/recycle-help/netbox-zte-g5b1.webp"
 ```
 
-Add only after the image exists and is available to the extension.
+Add only after the image exists and is available to the extension. When present, the image can be used by the floating help preview after an invalid non-empty serial and by the manual help menu opened from the yellow help button. Help UI is only visual guidance; it must not change serial values, SAP/material values, validation, or OSS navigation.
+
+If selected devices have `helpImagePath`, help UI shows only the selected-device help images. If no devices are selected, or selected devices have no help images, the UI falls back to category-level help where available. Android/IPTV currently has device-level help images.
 
 ### `warningText`
 
