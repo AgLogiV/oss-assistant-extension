@@ -2169,11 +2169,11 @@
     { deviceId: "stb_zte_b866v2f02_androidtv", categoryId: "android_iptv", displayName: "B866V2F02 (AndroidTV)", materialId: "121678", helpImagePath: "images/recycle-help/android_iptv-zte-zxv10-b866v2f02-richmedia-box.webp", validationProfileId: "android_b866v2f02_bg_plus_15_digits" },
 
     { deviceId: "kaon_kstb5019_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5019 XploreTV", materialId: "118542", validationProfileId: "xplore_zapper_mac12_hex_plain" },
-    { deviceId: "kaon_kstb6106_zapper", categoryId: "xplore_zapper", displayName: "KSTB6106 Zapper", materialId: "118543", validationProfileId: "xplore_zapper_mac12_hex_plain" },
+    { deviceId: "kaon_kstb6106_zapper", categoryId: "xplore_zapper", displayName: "KSTB6106 Zapper", materialId: "118543", helpImagePath: "images/recycle-help/KSTB6106 Zapper.webp", validationProfileId: "xplore_zapper_mac12_hex_plain" },
     { deviceId: "kaon_kstb5020_xploretv", categoryId: "xplore_zapper", displayName: "KSTB5020 XploreTV", materialId: "118544", validationProfileId: "xplore_zapper_mac12_hex_plain" },
 
     { deviceId: "dth_kaon_kstb1001", categoryId: "dth_kaon_nagra", displayName: "DTH STB KAON KSTB1001", materialId: "114915", validationProfileId: "dth_11_digits_prefix_00" },
-    { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961", validationProfileId: "dth_11_digits_prefix_00" },
+    { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961", helpImagePath: "images/recycle-help/DTH Nagra DTS3460.webp", validationProfileId: "dth_11_digits_prefix_00" },
 
     { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "123580" },
     { deviceId: "zte_mf296r", categoryId: "netbox", displayName: "ZTE MF296R", materialId: "123451" },
@@ -2188,18 +2188,18 @@
     { deviceId: "tp_link_nx520", categoryId: "netbox", displayName: "TP-Link NX520", materialId: "1000059633" },
     { deviceId: "tp_link_nx220v", categoryId: "netbox", displayName: "TP Link NX220v", materialId: "1000055165" },
 
-    { deviceId: "tp_link_hx520_home", categoryId: "routers", displayName: "HX520 Home", materialId: "1200014914", validationProfileId: "router_13_alnum" },
-    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4, AC1200, 2xGbE, MU-MIMO", materialId: "118551", validationProfileId: "router_13_alnum" },
+    { deviceId: "tp_link_hx520_home", categoryId: "routers", displayName: "HX520 Home", materialId: "1200014914", helpImagePath: "images/recycle-help/HX520 Home.webp", validationProfileId: "router_13_alnum" },
+    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4, AC1200, 2xGbE, MU-MIMO", materialId: "118551", helpImagePath: "images/recycle-help/Deco M4, AC1200, 2xGbE, MU-MIMO.webp", validationProfileId: "router_13_alnum" },
     { deviceId: "tp_link_archer_a6", categoryId: "routers", displayName: "Archer A6/AC1200/DB LVA", materialId: "118552" },
-    { deviceId: "tp_link_ex220", categoryId: "routers", displayName: "TP-Link EX220", materialId: "121150", validationProfileId: "router_13_alnum" },
-    { deviceId: "tp_link_ex220_home", categoryId: "routers", displayName: "TP-Link EX220 Home", materialId: "121376", validationProfileId: "router_13_alnum" },
-    { deviceId: "zte_zxhn_h3601p", categoryId: "routers", displayName: "ZTE ZXHN H3601P", materialId: "123357", validationProfileId: "router_zte_h3601p_zte_prefix_15_alnum" },
+    { deviceId: "tp_link_ex220", categoryId: "routers", displayName: "TP-Link EX220", materialId: "121150", helpImagePath: "images/recycle-help/TP-Link EX220.webp", validationProfileId: "router_13_alnum" },
+    { deviceId: "tp_link_ex220_home", categoryId: "routers", displayName: "TP-Link EX220 Home", materialId: "121376", helpImagePath: "images/recycle-help/TP-Link EX220 Home.webp", validationProfileId: "router_13_alnum" },
+    { deviceId: "zte_zxhn_h3601p", categoryId: "routers", displayName: "ZTE ZXHN H3601P", materialId: "123357", helpImagePath: "images/recycle-help/ZTE ZXHN H3601P.webp", validationProfileId: "router_zte_h3601p_zte_prefix_15_alnum" },
 
     { deviceId: "huawei_k562e_10_home", categoryId: "gpon", displayName: "K562E-10 Home", materialId: "1200014928" },
-    { deviceId: "huawei_gpon_hg8145v5", categoryId: "gpon", displayName: "Huawei GPON HG8145V5", materialId: "118560", validationProfileId: "gpon_16_alnum" },
-    { deviceId: "zte_gpon_zxhn_f670v", categoryId: "gpon", displayName: "GPON CPE ZXHN F670V", materialId: "118563", validationProfileId: "gpon_16_alnum" },
-    { deviceId: "zte_zxhn_f600", categoryId: "gpon", displayName: "ZTE ZXHN F600", materialId: "118564", imagePath: "images/devices/16x9/ZTE_ZXHN_F600.webp", validationProfileId: "gpon_16_alnum" },
-    { deviceId: "zte_gpon_zxhn_f6600p", categoryId: "gpon", displayName: "GPON CPE ZXHN F6600P", materialId: "122933", imagePath: "images/devices/16x9/GPON_CPE_ZXHN_F6600P_V9.0-removebg-preview.webp", validationProfileId: "gpon_16_alnum" },
+    { deviceId: "huawei_gpon_hg8145v5", categoryId: "gpon", displayName: "Huawei GPON HG8145V5", materialId: "118560", helpImagePath: "images/recycle-help/Huawei GPON HG8145V5.webp", validationProfileId: "gpon_16_alnum" },
+    { deviceId: "zte_gpon_zxhn_f670v", categoryId: "gpon", displayName: "GPON CPE ZXHN F670V", materialId: "118563", helpImagePath: "images/recycle-help/GPON CPE ZXHN F670V.webp", validationProfileId: "gpon_16_alnum" },
+    { deviceId: "zte_zxhn_f600", categoryId: "gpon", displayName: "ZTE ZXHN F600", materialId: "118564", imagePath: "images/devices/16x9/ZTE_ZXHN_F600.webp", helpImagePath: "images/recycle-help/ZTE ZXHN F600.webp", validationProfileId: "gpon_16_alnum" },
+    { deviceId: "zte_gpon_zxhn_f6600p", categoryId: "gpon", displayName: "GPON CPE ZXHN F6600P", materialId: "122933", imagePath: "images/devices/16x9/GPON_CPE_ZXHN_F6600P_V9.0-removebg-preview.webp", helpImagePath: "images/recycle-help/GPON CPE ZXHN F6600P.webp", validationProfileId: "gpon_16_alnum" },
     { deviceId: "zte_gpon_zxhn_f6600r", categoryId: "gpon", displayName: "GPON ONT ZXHN F6600R", materialId: "122944" }
   ];
 
@@ -2841,6 +2841,18 @@
         title: "STB ZXV B700v5",
         imagePath: "images/recycle-help/android_iptv-zte-zxv10-b700v5-iptv.webp",
         alt: "Правилен barcode за ZTE ZXV10 B700V5 IPTV"
+      }
+    ],
+    modems: [
+      {
+        title: "Modem Technivolor v1",
+        imagePath: "images/recycle-help/Modem Technivolor v1.webp",
+        alt: "РџСЂР°РІРёР»РµРЅ barcode Р·Р° Modem Technivolor v1"
+      },
+      {
+        title: "Modem Technivolor v2",
+        imagePath: "images/recycle-help/Modem Technivolor v2.webp",
+        alt: "РџСЂР°РІРёР»РµРЅ barcode Р·Р° Modem Technivolor v2"
       }
     ]
   };
