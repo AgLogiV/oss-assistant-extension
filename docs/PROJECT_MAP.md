@@ -26,7 +26,7 @@ For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_R
 - `Extension/images/categories/` - category card images used by the recycle entry category panel.
 - `Extension/dashboard/` - Express dashboard/API for managing material models, categories, and uploaded/remote images.
 - `Extension/dashboard/data/models.json` - local dashboard data store for material models.
-- `Extension/scripts/` - currently empty.
+- `Extension/scripts/` - dev-only helper scripts. `validate-recycle-catalog.js` validates the local recycle catalog and help image mappings without loading into extension runtime.
 - `.gitignore` - ignores archives, dependencies, `.env` files, and OS files.
 
 Old `.zip` backup/export files are not part of the extension runtime. Ignore them unless a future task explicitly asks to inspect an archive.
@@ -584,6 +584,12 @@ Latest confirmed real-OSS checks:
 - CAM modules flow works.
 - Recycle-specific material filtering works for the mapped categories.
 - `Material auto-continue` debug toggle works and no longer freezes the page.
+
+Dev-only catalog sanity check:
+
+- Run `node Extension/scripts/validate-recycle-catalog.js` after changing recycle devices, material IDs, image/help paths, validation profile IDs, or category help mappings.
+- The script reads `Extension/content.js` as text, extracts catalog/help literals, and does not load into extension runtime or change behavior.
+- Expected healthy result: `Result: PASS`.
 
 ## Working with Real OSS Pages / Missing DOM Context
 

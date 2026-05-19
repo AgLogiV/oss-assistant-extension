@@ -8,6 +8,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Open DevTools Console so runtime errors are visible.
 - Start from a clean tab/session when testing daily category behavior.
 - If testing dashboard models, note whether `https://oss-assistant.onrender.com/api/models` is reachable from the network.
+- For catalog/device/help-image changes, run the dev-only check `node Extension/scripts/validate-recycle-catalog.js`. Expected result: `Result: PASS`.
 
 ## Recycle Entry: Category and Serial Validation
 

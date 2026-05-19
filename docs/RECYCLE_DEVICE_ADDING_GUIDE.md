@@ -322,12 +322,15 @@ Minimum local checks:
 - `git diff --stat`
 - `git diff --check`
 - syntax parse check for `Extension/content.js`
+- `node Extension/scripts/validate-recycle-catalog.js`
 - verify only intended files changed
 - verify the new entry is in `RECYCLE_DEVICE_CATALOG_RAW`
 - verify `deviceId` is unique
 - verify `categoryId` is one of the allowed values
 - verify `materialId` is normalized and correct
 - verify material filter IDs/order for existing categories did not change unexpectedly
+
+The catalog validator is dev-only. It is not loaded by the extension and does not change runtime behavior. Run it after changing recycle devices, help images, image paths, `validationProfileId`, or `materialId`. It checks catalog sanity, asset paths, validation profile IDs, generated material filter parity, and GPON material order. Expected healthy output: `Result: PASS`.
 
 Manual OSS checks when the device is enabled:
 

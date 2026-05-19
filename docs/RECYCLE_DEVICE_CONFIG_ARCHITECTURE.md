@@ -335,6 +335,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Add local schema validation helpers.
    - Validate current `RECYCLE_DEVICE_CATALOG_RAW` without changing runtime behavior.
    - Report or log schema problems without breaking operators.
+   - Current dev-only checker: `node Extension/scripts/validate-recycle-catalog.js`.
 
 3. **Packaged JSON read-only experiment**
    - Add a packaged JSON file only after schema is stable.
@@ -368,8 +369,11 @@ Before any config architecture implementation is considered safe:
 - Austrian material behavior and Austrian label generation still work;
 - clipboard SSID/password autofill still works;
 - label/barcode generation still works;
+- dev-only catalog validator returns `Result: PASS`;
 - `Extension/content.js` syntax parse passes;
 - `git diff` shows no unrelated dashboard, manifest, image, or storage-key changes unless explicitly planned.
+
+The current validator is a local development helper. It reads `Extension/content.js` as text, extracts `RECYCLE_DEVICE_CATALOG_RAW`, `RECYCLE_SERIAL_HELP_BY_CATEGORY`, and predefined validation profile IDs, then checks catalog sanity, asset paths, material filter parity, and GPON order. It is not loaded by the extension runtime and must not become a runtime dependency.
 
 ## 10. What Not To Change During Field Testing
 
@@ -386,4 +390,3 @@ While colleagues are testing the current extension, avoid:
 - broad `Extension/content.js` refactors;
 - moving DOM selectors or OSS navigation into config;
 - changing clipboard, keyboard normalization, labels, or barcode generation.
-
