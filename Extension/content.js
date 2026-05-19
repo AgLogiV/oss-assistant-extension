@@ -2851,6 +2851,9 @@
   let recycleSerialDebugNoticeShown = false;
   let recycleSerialHelpUi = null;
   let recycleSerialHelpCloseTimer = 0;
+  let recycleSerialHelpPreviewUi = null;
+  let recycleSerialHelpPreviewTimer = 0;
+  let recycleSerialHelpPreviewCloseTimer = 0;
   const recycleInlineAlertAnimations = new WeakMap();
 
   function stopRecycleInlineAlertAnimation(el) {
@@ -3038,19 +3041,28 @@
     items.forEach(item => {
       const card = document.createElement("section");
       card.style.boxSizing = "border-box";
-      card.style.padding = "10px";
-      card.style.border = "1px solid #e6bd2f";
-      card.style.borderRadius = "6px";
-      card.style.background = "#fffdf0";
-      card.style.boxShadow = "0 2px 8px rgba(122, 87, 0, 0.12)";
+      card.style.padding = "9px";
+      card.style.border = "1px solid #d8dee6";
+      card.style.borderRadius = "8px";
+      card.style.background = "#ffffff";
+      card.style.boxShadow = "0 6px 18px rgba(15, 23, 42, 0.10)";
 
       const title = document.createElement("div");
       title.textContent = item.title;
       title.style.marginBottom = "8px";
-      title.style.color = "#4d3a00";
+      title.style.color = "#2f343a";
       title.style.fontSize = "13px";
       title.style.fontWeight = "800";
       title.style.lineHeight = "1.25";
+
+      const media = document.createElement("div");
+      media.style.boxSizing = "border-box";
+      media.style.width = "100%";
+      media.style.aspectRatio = "4 / 3";
+      media.style.overflow = "hidden";
+      media.style.border = "1px solid #e5e7eb";
+      media.style.borderRadius = "7px";
+      media.style.background = "#f8fafc";
 
       const img = document.createElement("img");
       img.src = resolveRecycleSerialHelpImageUrl(item.imagePath);
@@ -3058,18 +3070,134 @@
       img.loading = "lazy";
       img.style.display = "block";
       img.style.width = "100%";
-      img.style.height = "auto";
-      img.style.maxHeight = "360px";
-      img.style.objectFit = "contain";
-      img.style.borderRadius = "4px";
+      img.style.height = "100%";
+      img.style.objectFit = "cover";
       img.style.background = "#fff";
 
       card.appendChild(title);
+      media.appendChild(img);
+      card.appendChild(media);
+      ui.content.appendChild(card);
+    });
+
+    return true;
+  }
+
+  function clearRecycleSerialHelpPreviewTimers() {
+    if (recycleSerialHelpPreviewTimer) {
+      clearTimeout(recycleSerialHelpPreviewTimer);
+      recycleSerialHelpPreviewTimer = 0;
+    }
+    if (recycleSerialHelpPreviewCloseTimer) {
+      clearTimeout(recycleSerialHelpPreviewCloseTimer);
+      recycleSerialHelpPreviewCloseTimer = 0;
+    }
+  }
+
+  function renderRecycleSerialHelpPreviewContent(ui, categoryId) {
+    const items = getRecycleSerialHelpItemsForContext(categoryId);
+    if (!ui?.content || !items.length) return false;
+    const contextKey = JSON.stringify(items.map(item => [item.title, item.imagePath]));
+    if (ui.categoryId === categoryId && ui.helpContextKey === contextKey && ui.content.childElementCount) return true;
+
+    ui.categoryId = categoryId;
+    ui.helpContextKey = contextKey;
+    ui.preview.dataset.wifiOssRecycleHelpPreviewCategory = categoryId;
+    ui.content.textContent = "";
+
+    items.forEach(item => {
+      const card = document.createElement("section");
+      card.setAttribute("aria-label", item.alt || item.title || "Recycle barcode help");
+      card.style.boxSizing = "border-box";
+      card.style.width = "100%";
+      card.style.aspectRatio = "4 / 3";
+      card.style.padding = "0";
+      card.style.margin = "0";
+      card.style.border = "1px solid #d7d7d7";
+      card.style.borderRadius = "8px";
+      card.style.overflow = "hidden";
+      card.style.background = "#f4f4f4";
+      card.style.boxShadow = "0 8px 22px rgba(0, 0, 0, 0.16)";
+
+      const img = document.createElement("img");
+      img.src = resolveRecycleSerialHelpImageUrl(item.imagePath);
+      img.alt = item.alt || item.title || "";
+      img.loading = "lazy";
+      img.style.display = "block";
+      img.style.width = "100%";
+      img.style.height = "100%";
+      img.style.padding = "0";
+      img.style.margin = "0";
+      img.style.objectFit = "cover";
+      img.style.background = "#f4f4f4";
+
       card.appendChild(img);
       ui.content.appendChild(card);
     });
 
     return true;
+  }
+
+  function ensureRecycleSerialHelpPreviewUi() {
+    if (recycleSerialHelpPreviewUi && document.body?.contains(recycleSerialHelpPreviewUi.preview)) {
+      return recycleSerialHelpPreviewUi;
+    }
+    const parent = document.body || document.documentElement;
+    if (!parent) return null;
+
+    const preview = document.createElement("aside");
+    preview.id = `${RECYCLE_SERIAL_HELP_PANEL_ID}-preview`;
+    preview.setAttribute("aria-label", "РџРѕРґСЃРєР°Р·РєР° Р·Р° РїСЂР°РІРёР»РЅРёСЏ barcode");
+    preview.setAttribute("aria-hidden", "true");
+    preview.style.position = "fixed";
+    preview.style.top = "88px";
+    preview.style.right = "18px";
+    preview.style.bottom = "24px";
+    preview.style.zIndex = "2147483002";
+    preview.style.width = "min(330px, calc(100vw - 36px))";
+    preview.style.maxHeight = "calc(100vh - 112px)";
+    preview.style.boxSizing = "border-box";
+    preview.style.display = "none";
+    preview.style.overflowX = "hidden";
+    preview.style.overflowY = "auto";
+    preview.style.overscrollBehavior = "contain";
+    preview.style.scrollbarWidth = "none";
+    preview.style.msOverflowStyle = "none";
+    preview.style.opacity = "0";
+    preview.style.transform = "translateX(115%)";
+    preview.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "opacity 200ms ease, transform 200ms cubic-bezier(0.2, 0, 0.2, 1)";
+    preview.style.pointerEvents = "auto";
+
+    const content = document.createElement("div");
+    content.style.display = "grid";
+    content.style.gap = "10px";
+    content.style.width = "100%";
+    content.style.boxSizing = "border-box";
+    content.style.padding = "clamp(72px, 22vh, 190px) 0 24px";
+    content.style.margin = "0";
+
+    preview.appendChild(content);
+    parent.appendChild(preview);
+
+    if (!document.getElementById(`${preview.id}-style`)) {
+      const style = document.createElement("style");
+      style.id = `${preview.id}-style`;
+      style.textContent = `#${preview.id}::-webkit-scrollbar{display:none;}`;
+      parent.appendChild(style);
+    }
+
+    recycleSerialHelpPreviewUi = { preview, content, categoryId: "", helpContextKey: "" };
+
+    document.addEventListener("pointerdown", (e) => {
+      const ui = recycleSerialHelpPreviewUi;
+      if (!ui?.preview || ui.preview.dataset.wifiOssRecycleHelpPreviewOpen !== "1") return;
+      if (ui.preview.contains(e.target)) return;
+      hideRecycleSerialHelpPreview();
+    }, true);
+
+    return recycleSerialHelpPreviewUi;
   }
 
   function ensureRecycleSerialHelpUi() {
@@ -3159,10 +3287,10 @@
     panel.style.display = "none";
     panel.style.flexDirection = "column";
     panel.style.padding = "12px";
-    panel.style.border = "2px solid #dfaa19";
-    panel.style.borderRadius = "6px";
-    panel.style.background = "#fff4b8";
-    panel.style.boxShadow = "0 10px 28px rgba(80, 59, 0, 0.28)";
+    panel.style.border = "1px solid #d0d5dd";
+    panel.style.borderRadius = "8px";
+    panel.style.background = "#f6f7f9";
+    panel.style.boxShadow = "0 12px 30px rgba(15, 23, 42, 0.18)";
     panel.style.opacity = "0";
     panel.style.transform = "translateX(110%)";
     panel.style.transition = isRecycleReducedMotionPreferred()
@@ -3176,10 +3304,12 @@
     header.style.gap = "8px";
     header.style.flex = "0 0 auto";
     header.style.marginBottom = "10px";
+    header.style.paddingBottom = "10px";
+    header.style.borderBottom = "1px solid #e5e7eb";
 
     const heading = document.createElement("div");
     heading.textContent = "Кой barcode да сканирам?";
-    heading.style.color = "#4d3a00";
+    heading.style.color = "#2f343a";
     heading.style.fontSize = "15px";
     heading.style.fontWeight = "900";
     heading.style.lineHeight = "1.2";
@@ -3192,10 +3322,10 @@
     closeBtn.style.width = "28px";
     closeBtn.style.height = "28px";
     closeBtn.style.padding = "0";
-    closeBtn.style.border = "1px solid #cda100";
-    closeBtn.style.borderRadius = "4px";
-    closeBtn.style.background = "#ffe680";
-    closeBtn.style.color = "#4b3a00";
+    closeBtn.style.border = "1px solid #cfd6df";
+    closeBtn.style.borderRadius = "6px";
+    closeBtn.style.background = "#ffffff";
+    closeBtn.style.color = "#475467";
     closeBtn.style.cursor = "pointer";
     closeBtn.style.fontSize = "16px";
     closeBtn.style.fontWeight = "900";
@@ -3203,11 +3333,11 @@
 
     const content = document.createElement("div");
     content.style.display = "grid";
-    content.style.gap = "10px";
+    content.style.gap = "12px";
     content.style.flex = "1 1 auto";
     content.style.minHeight = "0";
     content.style.overflowY = "auto";
-    content.style.paddingRight = "3px";
+    content.style.paddingRight = "4px";
 
     header.appendChild(heading);
     header.appendChild(closeBtn);
@@ -3248,6 +3378,7 @@
 
     if (open) {
       if (!getRecycleSerialHelpItemsForContext(ui.categoryId).length) return;
+      hideRecycleSerialHelpPreview();
       ui.panel.dataset.wifiOssRecycleHelpOpen = "1";
       ui.panel.style.display = "flex";
       ui.panel.setAttribute("aria-hidden", "false");
@@ -3292,7 +3423,7 @@
     }, 230);
   }
 
-  function showRecycleSerialHelp(categoryId, options = {}) {
+  function showRecycleSerialHelp(categoryId) {
     const items = getRecycleSerialHelpItemsForContext(categoryId);
     if (!items.length) {
       hideRecycleSerialHelp();
@@ -3302,12 +3433,78 @@
     if (!ui) return false;
     if (!renderRecycleSerialHelpContent(ui, categoryId)) return false;
 
-    if (options.autoOpen === true || ui.panel.dataset.wifiOssRecycleHelpOpen === "1") {
+    if (ui.panel.dataset.wifiOssRecycleHelpOpen === "1") {
       setRecycleSerialHelpPanelOpen(true);
     } else {
       setRecycleSerialHelpButtonVisible(ui, true);
     }
     return true;
+  }
+
+  function showRecycleSerialHelpPreview(categoryId) {
+    const items = getRecycleSerialHelpItemsForContext(categoryId);
+    if (!items.length) {
+      hideRecycleSerialHelp();
+      return false;
+    }
+
+    const manualUi = recycleSerialHelpUi;
+    if (manualUi?.panel?.dataset.wifiOssRecycleHelpOpen === "1") {
+      return showRecycleSerialHelp(categoryId);
+    }
+
+    showRecycleSerialHelp(categoryId);
+    const ui = ensureRecycleSerialHelpPreviewUi();
+    if (!ui) return false;
+    if (!renderRecycleSerialHelpPreviewContent(ui, categoryId)) return false;
+
+    clearRecycleSerialHelpPreviewTimers();
+    ui.preview.dataset.wifiOssRecycleHelpPreviewOpen = "1";
+    ui.preview.style.display = "block";
+    ui.preview.setAttribute("aria-hidden", "false");
+
+    if (isRecycleReducedMotionPreferred()) {
+      ui.preview.style.opacity = "1";
+      ui.preview.style.transform = "none";
+    } else {
+      ui.preview.style.opacity = "0";
+      ui.preview.style.transform = "translateX(115%)";
+      requestAnimationFrame(() => {
+        if (ui.preview.dataset.wifiOssRecycleHelpPreviewOpen === "1") {
+          ui.preview.style.opacity = "1";
+          ui.preview.style.transform = "translateX(0)";
+        }
+      });
+    }
+
+    recycleSerialHelpPreviewTimer = setTimeout(() => {
+      hideRecycleSerialHelpPreview();
+    }, 5000);
+    return true;
+  }
+
+  function hideRecycleSerialHelpPreview() {
+    const ui = recycleSerialHelpPreviewUi;
+    clearRecycleSerialHelpPreviewTimers();
+    if (!ui?.preview) return;
+
+    ui.preview.dataset.wifiOssRecycleHelpPreviewOpen = "";
+    ui.preview.setAttribute("aria-hidden", "true");
+
+    if (isRecycleReducedMotionPreferred()) {
+      ui.preview.style.display = "none";
+      ui.preview.style.opacity = "0";
+      ui.preview.style.transform = "translateX(115%)";
+      return;
+    }
+
+    ui.preview.style.opacity = "0";
+    ui.preview.style.transform = "translateX(115%)";
+    recycleSerialHelpPreviewCloseTimer = setTimeout(() => {
+      if (ui.preview.dataset.wifiOssRecycleHelpPreviewOpen !== "1") {
+        ui.preview.style.display = "none";
+      }
+    }, 210);
   }
 
   function refreshRecycleSerialHelpAvailability(categoryId) {
@@ -3328,6 +3525,7 @@
   }
 
   function hideRecycleSerialHelp() {
+    hideRecycleSerialHelpPreview();
     const ui = recycleSerialHelpUi;
     if (!ui) return;
     setRecycleSerialHelpPanelOpen(false, { keepButton: false });
@@ -4303,7 +4501,7 @@
         e.preventDefault();
         e.stopPropagation();
         setSerialInlineAlert(r.msg, r.variant === "warning" ? "warning" : "error", r.kind || "validation");
-        if (String(serialInput.value || "").trim()) showRecycleSerialHelp(cat, { autoOpen: true });
+        if (String(serialInput.value || "").trim()) showRecycleSerialHelpPreview(cat);
         else hideRecycleSerialHelp();
         try { serialInput.focus(); serialInput.select?.(); } catch (e2) {}
         return;
