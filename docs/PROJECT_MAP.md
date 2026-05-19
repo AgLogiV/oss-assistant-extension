@@ -10,6 +10,8 @@ For future recycle redesign/device catalog work, read `docs/RECYCLE_DEVICE_CATAL
 
 For future device catalog architecture, validation profiles, multi-select, SAP/material mapping, help menu, or dashboard config layer work, also read `docs/RECYCLE_DEVICE_CATALOG_ARCHITECTURE_PLAN.md`. It is the current bridge between the concept document and future implementation tasks.
 
+For future work on moving hardcoded recycle metadata out of `content.js`, read `docs/RECYCLE_DEVICE_CONFIG_ARCHITECTURE.md`. It defines the local config, packaged JSON, dashboard override, cache, and blocked-runtime-behavior rules.
+
 When adding new local recycle devices to the catalog, read `docs/RECYCLE_DEVICE_ADDING_GUIDE.md` first. It documents required fields, optional contract fields, naming rules, image rules, and test gates for safe catalog additions.
 
 For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_RULES.md`. It is a human-authored input file for predefined local validation profiles; part of it is now implemented only when concrete recycle devices are selected.
