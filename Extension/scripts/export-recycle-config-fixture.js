@@ -8,6 +8,7 @@ const vm = require("vm");
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const EXTENSION_ROOT = path.join(REPO_ROOT, "Extension");
 const CONTENT_JS_PATH = path.join(EXTENSION_ROOT, "content.js");
+const FIXTURE_PATH = path.join(EXTENSION_ROOT, "config", "recycle-device-catalog.fixture.json");
 
 const ALLOWED_CATEGORY_IDS = new Set([
   "android_iptv",
@@ -227,6 +228,19 @@ function arraysEqual(left, right) {
   return left.every((value, index) => value === right[index]);
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && Object.prototype.toString.call(value) === "[object Object]") {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function normalizeDeviceForConfig(device, categoryValidationProfiles) {
   const categoryId = String(device.categoryId || "").trim();
   return {
@@ -326,7 +340,31 @@ function validateFixture(fixture, catalogCount) {
   }
 }
 
+function readFixture() {
+  try {
+    return JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf8").replace(/^\uFEFF/, ""));
+  } catch (error) {
+    failFast(`Cannot read/parse fixture ${path.relative(REPO_ROOT, FIXTURE_PATH)}: ${error.message}`);
+  }
+}
+
+function compareFixture(fixture) {
+  const stored = readFixture();
+  const current = stableStringify(fixture);
+  const expected = stableStringify(stored);
+  if (current !== expected) {
+    console.error("Result: FAIL");
+    console.error(`Current generated recycle config differs from ${path.relative(REPO_ROOT, FIXTURE_PATH)}.`);
+    console.error("This is a dev-only signal. If the catalog change is intentional, regenerate and review the fixture.");
+    process.exit(1);
+  }
+  console.log("Recycle config fixture compare");
+  console.log(`Fixture: ${path.relative(REPO_ROOT, FIXTURE_PATH)}`);
+  console.log("Result: PASS");
+}
+
 function main() {
+  const compareMode = process.argv.includes("--compare-fixture");
   const source = readContentJs();
   const catalog = parsePlainLiteral(
     extractAssignedLiteral(source, "RECYCLE_DEVICE_CATALOG_RAW", "[", "]"),
@@ -362,6 +400,10 @@ function main() {
   };
 
   validateFixture(fixture, catalog.length);
+  if (compareMode) {
+    compareFixture(fixture);
+    return;
+  }
   process.stdout.write(`${JSON.stringify(fixture, null, 2)}\n`);
 }
 
