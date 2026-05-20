@@ -2398,9 +2398,13 @@
     autoContinueSwapMaterialIfReady(root, input);
     if (maybeRedirectCamModulesEmptyMaterial(root, input)) return true;
     const autoContinueEnabled = isMaterialAutoContinueEnabled();
-    const recycleMaterialFilter = (!normalizeSwapMaterialId(input.value) || !autoContinueEnabled)
-      ? getSwapMaterialRecycleFilter(getSelectedRecycleEntryCategory())
+    const category = getSelectedRecycleEntryCategory();
+    const materialWasEmptyBeforeControlledFill = !normalizeSwapMaterialId(input.value);
+    const recycleMaterialFilter = (materialWasEmptyBeforeControlledFill || !autoContinueEnabled)
+      ? getSwapMaterialRecycleFilter(category)
       : null;
+    const fillCandidate = getRecycleMaterialFillCandidate(category, input, swapMaterialModels);
+    if (fillCandidate.ok) setSwapMaterialInputValue(input, fillCandidate.materialId);
 
     const panel = document.createElement("div");
     panel.className = "wifi-oss-swap-material-panel";
