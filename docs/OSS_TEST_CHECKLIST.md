@@ -80,8 +80,10 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With one selected recycle device in a mapped category, confirm its material button is shown first when it exists in the current material model list.
 - With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
 - After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
-- Confirm selected recycle devices do not auto-fill `MaterialId` and do not restrict the grid to selected devices only.
-- Until the controlled auto-fill milestone is explicitly implemented, confirm the fill-candidate helper does not write `MaterialId` or auto-continue.
+- With one selected recycle device, a valid per-flow snapshot, and an empty `MaterialId`, confirm controlled auto-fill writes the expected SAP/material value without auto-continuing.
+- With multiple selected recycle devices that have different SAP/material IDs, confirm there is no auto-fill.
+- With a prefilled OSS `MaterialId`, confirm the extension does not overwrite the value.
+- Confirm selected recycle devices do not restrict the grid to selected devices only.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
 - For unmapped categories, confirm the older full-list behavior remains.
 - For `austrian`, treat material filtering as TODO/unmapped until the missing/unclear device is added.
@@ -116,7 +118,8 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm Austrian label generation still works.
 - Confirm CAM Modules flow still works.
 - Confirm material filtering by recycle category still works for the mapped categories.
-- Confirm selected device cards only prioritize matching SAP/material quick buttons first; they do not auto-fill `MaterialId` or hide other category buttons.
+- Confirm selected device cards prioritize matching SAP/material quick buttons first; safe single-candidate selections can fill empty `MaterialId`, but they do not hide other category buttons or auto-continue after extension fill.
+- Confirm `austrian` and `modems` remain unchanged during the next regression pass.
 - Confirm the `Material auto-continue` debug toggle still works and does not freeze the OSS page.
 
 ## Evidence to Send Back to Codex

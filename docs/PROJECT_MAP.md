@@ -226,7 +226,7 @@ The normalized contract supports:
 - `validationProfileId`
 - `enabled`
 
-After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context, recycle help context, and SAP/material quick-button ordering. SAP/material filtering remains category-level.
+After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context, recycle help context, SAP/material quick-button ordering, and controlled SAP/material auto-fill when a safe single material candidate exists. SAP/material filtering remains category-level.
 
 ### Recycle Help UI
 
@@ -485,8 +485,9 @@ Behavior for mapped categories:
 - The button order follows the allowlist order.
 - If one or more recycle devices are selected in the current category, their matching material buttons are shown first when present in the current material model list.
 - After a valid recycle serial Continue, a per-flow material snapshot is saved in `sessionStorage`; the SAP/material grid uses a valid snapshot for selected-device ordering before falling back to live shared selected devices.
-- `getRecycleMaterialFillCandidate(...)` can calculate a future controlled fill candidate from the snapshot and current material model list, returning `{ ok, materialId, reason }`; it does not fill `MaterialId` or change auto-continue behavior.
-- Selected devices do not auto-fill `MaterialId`.
+- `getRecycleMaterialFillCandidate(...)` calculates a controlled fill candidate from the snapshot and current material model list, returning `{ ok, materialId, reason }`.
+- If the candidate is safe, `MaterialId` is empty, and the material exists in the current material model list, the extension fills `MaterialId` without calling auto-continue again.
+- Prefilled OSS `MaterialId` values are not overwritten.
 - Selected devices do not restrict the grid to selected devices only; all category-allowlisted buttons remain available.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
 - Search stays scoped to the rendered allowlisted devices.
@@ -561,7 +562,7 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_selected_devices` - `localStorage`, JSON array of selected recycle `deviceId` values shared across OSS tabs/windows.
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
-- `wifi_oss_recycle_entry_material_snapshot` - `sessionStorage`, per-flow category/device/material/serial/date snapshot used for SAP/material button ordering and future controlled auto-fill.
+- `wifi_oss_recycle_entry_material_snapshot` - `sessionStorage`, per-flow category/device/material/serial/date snapshot used for SAP/material button ordering and controlled auto-fill.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
 - `wifi_oss_debug_material_auto_continue_enabled` - `sessionStorage`, temporary debug/test override for material auto-continue (`"0"` means off; missing key means on).
 - `wifi_oss_serial_keyboard_debug` - `sessionStorage`, opt-in serial keyboard diagnostic logging (`"1"` means on).
@@ -591,7 +592,7 @@ Latest confirmed real-OSS checks:
 - Austrian label generation works.
 - CAM modules flow works.
 - Recycle-specific material filtering works for the mapped categories.
-- Selected recycle devices are prioritized first in mapped SAP/material quick-button grids without auto-fill or selected-only restriction.
+- Selected recycle devices are prioritized first in mapped SAP/material quick-button grids; safe single-candidate selections can controlled-fill empty `MaterialId` without auto-continue or selected-only restriction.
 - `Material auto-continue` debug toggle works and no longer freezes the page.
 
 Dev-only catalog sanity check:
