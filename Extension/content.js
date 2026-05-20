@@ -2969,6 +2969,29 @@
     return order;
   }
 
+  function getRecycleMaterialFillCandidate(categoryId, inputEl, models = swapMaterialModels) {
+    const category = String(categoryId || "").trim();
+    if (!category) return { ok: false, materialId: "", reason: "missing_category" };
+    if (category === "cam_modules") return { ok: false, materialId: "", reason: "special_cam_modules" };
+    if (category === "modems") return { ok: false, materialId: "", reason: "special_modems" };
+    if (category === "austrian") return { ok: false, materialId: "", reason: "austrian_legacy_preset" };
+    if (normalizeSwapMaterialId(inputEl?.value)) return { ok: false, materialId: "", reason: "material_prefilled" };
+
+    const snapshot = readValidRecycleEntryMaterialSnapshot(category);
+    if (!snapshot) return { ok: false, materialId: "", reason: "missing_or_invalid_snapshot" };
+    if (!snapshot.deviceIds.length) return { ok: false, materialId: "", reason: "no_selected_devices" };
+    if (snapshot.materialIds.length !== 1) return { ok: false, materialId: "", reason: "ambiguous_material" };
+
+    const materialId = normalizeSwapMaterialId(snapshot.materialIds[0]);
+    if (!materialId) return { ok: false, materialId: "", reason: "missing_material" };
+
+    const modelList = Array.isArray(models) ? models : [];
+    const hasMaterialModel = modelList.some(model => normalizeSwapMaterialId(model?.id) === materialId);
+    if (!hasMaterialModel) return { ok: false, materialId, reason: "missing_material_model" };
+
+    return { ok: true, materialId, reason: "ok" };
+  }
+
   const RECYCLE_SERIAL_CYRILLIC_WARNING = "\u0417\u0430\u0441\u0435\u0447\u0435\u043d\u0430 \u0435 \u043a\u0438\u0440\u0438\u043b\u0438\u0446\u0430 \u0432 \u0441\u0435\u0440\u0438\u0439\u043d\u0438\u044f \u043d\u043e\u043c\u0435\u0440. \u0421\u043c\u0435\u043d\u0438 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430\u0442\u0430 \u043d\u0430 EN \u0438 \u0441\u043a\u0430\u043d\u0438\u0440\u0430\u0439 \u043e\u0442\u043d\u043e\u0432\u043e.";
   const RECYCLE_SERIAL_HELP_BY_CATEGORY = {
     android_iptv: [
