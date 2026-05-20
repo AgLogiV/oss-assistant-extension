@@ -615,6 +615,7 @@ Dev-only config fixture export:
 - Run `node Extension/scripts/export-recycle-config-fixture.js` when checking readiness for future packaged JSON/config work.
 - The script reads `Extension/content.js` as text and writes JSON to stdout; it does not create runtime config files and is not loaded by the extension.
 - Exported top-level keys: `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, `generatedMaterialFilters`.
+- The exporter also guards expected top-level keys, `devices.length` versus catalog count, Austrian material filter order `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
 
 ## Working with Real OSS Pages / Missing DOM Context
 

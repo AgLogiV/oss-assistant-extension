@@ -341,6 +341,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Current dev-only checker: `node Extension/scripts/validate-recycle-catalog.js`.
    - Current dev-only fixture exporter: `node Extension/scripts/export-recycle-config-fixture.js`.
    - The exporter reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
+   - It checks expected top-level keys, `devices.length` against catalog count, Austrian material filter `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
    - It does not create runtime config files and is not loaded by the extension.
 
 3. **Packaged JSON read-only experiment**
@@ -363,7 +364,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
 Before any config architecture implementation is considered safe:
 
 - catalog parity: normalized devices match current behavior;
-- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js` emits the expected top-level keys and current catalog/material/help/profile data before packaged JSON work starts;
+- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js` emits the expected top-level keys and current catalog/material/help/profile data before packaged JSON work starts, including `devices.length`, Austrian material filter, and GPON order guards;
 - material filter order remains unchanged for mapped categories;
 - selected-device validation fallback remains correct;
 - selected-device OR validation still works;

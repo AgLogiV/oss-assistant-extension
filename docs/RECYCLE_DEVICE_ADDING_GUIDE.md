@@ -336,7 +336,7 @@ Minimum local checks:
 
 The catalog validator is dev-only. It is not loaded by the extension and does not change runtime behavior. Run it after changing recycle devices, help images, image paths, `validationProfileId`, or `materialId`. It checks catalog sanity, asset paths, validation profile IDs, generated material filter parity, and GPON material order. Expected healthy output: `Result: PASS`.
 
-The config fixture exporter is also dev-only. `Extension/scripts/export-recycle-config-fixture.js` reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`. It does not create runtime config files and is not loaded by the extension. Use it as a config-readiness/export parity check before future packaged JSON work.
+The config fixture exporter is also dev-only. `Extension/scripts/export-recycle-config-fixture.js` reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`. It checks expected top-level keys, `devices.length`, Austrian material filter `1200017460, 1200017462`, and GPON order `1200014928, 118560, 118563, 118564, 122933, 122944`. It does not create runtime config files and is not loaded by the extension. Use it as a config-readiness/export parity check before future packaged JSON work.
 
 Manual OSS checks when the device is enabled:
 

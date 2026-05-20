@@ -9,7 +9,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Start from a clean tab/session when testing daily category behavior.
 - If testing dashboard models, note whether `https://oss-assistant.onrender.com/api/models` is reachable from the network.
 - For catalog/device/help-image changes, run the dev-only check `node Extension/scripts/validate-recycle-catalog.js`. Expected result: `Result: PASS`.
-- Before future packaged JSON/config work, run `node Extension/scripts/export-recycle-config-fixture.js` as a dev-only config-readiness/export parity check. It should print JSON to stdout and must not create runtime config files.
+- Before future packaged JSON/config work, run `node Extension/scripts/export-recycle-config-fixture.js` as a dev-only config-readiness/export parity check. It should print JSON to stdout and must not create runtime config files. It guards expected top-level keys, `devices.length`, Austrian material filter `1200017460, 1200017462`, and GPON order `1200014928, 118560, 118563, 118564, 122933, 122944`.
 
 ## Recycle Entry: Category and Serial Validation
 
