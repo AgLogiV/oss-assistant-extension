@@ -2261,6 +2261,8 @@
   function getSelectedRecycleDeviceMaterialOrder(categoryId) {
     const category = String(categoryId || "").trim();
     if (!category) return new Map();
+    const snapshotOrder = getRecycleMaterialOrderFromSnapshot(category);
+    if (snapshotOrder) return snapshotOrder;
     const order = new Map();
     readSelectedRecycleDeviceIdsStorage().forEach(deviceId => {
       const device = getRecycleDeviceById(deviceId);
@@ -2759,6 +2761,7 @@
   const RECYCLE_ENTRY_SELECTED_DEVICES_KEY = "wifi_oss_recycle_entry_selected_devices";
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
+  const RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY = "wifi_oss_recycle_entry_material_snapshot";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
@@ -2767,10 +2770,15 @@
     try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY); } catch (e) {}
   }
 
+  function clearRecycleEntryMaterialSnapshotStorage() {
+    try { sessionStorage.removeItem(RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY); } catch (e) {}
+  }
+
   function clearRecycleEntrySelectionStorage() {
     try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY); } catch (e) {}
     try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DATE_KEY); } catch (e) {}
     clearRecycleEntrySelectedDevicesStorage();
+    clearRecycleEntryMaterialSnapshotStorage();
     try { sessionStorage.removeItem(RECYCLE_ENTRY_SELECTED_KEY); } catch (e) {}
   }
 
@@ -2847,6 +2855,118 @@
       if (clean.length) localStorage.setItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY, JSON.stringify(clean));
       else localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY);
     } catch (e) {}
+  }
+
+  function createRecycleEntryMaterialSnapshot(categoryId, serialRaw) {
+    const category = String(categoryId || "").trim();
+    const deviceIds = [];
+    const materialIds = [];
+    const seenDevices = new Set();
+    const seenMaterials = new Set();
+
+    if (category) {
+      readSelectedRecycleDeviceIdsStorage().forEach(deviceId => {
+        const id = String(deviceId || "").trim();
+        if (!id || seenDevices.has(id)) return;
+        const device = getRecycleDeviceById(id);
+        if (!device || device.categoryId !== category) return;
+        seenDevices.add(id);
+        deviceIds.push(id);
+        const materialId = normalizeSwapMaterialId(device.materialId);
+        if (materialId && !seenMaterials.has(materialId)) {
+          seenMaterials.add(materialId);
+          materialIds.push(materialId);
+        }
+      });
+    }
+
+    return {
+      categoryId: category,
+      deviceIds,
+      materialIds,
+      serial: String(serialRaw || "").trim(),
+      date: localDateKey()
+    };
+  }
+
+  function writeRecycleEntryMaterialSnapshot(categoryId, serialRaw) {
+    const snapshot = createRecycleEntryMaterialSnapshot(categoryId, serialRaw);
+    try {
+      sessionStorage.setItem(RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch (e) {}
+  }
+
+  function normalizeRecycleEntryMaterialSnapshot(snapshot, categoryId) {
+    if (!snapshot || typeof snapshot !== "object") return null;
+    const category = String(categoryId || "").trim();
+    const snapshotCategory = String(snapshot.categoryId || "").trim();
+    if (!category || snapshotCategory !== category) return null;
+    if (String(snapshot.date || "") !== localDateKey()) return null;
+    if (!Array.isArray(snapshot.deviceIds) || !Array.isArray(snapshot.materialIds)) return null;
+
+    const deviceIds = [];
+    const materialIds = [];
+    const seenDevices = new Set();
+    const seenMaterials = new Set();
+
+    for (const rawId of snapshot.deviceIds) {
+      const id = String(rawId || "").trim();
+      if (!id || seenDevices.has(id)) return null;
+      const device = getRecycleDeviceById(id);
+      if (!device || device.categoryId !== category) return null;
+      seenDevices.add(id);
+      deviceIds.push(id);
+      const materialId = normalizeSwapMaterialId(device.materialId);
+      if (materialId && !seenMaterials.has(materialId)) {
+        seenMaterials.add(materialId);
+        materialIds.push(materialId);
+      }
+    }
+
+    const snapshotMaterialIds = [];
+    const seenSnapshotMaterials = new Set();
+    for (const rawMaterialId of snapshot.materialIds) {
+      const materialId = normalizeSwapMaterialId(rawMaterialId);
+      if (!materialId || seenSnapshotMaterials.has(materialId)) return null;
+      seenSnapshotMaterials.add(materialId);
+      snapshotMaterialIds.push(materialId);
+    }
+
+    if (snapshotMaterialIds.length !== materialIds.length) return null;
+    for (let i = 0; i < materialIds.length; i += 1) {
+      if (snapshotMaterialIds[i] !== materialIds[i]) return null;
+    }
+
+    return {
+      categoryId: category,
+      deviceIds,
+      materialIds,
+      serial: String(snapshot.serial || "").trim(),
+      date: String(snapshot.date || "")
+    };
+  }
+
+  function readValidRecycleEntryMaterialSnapshot(categoryId) {
+    let parsed = null;
+    try {
+      const raw = String(sessionStorage.getItem(RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY) || "");
+      if (!raw) return null;
+      parsed = JSON.parse(raw);
+    } catch (e) {}
+
+    const snapshot = normalizeRecycleEntryMaterialSnapshot(parsed, categoryId);
+    if (!snapshot) clearRecycleEntryMaterialSnapshotStorage();
+    return snapshot;
+  }
+
+  function getRecycleMaterialOrderFromSnapshot(categoryId) {
+    const snapshot = readValidRecycleEntryMaterialSnapshot(categoryId);
+    if (!snapshot) return null;
+    const order = new Map();
+    snapshot.materialIds.forEach(materialId => {
+      if (!order.has(materialId)) order.set(materialId, order.size);
+    });
+    return order;
   }
 
   const RECYCLE_SERIAL_CYRILLIC_WARNING = "\u0417\u0430\u0441\u0435\u0447\u0435\u043d\u0430 \u0435 \u043a\u0438\u0440\u0438\u043b\u0438\u0446\u0430 \u0432 \u0441\u0435\u0440\u0438\u0439\u043d\u0438\u044f \u043d\u043e\u043c\u0435\u0440. \u0421\u043c\u0435\u043d\u0438 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430\u0442\u0430 \u043d\u0430 EN \u0438 \u0441\u043a\u0430\u043d\u0438\u0440\u0430\u0439 \u043e\u0442\u043d\u043e\u0432\u043e.";
@@ -4549,6 +4669,7 @@
       try {
         sessionStorage.setItem(RECYCLE_ENTRY_LAST_SERIAL_KEY, String(serialInput.value || "").trim());
         sessionStorage.setItem(RECYCLE_ENTRY_PENDING_MATERIAL_KEY, "1");
+        writeRecycleEntryMaterialSnapshot(cat, serialInput.value);
       } catch (e2) {}
     };
 
