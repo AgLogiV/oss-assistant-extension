@@ -44,6 +44,18 @@ const EXPECTED_MATERIAL_FILTERS = {
   gpon: ["1200014928", "118560", "118563", "118564", "122933", "122944"]
 };
 
+const EXPECTED_TOP_LEVEL_KEYS = [
+  "schemaVersion",
+  "revision",
+  "devices",
+  "categoryHelp",
+  "validationProfiles",
+  "generatedMaterialFilters"
+];
+
+const EXPECTED_GPON_ORDER = ["1200014928", "118560", "118563", "118564", "122933", "122944"];
+const EXPECTED_AUSTRIAN_FILTER = ["1200017460", "1200017462"];
+
 function normalizeMaterialId(id) {
   return String(id || "").trim().replace(/\D+/g, "");
 }
@@ -233,10 +245,37 @@ function normalizeDeviceForConfig(device, categoryValidationProfiles) {
   };
 }
 
-function validateFixture({ devices, categoryHelp, validationProfiles, generatedMaterialFilters }) {
+function validateFixture(fixture, catalogCount) {
   const errors = [];
+  const { devices, categoryHelp, validationProfiles, generatedMaterialFilters } = fixture;
   const deviceIds = new Set();
   const profileSet = new Set(validationProfiles);
+  const topLevelKeys = Object.keys(fixture);
+
+  if (!arraysEqual(topLevelKeys, EXPECTED_TOP_LEVEL_KEYS)) {
+    errors.push(`fixture top-level keys changed. Expected ${EXPECTED_TOP_LEVEL_KEYS.join(", ")}, got ${topLevelKeys.join(", ")}`);
+  }
+
+  if (!Array.isArray(devices)) errors.push("fixture.devices is not an array");
+  else if (devices.length !== catalogCount) {
+    errors.push(`fixture device count ${devices.length} does not match catalog count ${catalogCount}`);
+  }
+
+  if (Object.prototype.toString.call(categoryHelp) !== "[object Object]") {
+    errors.push("fixture.categoryHelp is not an object");
+  }
+
+  if (!Array.isArray(validationProfiles)) errors.push("fixture.validationProfiles is not an array");
+
+  if (Object.prototype.toString.call(generatedMaterialFilters) !== "[object Object]") {
+    errors.push("fixture.generatedMaterialFilters is not an object");
+  }
+
+  if (errors.length) {
+    console.error("ERROR: recycle config fixture validation failed:");
+    errors.forEach(error => console.error(`- ${error}`));
+    process.exit(1);
+  }
 
   devices.forEach((device, index) => {
     const label = device.deviceId || `device[${index}]`;
@@ -271,6 +310,14 @@ function validateFixture({ devices, categoryHelp, validationProfiles, generatedM
       errors.push(`${categoryId} material filter order changed. Expected ${expected.join(", ")}, got ${actual.join(", ") || "(empty)"}`);
     }
   });
+
+  if (!arraysEqual(generatedMaterialFilters.austrian || [], EXPECTED_AUSTRIAN_FILTER)) {
+    errors.push(`austrian material filter changed. Expected ${EXPECTED_AUSTRIAN_FILTER.join(", ")}, got ${(generatedMaterialFilters.austrian || []).join(", ") || "(empty)"}`);
+  }
+
+  if (!arraysEqual(generatedMaterialFilters.gpon || [], EXPECTED_GPON_ORDER)) {
+    errors.push(`GPON material order changed. Expected ${EXPECTED_GPON_ORDER.join(", ")}, got ${(generatedMaterialFilters.gpon || []).join(", ") || "(empty)"}`);
+  }
 
   if (errors.length) {
     console.error("ERROR: recycle config fixture validation failed:");
@@ -314,7 +361,7 @@ function main() {
     generatedMaterialFilters
   };
 
-  validateFixture(fixture);
+  validateFixture(fixture, catalog.length);
   process.stdout.write(`${JSON.stringify(fixture, null, 2)}\n`);
 }
 
