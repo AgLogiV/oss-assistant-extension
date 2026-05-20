@@ -51,6 +51,8 @@ Use this checklist in the real/demo OSS environment after loading the extension 
   - Netbox: 15-digit IMEI with Luhn check.
   - GPON confirmed devices: 16 alphanumeric characters.
   - Routers: confirmed TP-Link/Deco/HX520 devices use 13 alphanumeric characters; ZTE H3601P uses `ZTE` prefix and 15 total characters.
+  - Austrian ADB Modem 2220: starts with `PI` and is exactly 19 alphanumeric characters total.
+  - Austrian Huawei HA35-22 HIBRID: exactly 16 alphanumeric characters.
 - For invalid serials, confirm the page does not advance and the serial field keeps focus.
 - For invalid non-empty serials with help content, confirm the floating help preview appears on the right side and hides after about 5 seconds.
 - Click outside the floating help preview and confirm it hides without changing serial, category, selected devices, or OSS navigation.
@@ -76,7 +78,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Set the toggle to `OFF` before entering the material step and confirm a prefilled `MaterialId` leaves the SAP/material page visible.
 - With toggle `OFF` and a mapped recycle category, confirm the quick button grid is filtered to the selected recycle category.
 - Set the toggle back to `ON` and confirm following material pages with prefilled `MaterialId` auto-continue again.
-- For mapped categories (`xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, `gpon`), confirm only the expected allowlisted material buttons appear.
+- For mapped categories (`xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, `gpon`, `austrian`), confirm only the expected allowlisted material buttons appear.
 - With one selected recycle device in a mapped category, confirm its material button is shown first when it exists in the current material model list.
 - With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
 - After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
@@ -86,7 +88,11 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm selected recycle devices do not restrict the grid to selected devices only.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
 - For unmapped categories, confirm the older full-list behavior remains.
-- For `austrian`, treat material filtering as TODO/unmapped until the missing/unclear device is added.
+- For `austrian`, select `ADB Modem 2220` and confirm valid serial fills `1200017460` without auto-continuing.
+- For `austrian`, select `Huawei HA35-22 HIBRID` and confirm valid serial fills `1200017462` without auto-continuing.
+- For `austrian`, confirm invalid ADB/Huawei serial lengths or non-alphanumeric values are blocked.
+- For `austrian` with no selected device, confirm the legacy preset fallback still applies.
+- For `austrian`, note whether the Huawei quick material button/card has a dedicated image; text/material fallback is acceptable for now.
 - For `cam_modules`, confirm a prefilled `MaterialId` still auto-continues.
 - For `cam_modules`, confirm an empty `MaterialId` returns to the main `Рециклиране на устройство` operation through the breadcrumb instead of leaving the user in the quick-button flow.
 - On the returned operation page, confirm the red CAM helper text appears next to `Служебно прекратяване` and that `Служебно прекратяване` is not clicked automatically.
@@ -119,7 +125,8 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm CAM Modules flow still works.
 - Confirm material filtering by recycle category still works for the mapped categories.
 - Confirm selected device cards prioritize matching SAP/material quick buttons first; safe single-candidate selections can fill empty `MaterialId`, but they do not hide other category buttons or auto-continue after extension fill.
-- Confirm `austrian` and `modems` remain unchanged during the next regression pass.
+- Confirm Austrian no-selected-device legacy fallback still works.
+- Confirm `cam_modules` and `modems` remain unchanged during the next regression pass.
 - Confirm the `Material auto-continue` debug toggle still works and does not freeze the OSS page.
 
 ## Evidence to Send Back to Codex

@@ -47,6 +47,8 @@ The normalized local recycle catalog already drives:
 
 Current selected-device behavior affects validation, help context, SAP/material quick-button ordering, and controlled SAP/material auto-fill. SAP/material quick-button filtering remains category-level: selected devices are prioritized first when their material buttons exist, but they do not restrict the grid to selected devices only. A per-flow material snapshot in `sessionStorage` captures category/device/material/serial/date context at valid recycle Continue time so the SAP/material step does not have to depend only on live shared selected-device state. `getRecycleMaterialFillCandidate(...)` evaluates a controlled fill candidate and returns `{ ok, materialId, reason }`; when the candidate is safe and the OSS `MaterialId` field is empty, runtime fills the material value without calling auto-continue again.
 
+Austrian is now partially device-based. `ADB Modem 2220` and `Huawei HA35-22 HIBRID` are local catalog devices with device cards, help images, device-level validation, and selected-device material fill through the same snapshot/controlled-fill flow. If no Austrian device is selected, the legacy Austrian preset fallback remains active for compatibility. `cam_modules` and `modems` remain special categories outside this migration.
+
 ### Already dashboard-driven
 
 The existing dashboard/API currently applies to the Swap Shop/SAP material model list, not the recycle device catalog.
@@ -368,9 +370,11 @@ Before any config architecture implementation is considered safe:
 - SAP/material selected-device ordering uses a valid per-flow material snapshot when available and falls back safely when it is missing or stale;
 - SAP/material controlled auto-fill requires a valid per-flow snapshot, an empty `MaterialId`, exactly one safe normalized material candidate, and a material model match;
 - SAP/material controlled auto-fill does not overwrite prefilled OSS values and does not call auto-continue after extension fill;
+- Austrian selected-device validation covers ADB `PI` + exactly 19 alphanumeric characters and Huawei exactly 16 alphanumeric characters;
+- Austrian no-selected-device legacy preset fallback still works;
 - material auto-continue debug toggle still works;
 - CAM Modules flow is unchanged;
-- Austrian material behavior and Austrian label generation still work;
+- Austrian label generation still works;
 - clipboard SSID/password autofill still works;
 - label/barcode generation still works;
 - dev-only catalog validator returns `Result: PASS`;
@@ -386,7 +390,7 @@ While colleagues are testing the current extension, avoid:
 - moving recycle config to JSON runtime loading;
 - adding dashboard recycle config;
 - changing SAP/material filtering to selected-only behavior or broadening controlled auto-fill beyond the safe snapshot candidate policy;
-- changing Austrian behavior;
+- retiring Austrian no-selected-device legacy fallback without a separate plan;
 - changing CAM flow;
 - changing validation profiles;
 - adding storage keys;

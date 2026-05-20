@@ -13,9 +13,10 @@
 - Added a per-flow SAP/material snapshot in `sessionStorage` so selected-device ordering can use the category/device/material/serial/date context from the valid recycle Continue step without changing auto-fill or auto-continue behavior.
 - Added a recycle material fill-candidate helper that returns `{ ok, materialId, reason }` and is used by controlled auto-fill without changing auto-continue.
 - Added controlled recycle SAP/material auto-fill: when a valid per-flow snapshot has one safe material candidate and the OSS `MaterialId` field is empty, the extension fills the value without triggering auto-continue or changing the category-scoped material grid.
+- Added Austrian device-based recycle behavior for `ADB Modem 2220` and `Huawei HA35-22 HIBRID`, including device cards, selected-device validation, and selected-device material fill via the snapshot/controlled-fill flow.
 - Added a session-based debug/test toggle for `Material auto-continue`, defaulting to `ON`.
 - Kept `cam_modules` as a separate missing-material flow outside the quick-button grid.
-- Known gap: `austrian` material filtering is still TODO/unmapped pending the missing or unclear device/material.
+- Known UI polish: the Huawei Austrian quick material button can render through the material fallback even if it does not yet have a dedicated quick-button image.
 
 ## Recent Validation
 
@@ -26,6 +27,7 @@
 - Selected-device SAP/material button prioritization and controlled single-candidate auto-fill work without selected-only restriction.
 - Per-flow SAP/material snapshot behavior preserves selected-device ordering without changing CAM or Austrian behavior.
 - Controlled SAP/material auto-fill works for safe single-candidate recycle selections without overwriting prefilled OSS values or auto-continuing.
+- Austrian ADB/Huawei selected-device validation and material fill work; no selected Austrian device keeps the legacy preset fallback.
 - Shared recycle category/device selection works across tabs/windows.
 - Selected-device validation profiles and multi-select OR validation work for the implemented profiles.
 - Floating recycle help preview and the separate manual help menu work for Android/IPTV help images.

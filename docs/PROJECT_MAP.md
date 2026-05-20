@@ -348,7 +348,9 @@ Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopIm
   - Accepts `ZTEK` values only when length is exactly 15.
   - Note: the code comment says "starts with ZTE AND is exactly 12 chars long", but the code checks `ZTEK` and length `15`. Treat this as a business-rule uncertainty.
 - `austrian`
-  - Must be at least 16 alphanumeric characters.
+  - No selected device keeps the current category fallback: at least 16 alphanumeric characters.
+  - Selected `ADB Modem 2220` uses `austrian_adb_vv2220`: starts with `PI` and is exactly 19 alphanumeric characters total.
+  - Selected `Huawei HA35-22 HIBRID` uses `austrian_huawei_ha35_22_hibrid`: exactly 16 alphanumeric characters.
 - `dth_kaon_nagra`
   - Must be exactly 11 digits.
 - `cam_modules`
@@ -478,6 +480,7 @@ Mapped recycle categories:
 - `netbox`
 - `routers`
 - `gpon`
+- `austrian`
 
 Behavior for mapped categories:
 
@@ -491,15 +494,20 @@ Behavior for mapped categories:
 - Selected devices do not restrict the grid to selected devices only; all category-allowlisted buttons remain available.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
 - Search stays scoped to the rendered allowlisted devices.
-- There is no fallback to all devices when a mapped category is active; if a dashboard-provided model is missing, the matching button will be absent.
+- There is no fallback to all devices when a mapped category is active.
+- For recycle-scoped grids, missing dashboard-provided models can be supplemented from built-in material models when the local catalog allowlist requires them.
 
 Unmapped categories keep the older full-list behavior.
 
-Known gap:
+Current Austrian behavior:
 
-- `austrian` is currently unmapped/TODO because the target material device still needs to be added or clarified.
+- `austrian` has device cards for `ADB Modem 2220` and `Huawei HA35-22 HIBRID`.
+- A selected Austrian device can controlled-fill empty `MaterialId` through the per-flow snapshot.
+- Extension-filled Austrian material values do not auto-continue.
+- No selected Austrian device keeps the legacy preset fallback: `PI* -> 1200017460`, otherwise `1200017462`.
+- Known UI polish: `Huawei HA35-22 HIBRID` quick material button/card can render through the fallback material model even if no dedicated quick-button image is available yet.
 - `cam_modules` is a separate flow. With empty `MaterialId`, it redirects back to the operation page and does not use the quick-buttons grid.
-- Controlled fill candidates currently skip `cam_modules`, `modems`, and `austrian` while Austrian remains on the legacy preset behavior.
+- Controlled fill candidates still skip `cam_modules` and `modems`.
 
 ### Likely Future Change Points for Recycle-Based Material Filtering
 
@@ -577,7 +585,7 @@ Fallback behavior:
 - GPON validation comment and implementation disagree.
 - SAP material auto-continue may be too aggressive if a value is present for reasons other than OSS history.
 - Material auto-continue debug toggle is a test helper, not a primary user workflow; if it causes OSS issues, it can be removed without changing the core material filtering behavior.
-- `austrian` material filtering is still unmapped/TODO until the target device/material is clarified.
+- `austrian` is now partially device-based; keep the no-selected-device legacy preset fallback until it is explicitly retired.
 - CAM modules intentionally bypass material quick buttons only when `MaterialId` is empty; do not make this behavior global for other categories.
 - Dashboard data can replace built-in material models.
 - Real OSS DOM can differ from assumptions; do not rely only on guessed selectors.
@@ -593,6 +601,7 @@ Latest confirmed real-OSS checks:
 - CAM modules flow works.
 - Recycle-specific material filtering works for the mapped categories.
 - Selected recycle devices are prioritized first in mapped SAP/material quick-button grids; safe single-candidate selections can controlled-fill empty `MaterialId` without auto-continue or selected-only restriction.
+- Austrian ADB/Huawei device cards, selected-device validation, and selected-device material fill are implemented; no selected Austrian device keeps the legacy preset fallback.
 - `Material auto-continue` debug toggle works and no longer freezes the page.
 
 Dev-only catalog sanity check:

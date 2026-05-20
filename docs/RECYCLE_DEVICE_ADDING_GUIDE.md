@@ -184,7 +184,7 @@ modems
 
 Important notes:
 
-- `austrian` is special and should not be treated as a normal SAP/material quick-button category without explicit design.
+- `austrian` is now partially device-based. Existing Austrian devices can use normal catalog fields and selected-device material fill, but the no-selected-device legacy preset fallback must be preserved until a separate migration removes it.
 - `cam_modules` is special and has missing-material redirect behavior.
 - `modems` is currently special/unmapped for material filtering unless explicit catalog/material behavior is designed.
 - Adding a device to a mapped category can affect SAP/material filtering because filters are generated from catalog material IDs.
@@ -274,6 +274,8 @@ dth_11_digits_prefix_00
 gpon_16_alnum
 router_13_alnum
 router_zte_h3601p_zte_prefix_15_alnum
+austrian_adb_vv2220
+austrian_huawei_ha35_22_hibrid
 category_android_iptv_current
 category_xplore_zapper_mac12
 category_dth_kaon_nagra_11_digits
@@ -313,7 +315,8 @@ Do not:
 - add arbitrary regex or JavaScript validation from dashboard data;
 - rename existing `deviceId` values casually;
 - use SAP/material number as `deviceId`;
-- add devices to `austrian`, `cam_modules`, or `modems` without checking their special behavior.
+- add devices to `cam_modules` or `modems` without checking their special behavior;
+- change or remove the Austrian no-selected-device legacy preset fallback in a catalog-only patch.
 
 ## 12. Test checklist after adding a device
 
@@ -342,8 +345,10 @@ Manual OSS checks when the device is enabled:
 - mapped category material filtering contains the expected devices in the expected order;
 - current category validation behavior is unchanged;
 - CAM Modules flow is unchanged;
-- Austrian behavior is unchanged;
+- Austrian no-selected-device legacy fallback is unchanged unless the task explicitly changes it;
 - clipboard autofill and label/barcode generation are not regressed.
+
+For Austrian devices, also verify selected-device validation, selected-device material fill, no auto-continue after extension-filled `MaterialId`, and acceptable quick material button/card rendering. A text/material fallback is acceptable when a dedicated quick-button image is not available yet.
 
 ## 13. Example entry for a normal device
 
