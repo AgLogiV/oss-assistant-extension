@@ -42,6 +42,7 @@ const EXPECTED_MATERIAL_FILTERS = {
   android_iptv: ["114225", "121679", "121678"],
   xplore_zapper: ["118542", "118543", "118544"],
   dth_kaon_nagra: ["114915", "121961"],
+  austrian: ["1200017460", "1200017462"],
   netbox: [
     "123580",
     "123451",

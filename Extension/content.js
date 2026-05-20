@@ -1802,6 +1802,7 @@
     { id: "1-200-014-914", name: "HX520 Home" },
     { id: "1-200-014-928", name: "K562E-10 Home" },
     { id: "1-200-017-460", name: "Modem ADB 2220" },
+    { id: "1-200-017-462", name: "Huawei HA35-22 HIBRID" },
     { id: "BG108322", name: "DTH Conax Smart Card" },
     { id: "BG108445", name: "DTH CAM Neotion CI+ 1.3 CP" },
     { id: "BG108892", name: "STB ZXV B700v5" },
@@ -1863,6 +1864,19 @@
   // This list is controlled dynamically from the dashboard.
   let swapMaterialModels = SWAP_MATERIAL_MODELS_DEFAULT;
   let swapMaterialModelsSig = SWAP_MATERIAL_MODELS_DEFAULT.map(m => String(m.id || "")).join(",");
+
+  function getSwapMaterialModelsWithRecycleFallback(models, recycleMaterialFilter) {
+    const list = Array.isArray(models) ? models : [];
+    if (!recycleMaterialFilter) return list;
+    const seen = new Set(list.map(m => normalizeSwapMaterialId(m?.id)).filter(Boolean));
+    const fallback = SWAP_MATERIAL_MODELS_DEFAULT.filter(m => {
+      const id = normalizeSwapMaterialId(m?.id);
+      if (!id || seen.has(id)) return false;
+      return recycleMaterialFilter.idSet.has(id);
+    });
+    return fallback.length ? list.concat(fallback) : list;
+  }
+
   const SWAP_MATERIAL_DASHBOARD_URLS = [
     "https://oss-assistant.onrender.com/api/models"
   ];
@@ -2175,6 +2189,9 @@
     { deviceId: "dth_kaon_kstb1001", categoryId: "dth_kaon_nagra", displayName: "DTH STB KAON KSTB1001", materialId: "114915", validationProfileId: "dth_11_digits_prefix_00" },
     { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961", helpImagePath: "images/recycle-help/DTH Nagra DTS3460.webp", validationProfileId: "dth_11_digits_prefix_00" },
 
+    { deviceId: "adb_modem_2220", categoryId: "austrian", displayName: "ADB Modem 2220", materialId: "1200017460", imagePath: "images/devices/16x9/Modem_ADB_VoIP_VV_2220_AT-removebg-preview.webp", helpImagePath: "images/recycle-help/ADB modem vv2220.webp", validationProfileId: "austrian_adb_vv2220" },
+    { deviceId: "huawei_ha35_22_hibrid", categoryId: "austrian", displayName: "Huawei HA35-22 HIBRID", materialId: "1200017462", imagePath: "images/devices/16x9/Huawei_HA35-22AM.webp", helpImagePath: "images/recycle-help/Huawei HA35-22 HIBRID.webp", validationProfileId: "austrian_huawei_ha35_22_hibrid" },
+
     { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "123580" },
     { deviceId: "zte_mf296r", categoryId: "netbox", displayName: "ZTE MF296R", materialId: "123451" },
     { deviceId: "zte_mc888a", categoryId: "netbox", displayName: "ZTE MC888A", materialId: "121561" },
@@ -2403,7 +2420,8 @@
     const recycleMaterialFilter = (materialWasEmptyBeforeControlledFill || !autoContinueEnabled)
       ? getSwapMaterialRecycleFilter(category)
       : null;
-    const fillCandidate = getRecycleMaterialFillCandidate(category, input, swapMaterialModels);
+    const materialModelsForRecycleContext = getSwapMaterialModelsWithRecycleFallback(swapMaterialModels, recycleMaterialFilter);
+    const fillCandidate = getRecycleMaterialFillCandidate(category, input, materialModelsForRecycleContext);
     if (fillCandidate.ok) setSwapMaterialInputValue(input, fillCandidate.materialId);
 
     const panel = document.createElement("div");
@@ -2623,7 +2641,7 @@
       if (!recycleMaterialFilter) return swapMaterialModels;
       const seen = new Set();
       const selectedMaterialOrder = getSelectedRecycleDeviceMaterialOrder(getSelectedRecycleEntryCategory());
-      return swapMaterialModels
+      return materialModelsForRecycleContext
         .filter(m => {
           const id = normalizeSwapMaterialId(m.id);
           if (!recycleMaterialFilter.idSet.has(id)) return false;
@@ -3996,6 +4014,8 @@
     imei15_luhn: (s) => (/^\d{15}$/.test(s) && isValidImeiLuhn(s) ? recycleProfileOk() : recycleProfileInvalid()),
     router_13_alnum: (s) => (/^[A-Za-z0-9]{13}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
     router_zte_h3601p_zte_prefix_15_alnum: (s) => (/^ZTE[A-Za-z0-9]{12}$/i.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    austrian_adb_vv2220: (s) => (/^PI[A-Za-z0-9]{17}$/i.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
+    austrian_huawei_ha35_22_hibrid: (s) => (/^[A-Za-z0-9]{16}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid()),
     gpon_16_alnum: (s) => (/^[A-Za-z0-9]{16}$/.test(s) ? recycleProfileOk() : recycleProfileInvalid())
   };
 
