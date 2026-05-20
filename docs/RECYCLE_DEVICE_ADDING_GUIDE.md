@@ -326,6 +326,7 @@ Minimum local checks:
 - `git diff --check`
 - syntax parse check for `Extension/content.js`
 - `node Extension/scripts/validate-recycle-catalog.js`
+- `node Extension/scripts/export-recycle-config-fixture.js` if the change should be reflected in future config/export parity checks
 - verify only intended files changed
 - verify the new entry is in `RECYCLE_DEVICE_CATALOG_RAW`
 - verify `deviceId` is unique
@@ -334,6 +335,8 @@ Minimum local checks:
 - verify material filter IDs/order for existing categories did not change unexpectedly
 
 The catalog validator is dev-only. It is not loaded by the extension and does not change runtime behavior. Run it after changing recycle devices, help images, image paths, `validationProfileId`, or `materialId`. It checks catalog sanity, asset paths, validation profile IDs, generated material filter parity, and GPON material order. Expected healthy output: `Result: PASS`.
+
+The config fixture exporter is also dev-only. `Extension/scripts/export-recycle-config-fixture.js` reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`. It does not create runtime config files and is not loaded by the extension. Use it as a config-readiness/export parity check before future packaged JSON work.
 
 Manual OSS checks when the device is enabled:
 

@@ -339,6 +339,9 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Validate current `RECYCLE_DEVICE_CATALOG_RAW` without changing runtime behavior.
    - Report or log schema problems without breaking operators.
    - Current dev-only checker: `node Extension/scripts/validate-recycle-catalog.js`.
+   - Current dev-only fixture exporter: `node Extension/scripts/export-recycle-config-fixture.js`.
+   - The exporter reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
+   - It does not create runtime config files and is not loaded by the extension.
 
 3. **Packaged JSON read-only experiment**
    - Add a packaged JSON file only after schema is stable.
@@ -360,6 +363,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
 Before any config architecture implementation is considered safe:
 
 - catalog parity: normalized devices match current behavior;
+- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js` emits the expected top-level keys and current catalog/material/help/profile data before packaged JSON work starts;
 - material filter order remains unchanged for mapped categories;
 - selected-device validation fallback remains correct;
 - selected-device OR validation still works;
