@@ -2258,6 +2258,20 @@
     };
   }
 
+  function getSelectedRecycleDeviceMaterialOrder(categoryId) {
+    const category = String(categoryId || "").trim();
+    if (!category) return new Map();
+    const order = new Map();
+    readSelectedRecycleDeviceIdsStorage().forEach(deviceId => {
+      const device = getRecycleDeviceById(deviceId);
+      if (!device || device.categoryId !== category) return;
+      const materialId = normalizeSwapMaterialId(device.materialId);
+      if (!materialId || order.has(materialId)) return;
+      order.set(materialId, order.size);
+    });
+    return order;
+  }
+
   function getWflowOperationIdFromUrl(url) {
     const m = String(url || "").match(/\/wflow\/(\d+)(?:$|[/?#])/);
     return m ? m[1] : "";
@@ -2602,6 +2616,7 @@
     const modelsForButtons = (() => {
       if (!recycleMaterialFilter) return swapMaterialModels;
       const seen = new Set();
+      const selectedMaterialOrder = getSelectedRecycleDeviceMaterialOrder(getSelectedRecycleEntryCategory());
       return swapMaterialModels
         .filter(m => {
           const id = normalizeSwapMaterialId(m.id);
@@ -2611,8 +2626,18 @@
           return true;
         })
         .sort((a, b) => {
-          const ai = recycleMaterialFilter.order.get(normalizeSwapMaterialId(a.id));
-          const bi = recycleMaterialFilter.order.get(normalizeSwapMaterialId(b.id));
+          const aId = normalizeSwapMaterialId(a.id);
+          const bId = normalizeSwapMaterialId(b.id);
+          const aSelectedOrder = selectedMaterialOrder.get(aId);
+          const bSelectedOrder = selectedMaterialOrder.get(bId);
+          const aSelected = Number.isInteger(aSelectedOrder);
+          const bSelected = Number.isInteger(bSelectedOrder);
+          if (aSelected || bSelected) {
+            if (aSelected && bSelected) return aSelectedOrder - bSelectedOrder;
+            return aSelected ? -1 : 1;
+          }
+          const ai = recycleMaterialFilter.order.get(aId);
+          const bi = recycleMaterialFilter.order.get(bId);
           return ai - bi;
         });
     })();
