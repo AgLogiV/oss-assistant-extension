@@ -77,6 +77,9 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With toggle `OFF` and a mapped recycle category, confirm the quick button grid is filtered to the selected recycle category.
 - Set the toggle back to `ON` and confirm following material pages with prefilled `MaterialId` auto-continue again.
 - For mapped categories (`xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, `gpon`), confirm only the expected allowlisted material buttons appear.
+- With one selected recycle device in a mapped category, confirm its material button is shown first when it exists in the current material model list.
+- With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
+- Confirm selected recycle devices do not auto-fill `MaterialId` and do not restrict the grid to selected devices only.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
 - For unmapped categories, confirm the older full-list behavior remains.
 - For `austrian`, treat material filtering as TODO/unmapped until the missing/unclear device is added.
@@ -111,7 +114,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm Austrian label generation still works.
 - Confirm CAM Modules flow still works.
 - Confirm material filtering by recycle category still works for the mapped categories.
-- Confirm selected device cards do not change SAP/material quick-button filtering yet.
+- Confirm selected device cards only prioritize matching SAP/material quick buttons first; they do not auto-fill `MaterialId` or hide other category buttons.
 - Confirm the `Material auto-continue` debug toggle still works and does not freeze the OSS page.
 
 ## Evidence to Send Back to Codex

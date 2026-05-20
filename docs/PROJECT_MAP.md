@@ -226,7 +226,7 @@ The normalized contract supports:
 - `validationProfileId`
 - `enabled`
 
-After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context and recycle help context only; SAP/material filtering remains category-level.
+After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context, recycle help context, and SAP/material quick-button ordering. SAP/material filtering remains category-level.
 
 ### Recycle Help UI
 
@@ -482,6 +482,9 @@ Behavior for mapped categories:
 
 - Only allowlisted material buttons are rendered.
 - The button order follows the allowlist order.
+- If one or more recycle devices are selected in the current category, their matching material buttons are shown first when present in the current material model list.
+- Selected devices do not auto-fill `MaterialId`.
+- Selected devices do not restrict the grid to selected devices only; all category-allowlisted buttons remain available.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
 - Search stays scoped to the rendered allowlisted devices.
 - There is no fallback to all devices when a mapped category is active; if a dashboard-provided model is missing, the matching button will be absent.
@@ -583,6 +586,7 @@ Latest confirmed real-OSS checks:
 - Austrian label generation works.
 - CAM modules flow works.
 - Recycle-specific material filtering works for the mapped categories.
+- Selected recycle devices are prioritized first in mapped SAP/material quick-button grids without auto-fill or selected-only restriction.
 - `Material auto-continue` debug toggle works and no longer freezes the page.
 
 Dev-only catalog sanity check:

@@ -45,7 +45,7 @@ The normalized local recycle catalog already drives:
 - selected-device help images through `helpImagePath`;
 - category material allowlists generated from catalog `materialId` values.
 
-Current selected-device behavior affects validation and help context. SAP/material quick-button filtering still remains category-level.
+Current selected-device behavior affects validation, help context, and SAP/material quick-button ordering. SAP/material quick-button filtering remains category-level: selected devices are prioritized first when their material buttons exist, but they do not auto-fill `MaterialId` and do not restrict the grid to selected devices only.
 
 ### Already dashboard-driven
 
@@ -381,7 +381,7 @@ While colleagues are testing the current extension, avoid:
 
 - moving recycle config to JSON runtime loading;
 - adding dashboard recycle config;
-- changing SAP/material filtering by selected devices;
+- changing SAP/material filtering to selected-only behavior or adding selected-device auto-fill;
 - changing Austrian behavior;
 - changing CAM flow;
 - changing validation profiles;
