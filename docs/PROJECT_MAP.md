@@ -485,6 +485,7 @@ Behavior for mapped categories:
 - The button order follows the allowlist order.
 - If one or more recycle devices are selected in the current category, their matching material buttons are shown first when present in the current material model list.
 - After a valid recycle serial Continue, a per-flow material snapshot is saved in `sessionStorage`; the SAP/material grid uses a valid snapshot for selected-device ordering before falling back to live shared selected devices.
+- `getRecycleMaterialFillCandidate(...)` can calculate a future controlled fill candidate from the snapshot and current material model list, returning `{ ok, materialId, reason }`; it does not fill `MaterialId` or change auto-continue behavior.
 - Selected devices do not auto-fill `MaterialId`.
 - Selected devices do not restrict the grid to selected devices only; all category-allowlisted buttons remain available.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
@@ -497,6 +498,7 @@ Known gap:
 
 - `austrian` is currently unmapped/TODO because the target material device still needs to be added or clarified.
 - `cam_modules` is a separate flow. With empty `MaterialId`, it redirects back to the operation page and does not use the quick-buttons grid.
+- Controlled fill candidates currently skip `cam_modules`, `modems`, and `austrian` while Austrian remains on the legacy preset behavior.
 
 ### Likely Future Change Points for Recycle-Based Material Filtering
 

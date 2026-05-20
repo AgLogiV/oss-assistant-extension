@@ -11,6 +11,7 @@
 - Material filtering uses normalized material ID allowlists; mapped categories hide the broad chips and keep search scoped to the allowed devices.
 - Selected recycle devices are now prioritized first in category-scoped SAP/material quick-button grids; this does not auto-fill `MaterialId` and does not restrict the grid to selected devices only.
 - Added a per-flow SAP/material snapshot in `sessionStorage` so selected-device ordering can use the category/device/material/serial/date context from the valid recycle Continue step without changing auto-fill or auto-continue behavior.
+- Added a non-mutating recycle material fill-candidate helper that returns `{ ok, materialId, reason }` for future controlled auto-fill without writing `MaterialId` or changing auto-continue.
 - Added a session-based debug/test toggle for `Material auto-continue`, defaulting to `ON`.
 - Kept `cam_modules` as a separate missing-material flow outside the quick-button grid.
 - Known gap: `austrian` material filtering is still TODO/unmapped pending the missing or unclear device/material.

@@ -81,6 +81,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
 - After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
 - Confirm selected recycle devices do not auto-fill `MaterialId` and do not restrict the grid to selected devices only.
+- Until the controlled auto-fill milestone is explicitly implemented, confirm the fill-candidate helper does not write `MaterialId` or auto-continue.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
 - For unmapped categories, confirm the older full-list behavior remains.
 - For `austrian`, treat material filtering as TODO/unmapped until the missing/unclear device is added.

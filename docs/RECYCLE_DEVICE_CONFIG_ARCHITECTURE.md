@@ -45,7 +45,7 @@ The normalized local recycle catalog already drives:
 - selected-device help images through `helpImagePath`;
 - category material allowlists generated from catalog `materialId` values.
 
-Current selected-device behavior affects validation, help context, and SAP/material quick-button ordering. SAP/material quick-button filtering remains category-level: selected devices are prioritized first when their material buttons exist, but they do not auto-fill `MaterialId` and do not restrict the grid to selected devices only. A per-flow material snapshot in `sessionStorage` captures category/device/material/serial/date context at valid recycle Continue time so the SAP/material step does not have to depend only on live shared selected-device state.
+Current selected-device behavior affects validation, help context, and SAP/material quick-button ordering. SAP/material quick-button filtering remains category-level: selected devices are prioritized first when their material buttons exist, but they do not auto-fill `MaterialId` and do not restrict the grid to selected devices only. A per-flow material snapshot in `sessionStorage` captures category/device/material/serial/date context at valid recycle Continue time so the SAP/material step does not have to depend only on live shared selected-device state. `getRecycleMaterialFillCandidate(...)` can evaluate a future controlled fill candidate and returns `{ ok, materialId, reason }`, but it is not wired to write `MaterialId` or continue the OSS flow.
 
 ### Already dashboard-driven
 
@@ -366,6 +366,7 @@ Before any config architecture implementation is considered safe:
 - dashboard offline/invalid config keeps local fallback working;
 - SAP/material quick buttons still render and fill values;
 - SAP/material selected-device ordering uses a valid per-flow material snapshot when available and falls back safely when it is missing or stale;
+- SAP/material fill-candidate helper remains non-mutating until a controlled auto-fill milestone explicitly wires it into runtime behavior;
 - material auto-continue debug toggle still works;
 - CAM Modules flow is unchanged;
 - Austrian material behavior and Austrian label generation still work;
