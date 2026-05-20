@@ -2963,6 +2963,11 @@
     return snapshot;
   }
 
+  function hasSelectedRecycleMaterialSnapshotDevices(categoryId) {
+    const snapshot = readValidRecycleEntryMaterialSnapshot(categoryId);
+    return Boolean(snapshot && snapshot.deviceIds.length);
+  }
+
   function getRecycleMaterialOrderFromSnapshot(categoryId) {
     const snapshot = readValidRecycleEntryMaterialSnapshot(categoryId);
     if (!snapshot) return null;
@@ -2978,10 +2983,12 @@
     if (!category) return { ok: false, materialId: "", reason: "missing_category" };
     if (category === "cam_modules") return { ok: false, materialId: "", reason: "special_cam_modules" };
     if (category === "modems") return { ok: false, materialId: "", reason: "special_modems" };
-    if (category === "austrian") return { ok: false, materialId: "", reason: "austrian_legacy_preset" };
     if (normalizeSwapMaterialId(inputEl?.value)) return { ok: false, materialId: "", reason: "material_prefilled" };
 
     const snapshot = readValidRecycleEntryMaterialSnapshot(category);
+    if (category === "austrian" && (!snapshot || !snapshot.deviceIds.length)) {
+      return { ok: false, materialId: "", reason: "austrian_legacy_preset" };
+    }
     if (!snapshot) return { ok: false, materialId: "", reason: "missing_or_invalid_snapshot" };
     if (!snapshot.deviceIds.length) return { ok: false, materialId: "", reason: "no_selected_devices" };
     if (snapshot.materialIds.length !== 1) return { ok: false, materialId: "", reason: "ambiguous_material" };
@@ -4764,6 +4771,7 @@
 
     let sapId = "";
     if (cat === "austrian") {
+      if (hasSelectedRecycleMaterialSnapshotDevices(cat)) return false;
       // Austrian: PI* => 1200017460, otherwise 1200017462
       sapId = serial.toUpperCase().startsWith("PI") ? "1200017460" : "1200017462";
     } else {
