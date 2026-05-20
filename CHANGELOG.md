@@ -10,6 +10,7 @@
 - Added recycle-specific SAP/material quick-button filtering for `xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, and `gpon`.
 - Material filtering uses normalized material ID allowlists; mapped categories hide the broad chips and keep search scoped to the allowed devices.
 - Selected recycle devices are now prioritized first in category-scoped SAP/material quick-button grids; this does not auto-fill `MaterialId` and does not restrict the grid to selected devices only.
+- Added a per-flow SAP/material snapshot in `sessionStorage` so selected-device ordering can use the category/device/material/serial/date context from the valid recycle Continue step without changing auto-fill or auto-continue behavior.
 - Added a session-based debug/test toggle for `Material auto-continue`, defaulting to `ON`.
 - Kept `cam_modules` as a separate missing-material flow outside the quick-button grid.
 - Known gap: `austrian` material filtering is still TODO/unmapped pending the missing or unclear device/material.
@@ -21,6 +22,7 @@
 - CAM Modules flow works.
 - Category-specific material filtering works for the mapped recycle categories.
 - Selected-device SAP/material button prioritization works without auto-fill or selected-only restriction.
+- Per-flow SAP/material snapshot behavior preserves selected-device ordering without changing CAM or Austrian behavior.
 - Shared recycle category/device selection works across tabs/windows.
 - Selected-device validation profiles and multi-select OR validation work for the implemented profiles.
 - Floating recycle help preview and the separate manual help menu work for Android/IPTV help images.

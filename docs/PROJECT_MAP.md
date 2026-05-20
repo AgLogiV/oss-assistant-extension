@@ -251,8 +251,9 @@ Recycle entry storage:
 - `wifi_oss_recycle_entry_selected_devices` in `localStorage`, JSON array of selected `deviceId` strings
 - `wifi_oss_recycle_entry_last_serial` in `sessionStorage`
 - `wifi_oss_recycle_entry_pending_material` in `sessionStorage`
+- `wifi_oss_recycle_entry_material_snapshot` in `sessionStorage`, per-flow category/device/material/serial/date context for the next SAP/material step
 
-The selected category and selected devices are shared across OSS tabs/windows for the same browser origin. `sessionStorage` remains for transient recycle flow state such as the last valid serial and pending material context. Clipboard SSID/password autofill has its own storage and is not part of this recycle selection flow.
+The selected category and selected devices are shared across OSS tabs/windows for the same browser origin. `sessionStorage` remains for transient recycle flow state such as the last valid serial, pending material context, and the per-flow material snapshot. Clipboard SSID/password autofill has its own storage and is not part of this recycle selection flow.
 
 ### Daily Reset Logic
 
@@ -483,6 +484,7 @@ Behavior for mapped categories:
 - Only allowlisted material buttons are rendered.
 - The button order follows the allowlist order.
 - If one or more recycle devices are selected in the current category, their matching material buttons are shown first when present in the current material model list.
+- After a valid recycle serial Continue, a per-flow material snapshot is saved in `sessionStorage`; the SAP/material grid uses a valid snapshot for selected-device ordering before falling back to live shared selected devices.
 - Selected devices do not auto-fill `MaterialId`.
 - Selected devices do not restrict the grid to selected devices only; all category-allowlisted buttons remain available.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
@@ -557,6 +559,7 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_selected_devices` - `localStorage`, JSON array of selected recycle `deviceId` values shared across OSS tabs/windows.
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
+- `wifi_oss_recycle_entry_material_snapshot` - `sessionStorage`, per-flow category/device/material/serial/date snapshot used for SAP/material button ordering and future controlled auto-fill.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
 - `wifi_oss_debug_material_auto_continue_enabled` - `sessionStorage`, temporary debug/test override for material auto-continue (`"0"` means off; missing key means on).
 - `wifi_oss_serial_keyboard_debug` - `sessionStorage`, opt-in serial keyboard diagnostic logging (`"1"` means on).
