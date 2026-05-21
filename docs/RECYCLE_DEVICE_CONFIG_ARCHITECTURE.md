@@ -352,8 +352,11 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Add local schema validation helpers.
    - Validate current `RECYCLE_DEVICE_CATALOG_RAW` without changing runtime behavior.
    - Report or log schema problems without breaking operators.
+   - Main dev-only readiness command: `node Extension/scripts/check-recycle-config.js`.
    - Current dev-only checker: `node Extension/scripts/validate-recycle-catalog.js`.
    - Current dev-only fixture exporter: `node Extension/scripts/export-recycle-config-fixture.js`.
+   - Current dev-only fixture validator: `node Extension/scripts/validate-recycle-config-fixture.js`.
+   - Current dev-only loader adapter prototype: `node Extension/scripts/load-recycle-config-fixture.js`.
    - The exporter reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
    - It checks expected top-level keys, `devices.length` against catalog count, Austrian material filter `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
    - It does not create runtime config files and is not loaded by the extension.
@@ -363,6 +366,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - A compare mismatch is a development signal that recycle catalog/config metadata changed and the fixture should be reviewed and updated intentionally.
    - Mismatch diagnostics report the first semantic path, for example `Mismatch at generatedMaterialFilters.austrian[1]`, and print expected/actual values.
    - Source of truth remains `Extension/content.js`; the runtime does not load the fixture and `manifest.json` is not involved.
+   - `validate-recycle-config-fixture.js` validates fixture schema/data. `load-recycle-config-fixture.js` proves fixture JSON can be loaded and normalized into a future in-memory adapter shape with `devicesById`, `devicesByCategory`, `categoryHelp`, `validationProfiles`, and `materialFilters`.
 
 3. **Packaged JSON read-only experiment**
    - Add a packaged JSON file only after schema is stable.
@@ -385,6 +389,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
 Before any config architecture implementation is considered safe:
 
 - catalog parity: normalized devices match current behavior;
+- dev-only config readiness chain: `node Extension/scripts/check-recycle-config.js` passes catalog sanity, fixture compare, fixture validation, and fixture loader adapter checks;
 - dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture` matches `Extension/config/recycle-device-catalog.fixture.json`; mismatch means catalog/config metadata changed and needs intentional review before packaged JSON work starts, with first semantic path and expected/actual values printed;
 - material filter order remains unchanged for mapped categories;
 - selected-device validation fallback remains correct;
