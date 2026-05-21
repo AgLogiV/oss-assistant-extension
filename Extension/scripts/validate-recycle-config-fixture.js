@@ -79,11 +79,37 @@ function addIssue(list, code, message) {
   list.push({ code, message });
 }
 
-function readFixture() {
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const inputIndex = args.indexOf("--input");
+
+  if (inputIndex < 0) {
+    if (args.length) {
+      console.error(`ERROR: Unknown argument: ${args[0]}`);
+      process.exit(1);
+    }
+    return { inputPath: "" };
+  }
+
+  if (inputIndex !== 0 || args.length !== 2) {
+    console.error("ERROR: Usage: node Extension/scripts/validate-recycle-config-fixture.js [--input path/to/candidate.json]");
+    process.exit(1);
+  }
+
+  const inputPath = String(args[inputIndex + 1] || "").trim();
+  if (!inputPath) {
+    console.error("ERROR: --input requires a JSON file path");
+    process.exit(1);
+  }
+
+  return { inputPath: path.resolve(process.cwd(), inputPath) };
+}
+
+function readConfig(configPath) {
   try {
-    return JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf8").replace(/^\uFEFF/, ""));
+    return JSON.parse(fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, ""));
   } catch (error) {
-    console.error(`ERROR: Cannot read/parse ${path.relative(REPO_ROOT, FIXTURE_PATH)}: ${error.message}`);
+    console.error(`ERROR: Cannot read/parse ${path.relative(REPO_ROOT, configPath)}: ${error.message}`);
     process.exit(1);
   }
 }
@@ -145,13 +171,13 @@ function validateTopLevel(fixture, errors) {
   }
 }
 
-function validateDevices(devices, profileSet, errors) {
+function validateDevices(devices, profileSet, errors, options) {
   if (!Array.isArray(devices)) {
     addIssue(errors, "devices.notArray", "devices is not an array");
     return [];
   }
 
-  if (devices.length !== EXPECTED_DEVICE_COUNT) {
+  if (options.strictFixtureExpectations && devices.length !== EXPECTED_DEVICE_COUNT) {
     addIssue(errors, "devices.count", `expected ${EXPECTED_DEVICE_COUNT} devices, got ${devices.length}`);
   }
 
@@ -257,7 +283,7 @@ function validateValidationProfiles(validationProfiles, errors) {
   return profileSet;
 }
 
-function validateMaterialFilters(generatedMaterialFilters, normalizedDevices, errors) {
+function validateMaterialFilters(generatedMaterialFilters, normalizedDevices, errors, options) {
   if (!isPlainObject(generatedMaterialFilters)) {
     addIssue(errors, "generatedMaterialFilters.notObject", "generatedMaterialFilters is not an object");
     return;
@@ -272,12 +298,14 @@ function validateMaterialFilters(generatedMaterialFilters, normalizedDevices, er
     }
   });
 
-  Object.entries(EXPECTED_MATERIAL_FILTERS).forEach(([categoryId, expected]) => {
-    const actual = generatedMaterialFilters[categoryId] || [];
-    if (!arraysEqual(actual, expected)) {
-      addIssue(errors, "generatedMaterialFilters.expectedOrder", `${categoryId} material filter changed. Expected ${expected.join(", ")}, got ${actual.join(", ") || "(empty)"}`);
-    }
-  });
+  if (options.strictFixtureExpectations) {
+    Object.entries(EXPECTED_MATERIAL_FILTERS).forEach(([categoryId, expected]) => {
+      const actual = generatedMaterialFilters[categoryId] || [];
+      if (!arraysEqual(actual, expected)) {
+        addIssue(errors, "generatedMaterialFilters.expectedOrder", `${categoryId} material filter changed. Expected ${expected.join(", ")}, got ${actual.join(", ") || "(empty)"}`);
+      }
+    });
+  }
 
   if (!arraysEqual(generatedMaterialFilters.austrian || [], EXPECTED_AUSTRIAN_FILTER)) {
     addIssue(errors, "generatedMaterialFilters.austrian", `Austrian material filter changed. Expected ${EXPECTED_AUSTRIAN_FILTER.join(", ")}, got ${(generatedMaterialFilters.austrian || []).join(", ") || "(empty)"}`);
@@ -298,20 +326,26 @@ function printIssueList(title, issues) {
 }
 
 function main() {
+  const { inputPath } = parseArgs(process.argv);
+  const configPath = inputPath || FIXTURE_PATH;
+  const strictFixtureExpectations = !inputPath;
   const errors = [];
-  const fixture = readFixture();
+  const fixture = readConfig(configPath);
+  const sourceLabel = inputPath ? "Input" : "Fixture";
+  const title = inputPath ? "Recycle config input validation" : "Recycle config fixture validation";
+  const options = { strictFixtureExpectations };
 
   validateTopLevel(fixture, errors);
   const profileSet = validateValidationProfiles(fixture.validationProfiles, errors);
-  const normalizedDevices = validateDevices(fixture.devices, profileSet, errors);
+  const normalizedDevices = validateDevices(fixture.devices, profileSet, errors, options);
   validateCategoryHelp(fixture.categoryHelp, errors);
-  validateMaterialFilters(fixture.generatedMaterialFilters, normalizedDevices, errors);
+  validateMaterialFilters(fixture.generatedMaterialFilters, normalizedDevices, errors, options);
 
   const categoriesWithDevices = new Set(normalizedDevices.map(device => device.categoryId).filter(Boolean));
 
-  console.log("Recycle config fixture validation");
+  console.log(title);
   console.log("");
-  console.log(`Fixture: ${path.relative(REPO_ROOT, FIXTURE_PATH)}`);
+  console.log(`${sourceLabel}: ${path.relative(REPO_ROOT, configPath)}`);
   console.log(`Schema version: ${fixture && fixture.schemaVersion}`);
   console.log(`Revision: ${fixture && fixture.revision}`);
   console.log(`Devices: ${Array.isArray(fixture.devices) ? fixture.devices.length : 0}`);
