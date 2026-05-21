@@ -407,7 +407,12 @@ Config/admin must not control DOM selectors, OSS navigation, CAM flow, arbitrary
    - A compare mismatch is a development signal that recycle catalog/config metadata changed and the fixture should be reviewed and updated intentionally.
    - Mismatch diagnostics report the first semantic path, for example `Mismatch at generatedMaterialFilters.austrian[1]`, and print expected/actual values.
    - Source of truth remains `Extension/content.js`; the runtime does not load the fixture and `manifest.json` is not involved.
-   - `validate-recycle-config-fixture.js` validates fixture schema/data. `load-recycle-config-fixture.js` proves fixture JSON can be loaded and normalized into a future in-memory adapter shape with `devicesById`, `devicesByCategory`, `categoryHelp`, `validationProfiles`, and `materialFilters`.
+   - Default fixture validation command: `node Extension/scripts/validate-recycle-config-fixture.js`.
+   - The default validator command still validates `Extension/config/recycle-device-catalog.fixture.json`.
+   - Candidate config validation command for future local configurator exports: `node Extension/scripts/validate-recycle-config-fixture.js --input path/to/candidate.json`.
+   - Candidate mode validates schema, shape, data, assets, validation profile references, and generated material filters, but it does not require exact parity with current `Extension/content.js`.
+   - Candidate validation is dev-only readiness for future local configurator exports. The extension runtime still does not load JSON config.
+   - `validate-recycle-config-fixture.js` validates fixture or candidate schema/data. `load-recycle-config-fixture.js` proves fixture JSON can be loaded and normalized into a future in-memory adapter shape with `devicesById`, `devicesByCategory`, `categoryHelp`, `validationProfiles`, and `materialFilters`.
 
 3. **Packaged JSON read-only experiment**
    - Add a packaged JSON file only after schema is stable.

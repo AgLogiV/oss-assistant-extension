@@ -27,6 +27,7 @@ For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_R
 - `Extension/dashboard/` - Express dashboard/API for managing material models, categories, and uploaded/remote images.
 - `Extension/dashboard/data/models.json` - local dashboard data store for material models.
 - `Extension/scripts/` - dev-only helper scripts. `validate-recycle-catalog.js` validates the local recycle catalog and help image mappings without loading into extension runtime. `export-recycle-config-fixture.js` exports the current recycle config fixture JSON to stdout for future packaged-config readiness checks. `validate-recycle-config-fixture.js`, `load-recycle-config-fixture.js`, and `check-recycle-config.js` complete the dev-only recycle config readiness chain.
+- `Extension/scripts/validate-recycle-config-fixture.js --input path/to/candidate.json` - dev-only candidate JSON validator for future local configurator exports. It validates schema/shape/data without requiring exact parity with current `Extension/content.js`; the extension runtime still does not load JSON config.
 - `.gitignore` - ignores archives, dependencies, `.env` files, and OS files.
 
 Old `.zip` backup/export files are not part of the extension runtime. Ignore them unless a future task explicitly asks to inspect an archive.
@@ -631,7 +632,10 @@ Dev-only config fixture export:
 - The exporter also guards expected top-level keys, `devices.length` versus catalog count, Austrian material filter order `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
 - Source of truth remains `Extension/content.js`; the extension runtime does not load this fixture and `manifest.json` is not involved.
 - Future runtime packaged JSON loading is blocked until validator and fixture compare pass, schema/merge/fallback are documented, `manifest.json` exposure is reviewed, and a manual regression plan covers recycle category panel, selected-device validation/help/material fill, Austrian, CAM, modems, clipboard, labels, and barcodes.
-- `validate-recycle-config-fixture.js` validates the JSON fixture shape/data. `load-recycle-config-fixture.js` proves the fixture can be loaded and normalized into future in-memory adapter shape without creating runtime dependency.
+- `validate-recycle-config-fixture.js` validates the JSON fixture shape/data by default, using `Extension/config/recycle-device-catalog.fixture.json`.
+- Candidate JSON exported by a future local configurator can be checked with `node Extension/scripts/validate-recycle-config-fixture.js --input path/to/candidate.json`.
+- Candidate mode validates schema/shape/data but does not require exact parity with current `Extension/content.js`.
+- `load-recycle-config-fixture.js` proves the fixture can be loaded and normalized into future in-memory adapter shape without creating runtime dependency.
 
 ## Working with Real OSS Pages / Missing DOM Context
 
