@@ -15,6 +15,7 @@
 - Added controlled recycle SAP/material auto-fill: when a valid per-flow snapshot has one safe material candidate and the OSS `MaterialId` field is empty, the extension fills the value without triggering auto-continue or changing the category-scoped material grid.
 - Added Austrian device-based recycle behavior for `ADB Modem 2220` and `Huawei HA35-22 HIBRID`, including device cards, selected-device validation, and selected-device material fill via the snapshot/controlled-fill flow.
 - Added a dev-only recycle config fixture exporter that reads `Extension/content.js` as text and writes the current config-shaped JSON to stdout for future packaged JSON readiness checks, including top-level key, device count, Austrian filter, and GPON order parity guards.
+- Added a dev-only generated/reference recycle config fixture at `Extension/config/recycle-device-catalog.fixture.json` plus `--compare-fixture` workflow for intentional metadata review before future packaged JSON work.
 - Added a session-based debug/test toggle for `Material auto-continue`, defaulting to `ON`.
 - Kept `cam_modules` as a separate missing-material flow outside the quick-button grid.
 - Known UI polish: the Huawei Austrian quick material button can render through the material fallback even if it does not yet have a dedicated quick-button image.

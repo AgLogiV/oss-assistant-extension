@@ -327,6 +327,7 @@ Minimum local checks:
 - syntax parse check for `Extension/content.js`
 - `node Extension/scripts/validate-recycle-catalog.js`
 - `node Extension/scripts/export-recycle-config-fixture.js` if the change should be reflected in future config/export parity checks
+- `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture` to confirm the dev-only fixture still matches, or to detect that it needs an intentional update
 - verify only intended files changed
 - verify the new entry is in `RECYCLE_DEVICE_CATALOG_RAW`
 - verify `deviceId` is unique
@@ -336,7 +337,7 @@ Minimum local checks:
 
 The catalog validator is dev-only. It is not loaded by the extension and does not change runtime behavior. Run it after changing recycle devices, help images, image paths, `validationProfileId`, or `materialId`. It checks catalog sanity, asset paths, validation profile IDs, generated material filter parity, and GPON material order. Expected healthy output: `Result: PASS`.
 
-The config fixture exporter is also dev-only. `Extension/scripts/export-recycle-config-fixture.js` reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`. It checks expected top-level keys, `devices.length`, Austrian material filter `1200017460, 1200017462`, and GPON order `1200014928, 118560, 118563, 118564, 122933, 122944`. It does not create runtime config files and is not loaded by the extension. Use it as a config-readiness/export parity check before future packaged JSON work.
+The config fixture exporter is also dev-only. `Extension/scripts/export-recycle-config-fixture.js` reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`. The generated/reference fixture is `Extension/config/recycle-device-catalog.fixture.json`. Update it with `node Extension/scripts/export-recycle-config-fixture.js > Extension/config/recycle-device-catalog.fixture.json`, then compare with `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture`. It checks expected top-level keys, `devices.length`, Austrian material filter `1200017460, 1200017462`, and GPON order `1200014928, 118560, 118563, 118564, 122933, 122944`. It does not create runtime config files and is not loaded by the extension. Source of truth remains `Extension/content.js`; `manifest.json` is not involved.
 
 Manual OSS checks when the device is enabled:
 

@@ -614,8 +614,13 @@ Dev-only config fixture export:
 
 - Run `node Extension/scripts/export-recycle-config-fixture.js` when checking readiness for future packaged JSON/config work.
 - The script reads `Extension/content.js` as text and writes JSON to stdout; it does not create runtime config files and is not loaded by the extension.
+- Reference fixture path: `Extension/config/recycle-device-catalog.fixture.json`.
+- Generate/update command: `node Extension/scripts/export-recycle-config-fixture.js > Extension/config/recycle-device-catalog.fixture.json`.
+- Compare command: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture`.
+- A mismatch means recycle catalog/config metadata changed and the fixture should be reviewed and updated intentionally.
 - Exported top-level keys: `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, `generatedMaterialFilters`.
 - The exporter also guards expected top-level keys, `devices.length` versus catalog count, Austrian material filter order `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
+- Source of truth remains `Extension/content.js`; the extension runtime does not load this fixture and `manifest.json` is not involved.
 
 ## Working with Real OSS Pages / Missing DOM Context
 

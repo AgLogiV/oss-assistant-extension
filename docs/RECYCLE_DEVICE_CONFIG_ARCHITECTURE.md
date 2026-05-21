@@ -343,6 +343,11 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - The exporter reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
    - It checks expected top-level keys, `devices.length` against catalog count, Austrian material filter `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
    - It does not create runtime config files and is not loaded by the extension.
+   - Current dev-only generated/reference fixture: `Extension/config/recycle-device-catalog.fixture.json`.
+   - Update command: `node Extension/scripts/export-recycle-config-fixture.js > Extension/config/recycle-device-catalog.fixture.json`.
+   - Compare command: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture`.
+   - A compare mismatch is a development signal that recycle catalog/config metadata changed and the fixture should be reviewed and updated intentionally.
+   - Source of truth remains `Extension/content.js`; the runtime does not load the fixture and `manifest.json` is not involved.
 
 3. **Packaged JSON read-only experiment**
    - Add a packaged JSON file only after schema is stable.
@@ -364,7 +369,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
 Before any config architecture implementation is considered safe:
 
 - catalog parity: normalized devices match current behavior;
-- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js` emits the expected top-level keys and current catalog/material/help/profile data before packaged JSON work starts, including `devices.length`, Austrian material filter, and GPON order guards;
+- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture` matches `Extension/config/recycle-device-catalog.fixture.json`; mismatch means catalog/config metadata changed and needs intentional review before packaged JSON work starts;
 - material filter order remains unchanged for mapped categories;
 - selected-device validation fallback remains correct;
 - selected-device OR validation still works;
