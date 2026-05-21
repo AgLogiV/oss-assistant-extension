@@ -521,6 +521,12 @@ Most likely code areas:
 
 ## Dashboard/API Dependency
 
+Current dashboard status:
+
+- The existing dashboard/API is useful for Swap Shop/SAP material models, but it should not be treated as the final architecture for recycle device catalog/config work.
+- Future recycle config should follow the hybrid roadmap in `docs/RECYCLE_DEVICE_CONFIG_ARCHITECTURE.md`: local configurator/export first, GitHub or static hosted config as an MVP, optional validated remote overlay later, and a proper hosted admin panel only after schema/fallback/validation are stable.
+- Remote config must stay optional and validated; invalid or missing remote data must not block local recycle behavior.
+
 Files:
 
 - `Extension/dashboard/server.js`

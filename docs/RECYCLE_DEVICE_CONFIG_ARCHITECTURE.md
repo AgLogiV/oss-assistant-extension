@@ -342,7 +342,48 @@ Config payloads should include:
 
 Rollback should be possible by serving a previous valid `revision` from the dashboard or clearing cached remote config. The extension should record which revision is active for troubleshooting.
 
-## 8. Safe Migration Plan
+## 8. Future Admin / Config Roadmap
+
+Recommended direction is a hybrid path, not an immediate dependency on the current dashboard:
+
+1. **Local configurator UI / local tool**
+   - A local editor can make device/category/material/help metadata easier for non-developers to edit.
+   - It should generate schema-valid JSON and never write directly into packaged extension runtime files.
+
+2. **GitHub or simple static hosting as the first remote MVP**
+   - JSON and image assets can be published to GitHub or simple static hosting.
+   - Git history gives review, version history, and rollback.
+   - Run `node Extension/scripts/check-recycle-config.js` before publishing config changes.
+
+3. **Optional validated remote overlay**
+   - The extension may later read remote config only as an optional validated overlay.
+   - Invalid, missing, or offline remote config must fall back to the embedded/local catalog.
+   - Remote config must not hard-replace the local fallback.
+
+4. **Proper hosted admin panel later**
+   - A hosted admin panel can add persistence, image upload, validation, revisioning, rollback, and simple roles.
+   - It is a long-term option, not an immediate requirement.
+   - The current dashboard implementation should not constrain the future recycle config design.
+
+Temporary internal dashboard/server hosting is possible for testing, but it must not become an unclear source of truth. If used, it needs explicit backup, revision, and rollback rules.
+
+Config/admin may manage only safe metadata:
+
+- `deviceId`;
+- `categoryId`;
+- `displayName`;
+- `materialId`;
+- `legacyMaterialIds`;
+- `imagePath`;
+- `helpImagePath`;
+- `warningText`;
+- `validationProfileId` from predefined profiles;
+- `enabled`;
+- `sortOrder`.
+
+Config/admin must not control DOM selectors, OSS navigation, CAM flow, arbitrary JavaScript, arbitrary unsafe regex validation, clipboard parsers, labels/barcodes, auto-continue logic, or keyboard normalization.
+
+## 9. Safe Migration Plan
 
 1. **Docs/schema first**
    - Keep this document and related docs current.
@@ -384,7 +425,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Cache only last-known-good validated config.
    - Add revision visibility and rollback rules.
 
-## 9. Test Gates
+## 10. Test Gates
 
 Before any config architecture implementation is considered safe:
 
@@ -414,7 +455,7 @@ Before any config architecture implementation is considered safe:
 
 The current validator is a local development helper. It reads `Extension/content.js` as text, extracts `RECYCLE_DEVICE_CATALOG_RAW`, `RECYCLE_SERIAL_HELP_BY_CATEGORY`, and predefined validation profile IDs, then checks catalog sanity, asset paths, material filter parity, and GPON order. It is not loaded by the extension runtime and must not become a runtime dependency.
 
-## 10. What Not To Change During Field Testing
+## 11. What Not To Change During Field Testing
 
 While colleagues are testing the current extension, avoid:
 
