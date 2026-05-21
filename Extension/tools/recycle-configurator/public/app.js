@@ -3,6 +3,8 @@
 const endpoint = "/api/fixture";
 const validationEndpoint = "/api/validate-fixture";
 let currentCandidate = null;
+let originalCandidateJson = "";
+let isDirty = false;
 
 function byId(id) {
   return document.getElementById(id);
@@ -35,6 +37,205 @@ function renderCategories(categories) {
   });
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeString(value) {
+  return String(value || "").trim();
+}
+
+function legacyMaterialIdsToText(value) {
+  return Array.isArray(value) ? value.join("\n") : "";
+}
+
+function parseLegacyMaterialIds(value) {
+  return String(value || "")
+    .split(/[\n,]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function validationProfileOptions() {
+  return Array.isArray(currentCandidate && currentCandidate.validationProfiles)
+    ? currentCandidate.validationProfiles.map(profile => normalizeString(profile)).filter(Boolean)
+    : [];
+}
+
+function categorySummaries(devices) {
+  const categoriesById = new Map();
+
+  devices.forEach(device => {
+    const categoryId = device.categoryId || "(missing)";
+    const existing = categoriesById.get(categoryId) || {
+      categoryId,
+      deviceCount: 0,
+      enabledDeviceCount: 0,
+      disabledDeviceCount: 0
+    };
+
+    existing.deviceCount += 1;
+    if (device.enabled !== false) existing.enabledDeviceCount += 1;
+    else existing.disabledDeviceCount += 1;
+    categoriesById.set(categoryId, existing);
+  });
+
+  return Array.from(categoriesById.values()).sort((left, right) => left.categoryId.localeCompare(right.categoryId));
+}
+
+function regenerateMaterialFilters(candidate) {
+  const filters = {};
+  const seenByCategory = new Map();
+  const devices = Array.isArray(candidate && candidate.devices) ? candidate.devices : [];
+
+  devices.forEach(device => {
+    if (!device || device.enabled === false) return;
+
+    const categoryId = normalizeString(device.categoryId);
+    const materialId = normalizeString(device.materialId);
+    if (!categoryId || !materialId) return;
+
+    if (!filters[categoryId]) {
+      filters[categoryId] = [];
+      seenByCategory.set(categoryId, new Set());
+    }
+
+    const seen = seenByCategory.get(categoryId);
+    if (!seen.has(materialId)) {
+      filters[categoryId].push(materialId);
+      seen.add(materialId);
+    }
+  });
+
+  return filters;
+}
+
+function candidateForAction() {
+  if (!currentCandidate) return null;
+
+  const candidate = cloneJson(currentCandidate);
+  candidate.devices = Array.isArray(candidate.devices) ? candidate.devices.map(device => ({
+    ...device,
+    displayName: normalizeString(device.displayName),
+    materialId: normalizeString(device.materialId),
+    legacyMaterialIds: Array.isArray(device.legacyMaterialIds) ? device.legacyMaterialIds.map(normalizeString).filter(Boolean) : [],
+    imagePath: normalizeString(device.imagePath),
+    helpImagePath: normalizeString(device.helpImagePath),
+    warningText: normalizeString(device.warningText),
+    validationProfileId: normalizeString(device.validationProfileId),
+    enabled: device.enabled !== false
+  })) : [];
+  candidate.generatedMaterialFilters = regenerateMaterialFilters(candidate);
+  currentCandidate.generatedMaterialFilters = cloneJson(candidate.generatedMaterialFilters);
+  return candidate;
+}
+
+function updateSummaryFromCandidate() {
+  const devices = Array.isArray(currentCandidate && currentCandidate.devices) ? currentCandidate.devices : [];
+  const categories = categorySummaries(devices);
+  const enabledCount = devices.filter(device => device.enabled !== false).length;
+
+  setText("device-count", String(devices.length));
+  setText("enabled-count", `${enabledCount} / ${devices.length - enabledCount}`);
+  setText("category-count", String(categories.length));
+  renderCategories(categories);
+}
+
+function updateDirtyState() {
+  if (!currentCandidate) {
+    isDirty = false;
+    setText("edit-status", "Unavailable");
+    return;
+  }
+
+  isDirty = JSON.stringify(currentCandidate) !== originalCandidateJson;
+  setText("edit-status", isDirty ? "Edited in browser memory" : "Clean");
+}
+
+function updateDeviceField(index, field, value) {
+  if (!currentCandidate || !Array.isArray(currentCandidate.devices) || !currentCandidate.devices[index]) return;
+
+  const device = currentCandidate.devices[index];
+  if (field === "legacyMaterialIds") {
+    device.legacyMaterialIds = parseLegacyMaterialIds(value);
+  } else if (field === "enabled") {
+    device.enabled = Boolean(value);
+    updateSummaryFromCandidate();
+  } else {
+    device[field] = normalizeString(value);
+  }
+
+  if (field === "materialId" || field === "enabled") {
+    currentCandidate.generatedMaterialFilters = regenerateMaterialFilters(currentCandidate);
+  }
+
+  updateDirtyState();
+  setText("export-status", isDirty ? "Edited candidate ready" : "Ready");
+}
+
+function inputCell(row, device, index, field, options = {}) {
+  const cell = document.createElement("td");
+  const control = options.multiline ? document.createElement("textarea") : document.createElement("input");
+
+  control.value = options.format ? options.format(device[field]) : normalizeString(device[field]);
+  control.dataset.deviceIndex = String(index);
+  control.dataset.field = field;
+  control.addEventListener("input", event => {
+    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
+  });
+
+  cell.appendChild(control);
+  row.appendChild(cell);
+}
+
+function validationProfileCell(row, device, index) {
+  const cell = document.createElement("td");
+  const select = document.createElement("select");
+
+  validationProfileOptions().forEach(profileId => {
+    const option = document.createElement("option");
+    option.value = profileId;
+    option.textContent = profileId;
+    select.appendChild(option);
+  });
+
+  select.value = normalizeString(device.validationProfileId);
+  select.dataset.deviceIndex = String(index);
+  select.dataset.field = "validationProfileId";
+  select.addEventListener("change", event => {
+    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
+  });
+
+  cell.appendChild(select);
+  row.appendChild(cell);
+}
+
+function enabledCell(row, device, index) {
+  const cell = document.createElement("td");
+  const label = document.createElement("label");
+  const input = document.createElement("input");
+
+  label.className = "checkbox-label";
+  input.type = "checkbox";
+  input.checked = device.enabled !== false;
+  input.dataset.deviceIndex = String(index);
+  input.dataset.field = "enabled";
+  input.addEventListener("change", event => {
+    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.checked);
+  });
+
+  label.appendChild(input);
+  label.append(" enabled");
+  cell.appendChild(label);
+  row.appendChild(cell);
+}
+
+function readonlyCell(row, value) {
+  const cell = document.createElement("td");
+  cell.textContent = value || "";
+  row.appendChild(cell);
+}
+
 function renderDevices(devices) {
   const body = byId("device-table-body");
   if (!body) return;
@@ -44,33 +245,32 @@ function renderDevices(devices) {
   if (!Array.isArray(devices) || !devices.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 6;
+    cell.colSpan = 10;
     cell.textContent = "No devices found in fixture.";
     row.appendChild(cell);
     body.appendChild(row);
     return;
   }
 
-  devices.forEach(device => {
+  devices.forEach((device, index) => {
     const row = document.createElement("tr");
-    [
-      device.deviceId,
-      device.categoryId,
-      device.displayName,
-      device.materialId,
-      device.validationProfileId,
-      device.enabled ? "true" : "false"
-    ].forEach(value => {
-      const cell = document.createElement("td");
-      cell.textContent = value || "";
-      row.appendChild(cell);
-    });
+    readonlyCell(row, device.deviceId);
+    readonlyCell(row, device.categoryId);
+    inputCell(row, device, index, "displayName");
+    inputCell(row, device, index, "materialId");
+    inputCell(row, device, index, "legacyMaterialIds", { multiline: true, format: legacyMaterialIdsToText });
+    inputCell(row, device, index, "imagePath");
+    inputCell(row, device, index, "helpImagePath");
+    inputCell(row, device, index, "warningText", { multiline: true });
+    validationProfileCell(row, device, index);
+    enabledCell(row, device, index);
     body.appendChild(row);
   });
 }
 
 function renderFixture(data) {
-  currentCandidate = data.candidate || null;
+  currentCandidate = data.candidate ? cloneJson(data.candidate) : null;
+  originalCandidateJson = currentCandidate ? JSON.stringify(currentCandidate) : "";
   setText("fixture-status", data.ok ? "Loaded" : "Failed");
   setText("export-status", currentCandidate ? "Ready" : "Unavailable");
   setText("fixture-source", data.source || "Extension/config/recycle-device-catalog.fixture.json");
@@ -79,22 +279,30 @@ function renderFixture(data) {
   setText("device-count", String(data.deviceCount ?? "-"));
   setText("enabled-count", `${data.enabledDeviceCount ?? "-"} / ${data.disabledDeviceCount ?? "-"}`);
   setText("category-count", String(data.categoryCount ?? "-"));
-  renderCategories(data.categories);
-  renderDevices(data.devices);
+  if (currentCandidate) {
+    updateSummaryFromCandidate();
+    renderDevices(currentCandidate.devices);
+  } else {
+    renderCategories(data.categories);
+    renderDevices(data.devices);
+  }
+  updateDirtyState();
   setExportReady(Boolean(currentCandidate));
 }
 
 function renderError(error) {
   currentCandidate = null;
+  originalCandidateJson = "";
   setText("fixture-status", "Failed");
   setText("export-status", "Unavailable");
+  updateDirtyState();
   setExportReady(false);
   const body = byId("device-table-body");
   if (body) {
     body.textContent = "";
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 6;
+    cell.colSpan = 10;
     cell.textContent = `Cannot load fixture: ${error.message}`;
     row.appendChild(cell);
     body.appendChild(row);
@@ -117,16 +325,17 @@ function candidateFileName(candidate) {
 }
 
 function exportCandidate() {
-  if (!currentCandidate) {
+  const candidate = candidateForAction();
+  if (!candidate) {
     setText("export-status", "Fixture not loaded");
     return;
   }
 
-  const json = `${JSON.stringify(currentCandidate, null, 2)}\n`;
+  const json = `${JSON.stringify(candidate, null, 2)}\n`;
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const filename = candidateFileName(currentCandidate);
+  const filename = candidateFileName(candidate);
 
   link.href = url;
   link.download = filename;
@@ -186,7 +395,8 @@ function renderCandidateValidationError(error) {
 }
 
 async function validateCandidate() {
-  if (!currentCandidate) {
+  const candidate = candidateForAction();
+  if (!candidate) {
     setText("candidate-validation-status", "No candidate loaded");
     return;
   }
@@ -203,7 +413,7 @@ async function validateCandidate() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
-      body: JSON.stringify(currentCandidate)
+      body: JSON.stringify(candidate)
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {

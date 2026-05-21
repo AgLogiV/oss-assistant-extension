@@ -13,8 +13,8 @@
         <p class="eyebrow">Dev-only local tool</p>
         <h1>Recycle Configurator Skeleton</h1>
         <p>
-          This read-only skeleton previews the dev fixture that future candidate JSON exports will follow.
-          It is not connected to the extension runtime and cannot edit or export config.
+          This dev-only skeleton previews the fixture and edits existing device metadata in browser memory.
+          It is not connected to the extension runtime and cannot save config.
         </p>
 
         <dl class="status-grid" aria-label="Current skeleton status">
@@ -29,6 +29,10 @@
           <div>
             <dt>Write endpoints</dt>
             <dd>None</dd>
+          </div>
+          <div>
+            <dt>Edit state</dt>
+            <dd id="edit-status">Clean</dd>
           </div>
           <div>
             <dt>Validation target</dt>
@@ -88,8 +92,8 @@
       <section class="panel panel-spaced" aria-labelledby="fixture-heading">
         <div class="section-header">
           <div>
-            <p class="eyebrow">Read-only fixture</p>
-            <h2 id="fixture-heading">Recycle Device Catalog Fixture</h2>
+            <p class="eyebrow">In-memory candidate</p>
+            <h2 id="fixture-heading">Recycle Device Catalog Devices</h2>
           </div>
           <p class="source-path" id="fixture-source">Extension/config/recycle-device-catalog.fixture.json</p>
         </div>
@@ -127,6 +131,10 @@
                 <th>categoryId</th>
                 <th>displayName</th>
                 <th>materialId</th>
+                <th>legacyMaterialIds</th>
+                <th>imagePath</th>
+                <th>helpImagePath</th>
+                <th>warningText</th>
                 <th>validationProfileId</th>
                 <th>enabled</th>
               </tr>

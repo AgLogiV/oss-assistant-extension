@@ -4,11 +4,11 @@ This is a dev-only local tool skeleton for future recycle device config editing/
 
 Current status:
 
-- serves a static read-only fixture preview page;
+- serves a static fixture preview and in-memory existing-device editor page;
 - uses built-in Node.js modules only;
 - loads `Extension/config/recycle-device-catalog.fixture.json` through a read-only local endpoint;
 - does not write files;
-- does not expose edit or export endpoints;
+- does not expose save or export endpoints;
 - is not imported by the extension runtime.
 
 ## Start Options
@@ -35,7 +35,7 @@ http://127.0.0.1:5177/
 
 The local server must remain running while the page is open. If the browser shows `ERR_CONNECTION_REFUSED`, the local server is not running or was stopped.
 
-## Read-only Fixture View
+## Fixture View and In-memory Device Editing
 
 The page calls this local endpoint:
 
@@ -43,16 +43,20 @@ The page calls this local endpoint:
 GET /api/fixture
 ```
 
-The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and returns a safe summary plus read-only device rows for display:
+The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and returns a safe summary plus candidate JSON for display and browser-memory edits:
 
 - fixture loaded status;
 - `schemaVersion` and `revision`;
 - device count;
 - enabled and disabled device count;
 - category count/list;
-- device rows with `deviceId`, `categoryId`, `displayName`, `materialId`, `validationProfileId`, and `enabled`.
+- editable existing-device rows for `displayName`, `materialId`, `legacyMaterialIds`, `imagePath`, `helpImagePath`, `warningText`, `validationProfileId`, and `enabled`.
 
-There are still no write endpoints, no edit/export logic, no runtime imports, and no extension runtime dependency.
+`deviceId` and `categoryId` are read-only. There is no device creation, deletion, or category moving. `validationProfileId` is selected from the loaded candidate `validationProfiles` list. `legacyMaterialIds` is edited as comma/newline separated text and stored as an array of strings.
+
+Edits are kept only in browser memory and are reflected by the dirty state indicator. Before candidate export or candidate validation, `generatedMaterialFilters` is regenerated from enabled devices with non-empty trimmed `materialId` values, grouped by `categoryId` in device order.
+
+There are still no save endpoints, no runtime imports, and no extension runtime dependency.
 
 ## Validation Panel
 

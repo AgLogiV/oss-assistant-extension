@@ -22,7 +22,7 @@ body {
 }
 
 .panel {
-  width: min(760px, 100%);
+  width: min(1180px, 100%);
   background: #ffffff;
   border: 1px solid #d9e0e7;
   border-radius: 8px;
@@ -213,6 +213,39 @@ th {
 td {
   color: #18202a;
   overflow-wrap: anywhere;
+}
+
+td input[type="text"],
+td input:not([type]),
+td select,
+td textarea {
+  width: 100%;
+  min-width: 150px;
+  border: 1px solid #c7d1dc;
+  border-radius: 4px;
+  padding: 7px 8px;
+  background: #ffffff;
+  color: #18202a;
+  font: inherit;
+  font-size: 12px;
+}
+
+td textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 90px;
+  white-space: nowrap;
+}
+
+.checkbox-label input {
+  width: 16px;
+  height: 16px;
 }
 
 dt {
