@@ -17,6 +17,7 @@
 - Added a dev-only recycle config fixture exporter that reads `Extension/content.js` as text and writes the current config-shaped JSON to stdout for future packaged JSON readiness checks, including top-level key, device count, Austrian filter, and GPON order parity guards.
 - Added a dev-only generated/reference recycle config fixture at `Extension/config/recycle-device-catalog.fixture.json` plus `--compare-fixture` workflow for intentional metadata review before future packaged JSON work.
 - Documented the readiness gate for any future runtime packaged JSON loader: validator and fixture compare must pass, schema/merge/fallback must be documented, `manifest.json` exposure must be reviewed, and dashboard override must remain optional.
+- Improved dev-only `--compare-fixture` mismatch diagnostics to report the first semantic path and expected/actual values without changing PASS behavior or JSON stdout mode.
 - Added a session-based debug/test toggle for `Material auto-continue`, defaulting to `ON`.
 - Kept `cam_modules` as a separate missing-material flow outside the quick-button grid.
 - Known UI polish: the Huawei Austrian quick material button can render through the material fallback even if it does not yet have a dedicated quick-button image.

@@ -361,6 +361,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Update command: `node Extension/scripts/export-recycle-config-fixture.js > Extension/config/recycle-device-catalog.fixture.json`.
    - Compare command: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture`.
    - A compare mismatch is a development signal that recycle catalog/config metadata changed and the fixture should be reviewed and updated intentionally.
+   - Mismatch diagnostics report the first semantic path, for example `Mismatch at generatedMaterialFilters.austrian[1]`, and print expected/actual values.
    - Source of truth remains `Extension/content.js`; the runtime does not load the fixture and `manifest.json` is not involved.
 
 3. **Packaged JSON read-only experiment**
@@ -384,7 +385,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
 Before any config architecture implementation is considered safe:
 
 - catalog parity: normalized devices match current behavior;
-- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture` matches `Extension/config/recycle-device-catalog.fixture.json`; mismatch means catalog/config metadata changed and needs intentional review before packaged JSON work starts;
+- dev-only fixture export parity: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture` matches `Extension/config/recycle-device-catalog.fixture.json`; mismatch means catalog/config metadata changed and needs intentional review before packaged JSON work starts, with first semantic path and expected/actual values printed;
 - material filter order remains unchanged for mapped categories;
 - selected-device validation fallback remains correct;
 - selected-device OR validation still works;

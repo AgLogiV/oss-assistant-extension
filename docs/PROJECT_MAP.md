@@ -618,6 +618,7 @@ Dev-only config fixture export:
 - Generate/update command: `node Extension/scripts/export-recycle-config-fixture.js > Extension/config/recycle-device-catalog.fixture.json`.
 - Compare command: `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture`.
 - A mismatch means recycle catalog/config metadata changed and the fixture should be reviewed and updated intentionally.
+- Mismatch output reports the first semantic path, for example `Mismatch at generatedMaterialFilters.austrian[1]`, plus expected/actual values.
 - Exported top-level keys: `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, `generatedMaterialFilters`.
 - The exporter also guards expected top-level keys, `devices.length` versus catalog count, Austrian material filter order `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
 - Source of truth remains `Extension/content.js`; the extension runtime does not load this fixture and `manifest.json` is not involved.
