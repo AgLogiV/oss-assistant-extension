@@ -15,8 +15,9 @@ body {
 
 .shell {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 32px;
 }
 
@@ -27,6 +28,10 @@ body {
   border-radius: 8px;
   padding: 32px;
   box-shadow: 0 16px 40px rgba(24, 32, 42, 0.08);
+}
+
+.panel-spaced {
+  margin-top: 20px;
 }
 
 .eyebrow {
@@ -45,12 +50,34 @@ h1 {
   letter-spacing: 0;
 }
 
+h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
 p {
   margin: 0 0 24px;
   max-width: 620px;
   color: #415064;
   font-size: 16px;
   line-height: 1.55;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.source-path,
+.muted {
+  margin: 0;
+  color: #68778a;
+  font-size: 13px;
 }
 
 .status-grid {
@@ -60,11 +87,73 @@ p {
   margin: 0;
 }
 
-.status-grid div {
+.status-grid div,
+.summary-grid div {
   border: 1px solid #d9e0e7;
   border-radius: 6px;
   padding: 14px 16px;
   background: #f9fbfc;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border: 1px solid #d9e0e7;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #18202a;
+  font-size: 13px;
+}
+
+.table-wrap {
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid #d9e0e7;
+  border-radius: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e7edf3;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: #f9fbfc;
+  color: #415064;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+td {
+  color: #18202a;
+  overflow-wrap: anywhere;
 }
 
 dt {
@@ -99,5 +188,13 @@ dd {
 
   .status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-header {
+    display: block;
   }
 }

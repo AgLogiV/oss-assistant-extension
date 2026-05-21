@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Recycle Configurator Skeleton</title>
     <link rel="stylesheet" href="./styles.css">
+    <script src="./app.js" defer></script>
   </head>
   <body>
     <main class="shell">
@@ -12,8 +13,8 @@
         <p class="eyebrow">Dev-only local tool</p>
         <h1>Recycle Configurator Skeleton</h1>
         <p>
-          This placeholder is reserved for future recycle device config editing and candidate JSON export.
-          It is not connected to the extension runtime.
+          This read-only skeleton previews the dev fixture that future candidate JSON exports will follow.
+          It is not connected to the extension runtime and cannot edit or export config.
         </p>
 
         <dl class="status-grid" aria-label="Current skeleton status">
@@ -22,8 +23,8 @@
             <dd>Extension/content.js</dd>
           </div>
           <div>
-            <dt>JSON loading</dt>
-            <dd>Not enabled</dd>
+            <dt>Fixture status</dt>
+            <dd id="fixture-status">Loading fixture...</dd>
           </div>
           <div>
             <dt>Write endpoints</dt>
@@ -34,6 +35,61 @@
             <dd>validate-recycle-config-fixture.js --input</dd>
           </div>
         </dl>
+      </section>
+
+      <section class="panel panel-spaced" aria-labelledby="fixture-heading">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Read-only fixture</p>
+            <h2 id="fixture-heading">Recycle Device Catalog Fixture</h2>
+          </div>
+          <p class="source-path" id="fixture-source">Extension/config/recycle-device-catalog.fixture.json</p>
+        </div>
+
+        <dl class="summary-grid" aria-label="Fixture summary">
+          <div>
+            <dt>Schema</dt>
+            <dd id="schema-version">-</dd>
+          </div>
+          <div>
+            <dt>Revision</dt>
+            <dd id="revision">-</dd>
+          </div>
+          <div>
+            <dt>Devices</dt>
+            <dd id="device-count">-</dd>
+          </div>
+          <div>
+            <dt>Enabled / Disabled</dt>
+            <dd id="enabled-count">-</dd>
+          </div>
+          <div>
+            <dt>Categories</dt>
+            <dd id="category-count">-</dd>
+          </div>
+        </dl>
+
+        <div class="category-list" id="category-list" aria-label="Fixture category list"></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>deviceId</th>
+                <th>categoryId</th>
+                <th>displayName</th>
+                <th>materialId</th>
+                <th>validationProfileId</th>
+                <th>enabled</th>
+              </tr>
+            </thead>
+            <tbody id="device-table-body">
+              <tr>
+                <td colspan="6">Loading devices...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
   </body>

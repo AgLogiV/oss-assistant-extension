@@ -4,9 +4,9 @@ This is a dev-only local tool skeleton for future recycle device config editing/
 
 Current status:
 
-- serves a static placeholder page;
+- serves a static read-only fixture preview page;
 - uses built-in Node.js modules only;
-- does not load JSON config;
+- loads `Extension/config/recycle-device-catalog.fixture.json` through a read-only local endpoint;
 - does not write files;
 - does not expose edit or export endpoints;
 - is not imported by the extension runtime.
@@ -34,6 +34,25 @@ http://127.0.0.1:5177/
 ```
 
 The local server must remain running while the page is open. If the browser shows `ERR_CONNECTION_REFUSED`, the local server is not running or was stopped.
+
+## Read-only Fixture View
+
+The page calls this local endpoint:
+
+```text
+GET /api/fixture
+```
+
+The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and returns a safe summary plus read-only device rows for display:
+
+- fixture loaded status;
+- `schemaVersion` and `revision`;
+- device count;
+- enabled and disabled device count;
+- category count/list;
+- device rows with `deviceId`, `categoryId`, `displayName`, `materialId`, `validationProfileId`, and `enabled`.
+
+There are still no write endpoints, no edit/export logic, no runtime imports, and no extension runtime dependency.
 
 Future candidate JSON exports should be validated with:
 

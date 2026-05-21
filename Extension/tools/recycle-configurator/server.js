@@ -9,6 +9,8 @@ const HOST = "127.0.0.1";
 const DEFAULT_PORT = 5177;
 const PORT = Number(process.env.PORT || DEFAULT_PORT);
 const PUBLIC_DIR = path.join(__dirname, "public");
+const EXTENSION_ROOT = path.resolve(__dirname, "..", "..");
+const FIXTURE_PATH = path.join(EXTENSION_ROOT, "config", "recycle-device-catalog.fixture.json");
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -28,6 +30,80 @@ function sendText(response, statusCode, text) {
   response.end(text);
 }
 
+function sendJson(request, response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store"
+  });
+  response.end(request.method === "HEAD" ? undefined : JSON.stringify(payload, null, 2));
+}
+
+function normalizeDevice(device) {
+  const source = device && typeof device === "object" ? device : {};
+  return {
+    deviceId: String(source.deviceId || "").trim(),
+    categoryId: String(source.categoryId || "").trim(),
+    displayName: String(source.displayName || "").trim(),
+    materialId: String(source.materialId || "").trim(),
+    validationProfileId: String(source.validationProfileId || "").trim(),
+    enabled: source.enabled !== false
+  };
+}
+
+function buildFixtureResponse(fixture) {
+  const devices = Array.isArray(fixture.devices) ? fixture.devices.map(normalizeDevice) : [];
+  const categoriesById = new Map();
+
+  devices.forEach(device => {
+    const categoryId = device.categoryId || "(missing)";
+    const existing = categoriesById.get(categoryId) || {
+      categoryId,
+      deviceCount: 0,
+      enabledDeviceCount: 0,
+      disabledDeviceCount: 0
+    };
+
+    existing.deviceCount += 1;
+    if (device.enabled) existing.enabledDeviceCount += 1;
+    else existing.disabledDeviceCount += 1;
+    categoriesById.set(categoryId, existing);
+  });
+
+  return {
+    ok: true,
+    source: "Extension/config/recycle-device-catalog.fixture.json",
+    schemaVersion: fixture.schemaVersion,
+    revision: fixture.revision || "",
+    deviceCount: devices.length,
+    enabledDeviceCount: devices.filter(device => device.enabled).length,
+    disabledDeviceCount: devices.filter(device => !device.enabled).length,
+    categoryCount: categoriesById.size,
+    categories: Array.from(categoriesById.values()).sort((left, right) => left.categoryId.localeCompare(right.categoryId)),
+    devices
+  };
+}
+
+function serveFixture(request, response) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    sendJson(request, response, 405, { ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  fs.readFile(FIXTURE_PATH, "utf8", (error, content) => {
+    if (error) {
+      sendJson(request, response, 500, { ok: false, error: "Cannot read recycle config fixture" });
+      return;
+    }
+
+    try {
+      const fixture = JSON.parse(content.replace(/^\uFEFF/, ""));
+      sendJson(request, response, 200, buildFixtureResponse(fixture));
+    } catch (parseError) {
+      sendJson(request, response, 500, { ok: false, error: "Cannot parse recycle config fixture" });
+    }
+  });
+}
+
 function resolvePublicPath(requestUrl) {
   const url = new URL(requestUrl, `http://${HOST}:${PORT}`);
   const pathname = decodeURIComponent(url.pathname);
@@ -42,6 +118,13 @@ function resolvePublicPath(requestUrl) {
 }
 
 function serveStatic(request, response) {
+  const url = new URL(request.url, `http://${HOST}:${PORT}`);
+
+  if (url.pathname === "/api/fixture") {
+    serveFixture(request, response);
+    return;
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     sendText(response, 405, "Method not allowed");
     return;
@@ -72,5 +155,5 @@ const server = http.createServer(serveStatic);
 
 server.listen(PORT, HOST, () => {
   console.log(`Recycle configurator skeleton: http://${HOST}:${PORT}/`);
-  console.log("Mode: dev-only static skeleton; no JSON loading or write endpoints.");
+  console.log("Mode: dev-only read-only fixture view; no write endpoints.");
 });
