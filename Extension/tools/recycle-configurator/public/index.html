@@ -16,6 +16,9 @@
           This dev-only skeleton previews the fixture and edits existing device metadata in browser memory.
           It is not connected to the extension runtime and cannot save config.
         </p>
+        <p class="notice">
+          Edits are browser-memory only. They are not saved to project files unless you export and validate a candidate JSON separately.
+        </p>
 
         <dl class="status-grid" aria-label="Current skeleton status">
           <div>
@@ -122,6 +125,21 @@
         </dl>
 
         <div class="category-list" id="category-list" aria-label="Fixture category list"></div>
+
+        <div class="table-tools" aria-label="Device table filters">
+          <label>
+            Search
+            <input id="device-search" type="search" placeholder="deviceId, categoryId, displayName, materialId" disabled>
+          </label>
+          <label>
+            Category
+            <select id="category-filter" disabled>
+              <option value="">All categories</option>
+            </select>
+          </label>
+          <button id="revert-candidate-btn" type="button" disabled>Revert changes</button>
+          <p class="filter-status" id="filter-status">Waiting for fixture</p>
+        </div>
 
         <div class="table-wrap">
           <table>

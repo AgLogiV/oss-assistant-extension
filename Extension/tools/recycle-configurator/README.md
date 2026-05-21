@@ -54,7 +54,11 @@ The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and re
 
 `deviceId` and `categoryId` are read-only. There is no device creation, deletion, or category moving. `validationProfileId` is selected from the loaded candidate `validationProfiles` list. `legacyMaterialIds` is edited as comma/newline separated text and stored as an array of strings.
 
+The device table can be filtered by search text across `deviceId`, `categoryId`, `displayName`, and `materialId`, plus a category dropdown based on the loaded candidate categories.
+
 Edits are kept only in browser memory and are reflected by the dirty state indicator. Before candidate export or candidate validation, `generatedMaterialFilters` is regenerated from enabled devices with non-empty trimmed `materialId` values, grouped by `categoryId` in device order.
+
+Use `Revert changes` to reset the browser-memory candidate back to the original loaded fixture data. This does not read or write project files.
 
 There are still no save endpoints, no runtime imports, and no extension runtime dependency.
 

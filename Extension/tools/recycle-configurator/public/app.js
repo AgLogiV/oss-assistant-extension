@@ -5,6 +5,8 @@ const validationEndpoint = "/api/validate-fixture";
 let currentCandidate = null;
 let originalCandidateJson = "";
 let isDirty = false;
+let activeSearch = "";
+let activeCategory = "";
 
 function byId(id) {
   return document.getElementById(id);
@@ -83,6 +85,41 @@ function categorySummaries(devices) {
   return Array.from(categoriesById.values()).sort((left, right) => left.categoryId.localeCompare(right.categoryId));
 }
 
+function setFormControlsReady(isReady) {
+  ["device-search", "category-filter"].forEach(id => {
+    const control = byId(id);
+    if (control) control.disabled = !isReady;
+  });
+}
+
+function updateRevertButton() {
+  const button = byId("revert-candidate-btn");
+  if (button) button.disabled = !currentCandidate || !isDirty;
+}
+
+function populateCategoryFilter(categories) {
+  const select = byId("category-filter");
+  if (!select) return;
+
+  const previousValue = select.value;
+  select.textContent = "";
+
+  const allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.textContent = "All categories";
+  select.appendChild(allOption);
+
+  categories.forEach(category => {
+    const option = document.createElement("option");
+    option.value = category.categoryId;
+    option.textContent = category.categoryId;
+    select.appendChild(option);
+  });
+
+  select.value = categories.some(category => category.categoryId === previousValue) ? previousValue : "";
+  activeCategory = select.value;
+}
+
 function regenerateMaterialFilters(candidate) {
   const filters = {};
   const seenByCategory = new Map();
@@ -108,6 +145,39 @@ function regenerateMaterialFilters(candidate) {
   });
 
   return filters;
+}
+
+function deviceMatchesFilters(device) {
+  const matchesCategory = !activeCategory || normalizeString(device.categoryId) === activeCategory;
+  if (!matchesCategory) return false;
+
+  const query = activeSearch.toLowerCase();
+  if (!query) return true;
+
+  return [
+    device.deviceId,
+    device.categoryId,
+    device.displayName,
+    device.materialId
+  ].some(value => normalizeString(value).toLowerCase().includes(query));
+}
+
+function filteredDeviceEntries() {
+  const devices = Array.isArray(currentCandidate && currentCandidate.devices) ? currentCandidate.devices : [];
+  return devices
+    .map((device, index) => ({ device, index }))
+    .filter(entry => deviceMatchesFilters(entry.device));
+}
+
+function updateFilterStatus(visibleCount) {
+  const totalCount = Array.isArray(currentCandidate && currentCandidate.devices) ? currentCandidate.devices.length : 0;
+  setText("filter-status", currentCandidate ? `${visibleCount} of ${totalCount} devices shown` : "Waiting for fixture");
+}
+
+function renderFilteredDevices() {
+  const entries = filteredDeviceEntries();
+  renderDevices(entries);
+  updateFilterStatus(entries.length);
 }
 
 function candidateForAction() {
@@ -139,6 +209,7 @@ function updateSummaryFromCandidate() {
   setText("enabled-count", `${enabledCount} / ${devices.length - enabledCount}`);
   setText("category-count", String(categories.length));
   renderCategories(categories);
+  populateCategoryFilter(categories);
 }
 
 function updateDirtyState() {
@@ -150,6 +221,7 @@ function updateDirtyState() {
 
   isDirty = JSON.stringify(currentCandidate) !== originalCandidateJson;
   setText("edit-status", isDirty ? "Edited in browser memory" : "Clean");
+  updateRevertButton();
 }
 
 function updateDeviceField(index, field, value) {
@@ -171,6 +243,7 @@ function updateDeviceField(index, field, value) {
 
   updateDirtyState();
   setText("export-status", isDirty ? "Edited candidate ready" : "Ready");
+  updateFilterStatus(filteredDeviceEntries().length);
 }
 
 function inputCell(row, device, index, field, options = {}) {
@@ -236,23 +309,24 @@ function readonlyCell(row, value) {
   row.appendChild(cell);
 }
 
-function renderDevices(devices) {
+function renderDevices(entries) {
   const body = byId("device-table-body");
   if (!body) return;
 
   body.textContent = "";
 
-  if (!Array.isArray(devices) || !devices.length) {
+  if (!Array.isArray(entries) || !entries.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 10;
-    cell.textContent = "No devices found in fixture.";
+    cell.textContent = currentCandidate ? "No devices match the current filters." : "No devices found in fixture.";
     row.appendChild(cell);
     body.appendChild(row);
     return;
   }
 
-  devices.forEach((device, index) => {
+  entries.forEach(entry => {
+    const { device, index } = entry;
     const row = document.createElement("tr");
     readonlyCell(row, device.deviceId);
     readonlyCell(row, device.categoryId);
@@ -281,22 +355,28 @@ function renderFixture(data) {
   setText("category-count", String(data.categoryCount ?? "-"));
   if (currentCandidate) {
     updateSummaryFromCandidate();
-    renderDevices(currentCandidate.devices);
+    renderFilteredDevices();
   } else {
     renderCategories(data.categories);
-    renderDevices(data.devices);
+    renderDevices((data.devices || []).map((device, index) => ({ device, index })));
+    updateFilterStatus(0);
   }
   updateDirtyState();
   setExportReady(Boolean(currentCandidate));
+  setFormControlsReady(Boolean(currentCandidate));
 }
 
 function renderError(error) {
   currentCandidate = null;
   originalCandidateJson = "";
+  activeSearch = "";
+  activeCategory = "";
   setText("fixture-status", "Failed");
   setText("export-status", "Unavailable");
+  updateFilterStatus(0);
   updateDirtyState();
   setExportReady(false);
+  setFormControlsReady(false);
   const body = byId("device-table-body");
   if (body) {
     body.textContent = "";
@@ -307,6 +387,25 @@ function renderError(error) {
     row.appendChild(cell);
     body.appendChild(row);
   }
+}
+
+function applyFiltersFromControls() {
+  const search = byId("device-search");
+  const category = byId("category-filter");
+  activeSearch = normalizeString(search && search.value);
+  activeCategory = normalizeString(category && category.value);
+  renderFilteredDevices();
+}
+
+function revertCandidate() {
+  if (!originalCandidateJson) return;
+
+  currentCandidate = JSON.parse(originalCandidateJson);
+  setText("export-status", "Ready");
+  setText("candidate-validation-status", "Not run");
+  updateSummaryFromCandidate();
+  renderFilteredDevices();
+  updateDirtyState();
 }
 
 function setExportReady(isReady) {
@@ -476,4 +575,19 @@ if (exportButton) {
 const validateCandidateButton = byId("validate-candidate-btn");
 if (validateCandidateButton) {
   validateCandidateButton.addEventListener("click", validateCandidate);
+}
+
+const deviceSearch = byId("device-search");
+if (deviceSearch) {
+  deviceSearch.addEventListener("input", applyFiltersFromControls);
+}
+
+const categoryFilter = byId("category-filter");
+if (categoryFilter) {
+  categoryFilter.addEventListener("change", applyFiltersFromControls);
+}
+
+const revertButton = byId("revert-candidate-btn");
+if (revertButton) {
+  revertButton.addEventListener("click", revertCandidate);
 }
