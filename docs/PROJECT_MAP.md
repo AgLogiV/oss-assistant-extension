@@ -621,6 +621,7 @@ Dev-only config fixture export:
 - Exported top-level keys: `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, `generatedMaterialFilters`.
 - The exporter also guards expected top-level keys, `devices.length` versus catalog count, Austrian material filter order `1200017460, 1200017462`, and GPON material order `1200014928, 118560, 118563, 118564, 122933, 122944`.
 - Source of truth remains `Extension/content.js`; the extension runtime does not load this fixture and `manifest.json` is not involved.
+- Future runtime packaged JSON loading is blocked until validator and fixture compare pass, schema/merge/fallback are documented, `manifest.json` exposure is reviewed, and a manual regression plan covers recycle category panel, selected-device validation/help/material fill, Austrian, CAM, modems, clipboard, labels, and barcodes.
 
 ## Working with Real OSS Pages / Missing DOM Context
 

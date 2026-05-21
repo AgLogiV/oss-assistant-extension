@@ -250,6 +250,20 @@ That means this option likely requires a reviewed `Extension/manifest.json` chan
 
 Do not add this casually while runtime behavior is being tested.
 
+### Runtime loader readiness gate
+
+The current fixture is a packaged-shape rehearsal, not a runtime source of truth. A runtime packaged JSON loader is not allowed until these gates are explicitly satisfied:
+
+- `node Extension/scripts/validate-recycle-catalog.js` returns `Result: PASS`;
+- `node Extension/scripts/export-recycle-config-fixture.js --compare-fixture` returns `Result: PASS`;
+- schema, normalize, merge, and fallback strategy are documented;
+- invalid or missing JSON has deterministic fallback to the embedded catalog in `Extension/content.js`;
+- required `manifest.json` / `web_accessible_resources` exposure is reviewed before any runtime fetch is added;
+- manual regression plan covers the category panel, selected-device validation/help/material fill, Austrian, CAM, modems, clipboard autofill, labels, and barcodes;
+- dashboard override remains an optional validated overlay, not a replacement for local fallback.
+
+Runtime loader work must still keep these out of JSON/dashboard control: DOM selectors, OSS navigation, CAM flow, arbitrary JavaScript or arbitrary regex validation, clipboard parsers, labels/barcodes, auto-continue logic, and keyboard normalization.
+
 ### Load unpacked
 
 With Chrome `Load unpacked`, packaged JSON can work as an extension asset if the path and manifest exposure are correct.
@@ -353,6 +367,7 @@ Rollback should be possible by serving a previous valid `revision` from the dash
    - Add a packaged JSON file only after schema is stable.
    - Add any required `manifest.json` exposure intentionally.
    - Keep embedded fallback until parity is proven.
+   - Do not add runtime loading until the runtime loader readiness gate passes.
 
 4. **Dashboard override**
    - Add a new remote endpoint for recycle config.
