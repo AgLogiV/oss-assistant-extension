@@ -241,6 +241,59 @@ function stableStringify(value) {
   return JSON.stringify(value);
 }
 
+function formatPath(pathParts) {
+  if (!pathParts.length) return "(root)";
+  return pathParts.map(part => {
+    if (typeof part === "number") return `[${part}]`;
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(part) ? `.${part}` : `[${JSON.stringify(part)}]`;
+  }).join("").replace(/^\./, "");
+}
+
+function previewValue(value) {
+  const text = JSON.stringify(value);
+  if (typeof text !== "string") return String(text);
+  return text.length > 240 ? `${text.slice(0, 237)}...` : text;
+}
+
+function findFirstDifference(expected, actual, pathParts = []) {
+  if (stableStringify(expected) === stableStringify(actual)) return null;
+
+  const expectedIsArray = Array.isArray(expected);
+  const actualIsArray = Array.isArray(actual);
+  if (expectedIsArray || actualIsArray) {
+    if (!expectedIsArray || !actualIsArray) {
+      return { path: formatPath(pathParts), expected, actual };
+    }
+    const maxLength = Math.max(expected.length, actual.length);
+    for (let index = 0; index < maxLength; index += 1) {
+      if (index >= expected.length || index >= actual.length) {
+        return { path: formatPath([...pathParts, index]), expected: expected[index], actual: actual[index] };
+      }
+      const diff = findFirstDifference(expected[index], actual[index], [...pathParts, index]);
+      if (diff) return diff;
+    }
+    return { path: formatPath(pathParts), expected, actual };
+  }
+
+  const expectedIsObject = expected && Object.prototype.toString.call(expected) === "[object Object]";
+  const actualIsObject = actual && Object.prototype.toString.call(actual) === "[object Object]";
+  if (expectedIsObject || actualIsObject) {
+    if (!expectedIsObject || !actualIsObject) {
+      return { path: formatPath(pathParts), expected, actual };
+    }
+    const keys = Array.from(new Set([...Object.keys(expected), ...Object.keys(actual)])).sort();
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(expected, key) || !Object.prototype.hasOwnProperty.call(actual, key)) {
+        return { path: formatPath([...pathParts, key]), expected: expected[key], actual: actual[key] };
+      }
+      const diff = findFirstDifference(expected[key], actual[key], [...pathParts, key]);
+      if (diff) return diff;
+    }
+  }
+
+  return { path: formatPath(pathParts), expected, actual };
+}
+
 function normalizeDeviceForConfig(device, categoryValidationProfiles) {
   const categoryId = String(device.categoryId || "").trim();
   return {
@@ -353,8 +406,14 @@ function compareFixture(fixture) {
   const current = stableStringify(fixture);
   const expected = stableStringify(stored);
   if (current !== expected) {
+    const diff = findFirstDifference(stored, fixture);
     console.error("Result: FAIL");
     console.error(`Current generated recycle config differs from ${path.relative(REPO_ROOT, FIXTURE_PATH)}.`);
+    if (diff) {
+      console.error(`Mismatch at ${diff.path}`);
+      console.error(`expected: ${previewValue(diff.expected)}`);
+      console.error(`actual: ${previewValue(diff.actual)}`);
+    }
     console.error("This is a dev-only signal. If the catalog change is intentional, regenerate and review the fixture.");
     process.exit(1);
   }
