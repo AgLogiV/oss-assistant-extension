@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const http = require("http");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -15,6 +16,8 @@ const REPO_ROOT = path.resolve(EXTENSION_ROOT, "..");
 const FIXTURE_PATH = path.join(EXTENSION_ROOT, "config", "recycle-device-catalog.fixture.json");
 const VALIDATOR_PATH = path.join(EXTENSION_ROOT, "scripts", "validate-recycle-config-fixture.js");
 const FIXTURE_RELATIVE_PATH = "Extension/config/recycle-device-catalog.fixture.json";
+const MAX_CANDIDATE_BODY_BYTES = 1024 * 1024;
+const TEMP_DIR_PREFIX = "oss-recycle-configurator-";
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -40,6 +43,55 @@ function sendJson(request, response, statusCode, payload) {
     "Cache-Control": "no-store"
   });
   response.end(request.method === "HEAD" ? undefined : JSON.stringify(payload, null, 2));
+}
+
+function cleanupTempCandidate(tempDir, tempFile, callback) {
+  const finish = typeof callback === "function" ? callback : () => {};
+  if (!tempDir) {
+    finish();
+    return;
+  }
+
+  fs.unlink(tempFile, () => {
+    fs.rmdir(tempDir, () => {
+      finish();
+    });
+  });
+}
+
+function readJsonBody(request, callback) {
+  let raw = "";
+  let byteLength = 0;
+  let completed = false;
+
+  function done(error, value) {
+    if (completed) return;
+    completed = true;
+    callback(error, value);
+  }
+
+  request.on("data", chunk => {
+    if (completed) return;
+    byteLength += chunk.length;
+    if (byteLength > MAX_CANDIDATE_BODY_BYTES) {
+      done(new Error("Candidate JSON body is too large"));
+      return;
+    }
+    raw += chunk.toString("utf8");
+  });
+
+  request.on("end", () => {
+    if (completed) return;
+    try {
+      done(null, JSON.parse(raw || "{}"));
+    } catch (error) {
+      done(new Error("Candidate JSON body is not valid JSON"));
+    }
+  });
+
+  request.on("error", error => {
+    done(error);
+  });
 }
 
 function normalizeDevice(device) {
@@ -198,6 +250,111 @@ function serveFixtureValidation(request, response) {
   });
 }
 
+function runValidator(inputPath, inputLabel, callback) {
+  const child = spawn(process.execPath, [VALIDATOR_PATH, "--input", inputPath], {
+    cwd: REPO_ROOT,
+    shell: false,
+    windowsHide: true
+  });
+
+  let stdout = "";
+  let stderr = "";
+  let settled = false;
+
+  child.stdout.on("data", chunk => {
+    stdout += chunk.toString("utf8");
+  });
+
+  child.stderr.on("data", chunk => {
+    stderr += chunk.toString("utf8");
+  });
+
+  child.on("error", error => {
+    if (settled) return;
+    settled = true;
+    callback({
+      ok: false,
+      pass: false,
+      exitCode: null,
+      error: error.message,
+      stdout,
+      stderr
+    });
+  });
+
+  child.on("close", exitCode => {
+    if (settled) return;
+    settled = true;
+    callback({
+      ok: true,
+      pass: exitCode === 0,
+      exitCode,
+      command: "validate-recycle-config-fixture.js --input",
+      input: inputLabel,
+      stdout,
+      stderr
+    });
+  });
+}
+
+function serveCandidateValidation(request, response) {
+  if (request.method !== "POST") {
+    sendJson(request, response, 405, { ok: false, pass: false, error: "Method not allowed" });
+    return;
+  }
+
+  readJsonBody(request, (readError, candidate) => {
+    if (readError) {
+      sendJson(request, response, 400, {
+        ok: false,
+        pass: false,
+        exitCode: null,
+        error: readError.message,
+        stdout: "",
+        stderr: ""
+      });
+      return;
+    }
+
+    fs.mkdtemp(path.join(os.tmpdir(), TEMP_DIR_PREFIX), (tempDirError, tempDir) => {
+      if (tempDirError) {
+        sendJson(request, response, 500, {
+          ok: false,
+          pass: false,
+          exitCode: null,
+          error: "Cannot create temp directory",
+          stdout: "",
+          stderr: ""
+        });
+        return;
+      }
+
+      const tempFile = path.join(tempDir, "candidate.json");
+      fs.writeFile(tempFile, `${JSON.stringify(candidate, null, 2)}\n`, "utf8", writeError => {
+        if (writeError) {
+          cleanupTempCandidate(tempDir, tempFile, () => {
+            sendJson(request, response, 500, {
+              ok: false,
+              pass: false,
+              exitCode: null,
+              error: "Cannot write temp candidate file",
+              stdout: "",
+              stderr: ""
+            });
+          });
+          return;
+        }
+
+        runValidator(tempFile, "temp-candidate.json", result => {
+          cleanupTempCandidate(tempDir, tempFile, () => {
+            sendJson(request, response, result.ok ? 200 : 500, result);
+          });
+        });
+      });
+    });
+  });
+}
+
 function resolvePublicPath(requestUrl) {
   const url = new URL(requestUrl, `http://${HOST}:${PORT}`);
   const pathname = decodeURIComponent(url.pathname);
@@ -221,6 +378,11 @@ function serveStatic(request, response) {
 
   if (url.pathname === "/api/validate-fixture") {
     serveFixtureValidation(request, response);
+    return;
+  }
+
+  if (url.pathname === "/api/validate-candidate") {
+    serveCandidateValidation(request, response);
     return;
   }
 

@@ -102,8 +102,10 @@ function renderError(error) {
 }
 
 function setExportReady(isReady) {
-  const button = byId("export-candidate-btn");
-  if (button) button.disabled = !isReady;
+  ["export-candidate-btn", "validate-candidate-btn"].forEach(id => {
+    const button = byId(id);
+    if (button) button.disabled = !isReady;
+  });
 }
 
 function candidateFileName(candidate) {
@@ -144,10 +146,26 @@ function setValidationRunning(isRunning) {
   }
 }
 
+function setCandidateValidationRunning(isRunning) {
+  const button = byId("validate-candidate-btn");
+  if (button) {
+    button.disabled = isRunning || !currentCandidate;
+    button.textContent = isRunning ? "Validating Candidate..." : "Validate Candidate";
+  }
+}
+
 function renderValidationResult(data) {
   setText("validation-status", data.pass ? "PASS" : "FAIL");
   setText("validation-exit-code", data.exitCode === null || data.exitCode === undefined ? "-" : String(data.exitCode));
   setText("validation-input", data.input || "Extension/config/recycle-device-catalog.fixture.json");
+  setText("validation-stdout", data.stdout || "(empty)");
+  setText("validation-stderr", data.stderr || "(empty)");
+}
+
+function renderCandidateValidationResult(data) {
+  setText("candidate-validation-status", data.pass ? "PASS" : "FAIL");
+  setText("validation-exit-code", data.exitCode === null || data.exitCode === undefined ? "-" : String(data.exitCode));
+  setText("validation-input", data.input || "temp-candidate.json");
   setText("validation-stdout", data.stdout || "(empty)");
   setText("validation-stderr", data.stderr || "(empty)");
 }
@@ -157,6 +175,46 @@ function renderValidationError(error) {
   setText("validation-exit-code", "-");
   setText("validation-stdout", "(empty)");
   setText("validation-stderr", error.message);
+}
+
+function renderCandidateValidationError(error) {
+  setText("candidate-validation-status", "ERROR");
+  setText("validation-exit-code", "-");
+  setText("validation-input", "temp-candidate.json");
+  setText("validation-stdout", "(empty)");
+  setText("validation-stderr", error.message);
+}
+
+async function validateCandidate() {
+  if (!currentCandidate) {
+    setText("candidate-validation-status", "No candidate loaded");
+    return;
+  }
+
+  setCandidateValidationRunning(true);
+  setText("candidate-validation-status", "Running");
+  setText("validation-exit-code", "-");
+  setText("validation-input", "temp-candidate.json");
+  setText("validation-stdout", "Running candidate validator...");
+  setText("validation-stderr", "(empty)");
+
+  try {
+    const response = await fetch("/api/validate-candidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(currentCandidate)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    renderCandidateValidationResult(data);
+  } catch (error) {
+    renderCandidateValidationError(error);
+  } finally {
+    setCandidateValidationRunning(false);
+  }
 }
 
 async function validateFixture() {
@@ -203,4 +261,9 @@ if (validateButton) {
 const exportButton = byId("export-candidate-btn");
 if (exportButton) {
   exportButton.addEventListener("click", exportCandidate);
+}
+
+const validateCandidateButton = byId("validate-candidate-btn");
+if (validateCandidateButton) {
+  validateCandidateButton.addEventListener("click", validateCandidate);
 }

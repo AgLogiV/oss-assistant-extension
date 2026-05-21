@@ -86,6 +86,20 @@ recycle-device-catalog.candidate.dev-current.json
 
 This uses `Blob` and `URL.createObjectURL` in the browser. The server does not write files, does not expose a save endpoint, and does not accept candidate paths.
 
+## Candidate Validation
+
+The page can validate the currently loaded candidate JSON without saving it permanently.
+
+It calls this local endpoint:
+
+```text
+POST /api/validate-candidate
+```
+
+The browser sends the candidate JSON body, not a file path or command. The server writes the JSON to a temporary file under the operating system temp directory, runs the existing validator with `--input <temp-file>` by using `process.execPath` and `spawn` with `shell: false`, then deletes the temp file where possible.
+
+The endpoint has a 1 MB request body limit. It does not create permanent project files and does not accept arbitrary command input or arbitrary file paths.
+
 Future candidate JSON exports should be validated with:
 
 ```bash

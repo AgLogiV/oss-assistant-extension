@@ -136,7 +136,7 @@ button:disabled {
 }
 
 .validation-grid {
-  grid-template-columns: 180px 160px 140px minmax(0, 1fr);
+  grid-template-columns: 180px 180px 160px 140px minmax(0, 1fr);
 }
 
 .output-grid {
