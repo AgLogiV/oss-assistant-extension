@@ -54,6 +54,26 @@ The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and re
 
 There are still no write endpoints, no edit/export logic, no runtime imports, and no extension runtime dependency.
 
+## Validation Panel
+
+The page also has a dev-only validation button for the fixed fixture.
+
+It calls this local endpoint:
+
+```text
+GET /api/validate-fixture
+```
+
+The endpoint runs the existing validator with the same Node executable that started the local server:
+
+```bash
+node Extension/scripts/validate-recycle-config-fixture.js --input Extension/config/recycle-device-catalog.fixture.json
+```
+
+The browser cannot provide command text or file paths. The endpoint validates only the fixed fixture path and returns structured `ok`, `pass`, `exitCode`, `stdout`, and `stderr` fields for display.
+
+There are still no write endpoints, no edit/export logic, no runtime imports, and no extension runtime dependency.
+
 Future candidate JSON exports should be validated with:
 
 ```bash

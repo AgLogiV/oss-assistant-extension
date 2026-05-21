@@ -1,6 +1,7 @@
 "use strict";
 
 const endpoint = "/api/fixture";
+const validationEndpoint = "/api/validate-fixture";
 
 function byId(id) {
   return document.getElementById(id);
@@ -93,6 +94,50 @@ function renderError(error) {
   }
 }
 
+function setValidationRunning(isRunning) {
+  const button = byId("validate-fixture-btn");
+  if (button) {
+    button.disabled = isRunning;
+    button.textContent = isRunning ? "Validating..." : "Validate Fixture";
+  }
+}
+
+function renderValidationResult(data) {
+  setText("validation-status", data.pass ? "PASS" : "FAIL");
+  setText("validation-exit-code", data.exitCode === null || data.exitCode === undefined ? "-" : String(data.exitCode));
+  setText("validation-input", data.input || "Extension/config/recycle-device-catalog.fixture.json");
+  setText("validation-stdout", data.stdout || "(empty)");
+  setText("validation-stderr", data.stderr || "(empty)");
+}
+
+function renderValidationError(error) {
+  setText("validation-status", "ERROR");
+  setText("validation-exit-code", "-");
+  setText("validation-stdout", "(empty)");
+  setText("validation-stderr", error.message);
+}
+
+async function validateFixture() {
+  setValidationRunning(true);
+  setText("validation-status", "Running");
+  setText("validation-exit-code", "-");
+  setText("validation-stdout", "Running validator...");
+  setText("validation-stderr", "(empty)");
+
+  try {
+    const response = await fetch(validationEndpoint, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    renderValidationResult(data);
+  } catch (error) {
+    renderValidationError(error);
+  } finally {
+    setValidationRunning(false);
+  }
+}
+
 async function loadFixture() {
   try {
     const response = await fetch(endpoint, { cache: "no-store" });
@@ -107,3 +152,8 @@ async function loadFixture() {
 }
 
 loadFixture();
+
+const validateButton = byId("validate-fixture-btn");
+if (validateButton) {
+  validateButton.addEventListener("click", validateFixture);
+}

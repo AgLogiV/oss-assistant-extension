@@ -37,6 +37,42 @@
         </dl>
       </section>
 
+      <section class="panel panel-spaced" aria-labelledby="validation-heading">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Dev-only validation</p>
+            <h2 id="validation-heading">Current Fixture Validation</h2>
+          </div>
+          <button id="validate-fixture-btn" type="button">Validate Fixture</button>
+        </div>
+
+        <dl class="summary-grid validation-grid" aria-label="Fixture validation summary">
+          <div>
+            <dt>Status</dt>
+            <dd id="validation-status">Not run</dd>
+          </div>
+          <div>
+            <dt>Exit code</dt>
+            <dd id="validation-exit-code">-</dd>
+          </div>
+          <div>
+            <dt>Input</dt>
+            <dd id="validation-input">Extension/config/recycle-device-catalog.fixture.json</dd>
+          </div>
+        </dl>
+
+        <div class="output-grid">
+          <div>
+            <h3>stdout</h3>
+            <pre id="validation-stdout">Validation output will appear here.</pre>
+          </div>
+          <div>
+            <h3>stderr</h3>
+            <pre id="validation-stderr">Validation errors will appear here.</pre>
+          </div>
+        </div>
+      </section>
+
       <section class="panel panel-spaced" aria-labelledby="fixture-heading">
         <div class="section-header">
           <div>

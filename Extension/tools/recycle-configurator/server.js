@@ -4,13 +4,17 @@
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const HOST = "127.0.0.1";
 const DEFAULT_PORT = 5177;
 const PORT = Number(process.env.PORT || DEFAULT_PORT);
 const PUBLIC_DIR = path.join(__dirname, "public");
 const EXTENSION_ROOT = path.resolve(__dirname, "..", "..");
+const REPO_ROOT = path.resolve(EXTENSION_ROOT, "..");
 const FIXTURE_PATH = path.join(EXTENSION_ROOT, "config", "recycle-device-catalog.fixture.json");
+const VALIDATOR_PATH = path.join(EXTENSION_ROOT, "scripts", "validate-recycle-config-fixture.js");
+const FIXTURE_RELATIVE_PATH = "Extension/config/recycle-device-catalog.fixture.json";
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -104,6 +108,63 @@ function serveFixture(request, response) {
   });
 }
 
+function serveFixtureValidation(request, response) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    sendJson(request, response, 405, { ok: false, pass: false, error: "Method not allowed" });
+    return;
+  }
+
+  const args = [
+    VALIDATOR_PATH,
+    "--input",
+    path.join(EXTENSION_ROOT, "config", "recycle-device-catalog.fixture.json")
+  ];
+  const child = spawn(process.execPath, args, {
+    cwd: REPO_ROOT,
+    shell: false,
+    windowsHide: true
+  });
+
+  let stdout = "";
+  let stderr = "";
+  let settled = false;
+
+  child.stdout.on("data", chunk => {
+    stdout += chunk.toString("utf8");
+  });
+
+  child.stderr.on("data", chunk => {
+    stderr += chunk.toString("utf8");
+  });
+
+  child.on("error", error => {
+    if (settled) return;
+    settled = true;
+    sendJson(request, response, 500, {
+      ok: false,
+      pass: false,
+      exitCode: null,
+      error: error.message,
+      stdout,
+      stderr
+    });
+  });
+
+  child.on("close", exitCode => {
+    if (settled) return;
+    settled = true;
+    sendJson(request, response, 200, {
+      ok: true,
+      pass: exitCode === 0,
+      exitCode,
+      command: "validate-recycle-config-fixture.js --input",
+      input: FIXTURE_RELATIVE_PATH,
+      stdout,
+      stderr
+    });
+  });
+}
+
 function resolvePublicPath(requestUrl) {
   const url = new URL(requestUrl, `http://${HOST}:${PORT}`);
   const pathname = decodeURIComponent(url.pathname);
@@ -122,6 +183,11 @@ function serveStatic(request, response) {
 
   if (url.pathname === "/api/fixture") {
     serveFixture(request, response);
+    return;
+  }
+
+  if (url.pathname === "/api/validate-fixture") {
+    serveFixtureValidation(request, response);
     return;
   }
 
@@ -155,5 +221,5 @@ const server = http.createServer(serveStatic);
 
 server.listen(PORT, HOST, () => {
   console.log(`Recycle configurator skeleton: http://${HOST}:${PORT}/`);
-  console.log("Mode: dev-only read-only fixture view; no write endpoints.");
+  console.log("Mode: dev-only read-only fixture view and validation panel; no write endpoints.");
 });
