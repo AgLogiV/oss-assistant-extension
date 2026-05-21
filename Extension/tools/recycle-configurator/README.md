@@ -72,6 +72,8 @@ node Extension/scripts/validate-recycle-config-fixture.js --input Extension/conf
 
 The browser cannot provide command text or file paths. The endpoint validates only the fixed fixture path and returns structured `ok`, `pass`, `exitCode`, `stdout`, and `stderr` fields for display.
 
+Validator execution has a 20 second timeout. Captured `stdout` and `stderr` are limited to 128 KB each; truncated output is marked in the returned text and with `stdoutTruncated` / `stderrTruncated`.
+
 There are still no write endpoints, no edit/export logic, no runtime imports, and no extension runtime dependency.
 
 ## Candidate JSON Export
@@ -99,6 +101,8 @@ POST /api/validate-candidate
 The browser sends the candidate JSON body, not a file path or command. The server writes the JSON to a temporary file under the operating system temp directory, runs the existing validator with `--input <temp-file>` by using `process.execPath` and `spawn` with `shell: false`, then deletes the temp file where possible.
 
 The endpoint has a 1 MB request body limit. It does not create permanent project files and does not accept arbitrary command input or arbitrary file paths.
+
+Candidate validation uses the same 20 second validator timeout and 128 KB per-stream output capture limit as fixture validation.
 
 Future candidate JSON exports should be validated with:
 

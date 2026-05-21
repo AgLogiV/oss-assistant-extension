@@ -17,6 +17,8 @@ const FIXTURE_PATH = path.join(EXTENSION_ROOT, "config", "recycle-device-catalog
 const VALIDATOR_PATH = path.join(EXTENSION_ROOT, "scripts", "validate-recycle-config-fixture.js");
 const FIXTURE_RELATIVE_PATH = "Extension/config/recycle-device-catalog.fixture.json";
 const MAX_CANDIDATE_BODY_BYTES = 1024 * 1024;
+const VALIDATOR_TIMEOUT_MS = 20 * 1000;
+const MAX_VALIDATOR_OUTPUT_BYTES = 128 * 1024;
 const TEMP_DIR_PREFIX = "oss-recycle-configurator-";
 
 const MIME_TYPES = {
@@ -92,6 +94,51 @@ function readJsonBody(request, callback) {
   request.on("error", error => {
     done(error);
   });
+}
+
+function createOutputCapture() {
+  return {
+    text: "",
+    bytes: 0,
+    truncated: false
+  };
+}
+
+function appendLimitedOutput(capture, chunk) {
+  if (capture.truncated) return;
+
+  const text = chunk.toString("utf8");
+  const bytes = Buffer.byteLength(text, "utf8");
+  const remaining = MAX_VALIDATOR_OUTPUT_BYTES - capture.bytes;
+
+  if (bytes <= remaining) {
+    capture.text += text;
+    capture.bytes += bytes;
+    return;
+  }
+
+  if (remaining > 0) {
+    capture.text += Buffer.from(text, "utf8").subarray(0, remaining).toString("utf8");
+    capture.bytes = MAX_VALIDATOR_OUTPUT_BYTES;
+  }
+  capture.truncated = true;
+}
+
+function capturedOutput(capture, label) {
+  if (!capture.truncated) return capture.text;
+  return `${capture.text}\n[${label} truncated at ${MAX_VALIDATOR_OUTPUT_BYTES} bytes]\n`;
+}
+
+function validatorResult(baseResult, stdoutCapture, stderrCapture) {
+  return {
+    ...baseResult,
+    stdout: capturedOutput(stdoutCapture, "stdout"),
+    stderr: capturedOutput(stderrCapture, "stderr"),
+    stdoutTruncated: stdoutCapture.truncated,
+    stderrTruncated: stderrCapture.truncated,
+    timeoutMs: VALIDATOR_TIMEOUT_MS,
+    outputLimitBytes: MAX_VALIDATOR_OUTPUT_BYTES
+  };
 }
 
 function normalizeDevice(device) {
@@ -199,54 +246,8 @@ function serveFixtureValidation(request, response) {
     return;
   }
 
-  const args = [
-    VALIDATOR_PATH,
-    "--input",
-    path.join(EXTENSION_ROOT, "config", "recycle-device-catalog.fixture.json")
-  ];
-  const child = spawn(process.execPath, args, {
-    cwd: REPO_ROOT,
-    shell: false,
-    windowsHide: true
-  });
-
-  let stdout = "";
-  let stderr = "";
-  let settled = false;
-
-  child.stdout.on("data", chunk => {
-    stdout += chunk.toString("utf8");
-  });
-
-  child.stderr.on("data", chunk => {
-    stderr += chunk.toString("utf8");
-  });
-
-  child.on("error", error => {
-    if (settled) return;
-    settled = true;
-    sendJson(request, response, 500, {
-      ok: false,
-      pass: false,
-      exitCode: null,
-      error: error.message,
-      stdout,
-      stderr
-    });
-  });
-
-  child.on("close", exitCode => {
-    if (settled) return;
-    settled = true;
-    sendJson(request, response, 200, {
-      ok: true,
-      pass: exitCode === 0,
-      exitCode,
-      command: "validate-recycle-config-fixture.js --input",
-      input: FIXTURE_RELATIVE_PATH,
-      stdout,
-      stderr
-    });
+  runValidator(FIXTURE_PATH, FIXTURE_RELATIVE_PATH, result => {
+    sendJson(request, response, result.ok ? 200 : 500, result);
   });
 }
 
@@ -257,42 +258,57 @@ function runValidator(inputPath, inputLabel, callback) {
     windowsHide: true
   });
 
-  let stdout = "";
-  let stderr = "";
+  const stdout = createOutputCapture();
+  const stderr = createOutputCapture();
   let settled = false;
+  const timeout = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    child.kill();
+    callback(validatorResult({
+      ok: false,
+      pass: false,
+      exitCode: null,
+      error: `Validator timed out after ${VALIDATOR_TIMEOUT_MS} ms`,
+      timedOut: true,
+      command: "validate-recycle-config-fixture.js --input",
+      input: inputLabel
+    }, stdout, stderr));
+  }, VALIDATOR_TIMEOUT_MS);
+
+  function finish(result) {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeout);
+    callback(validatorResult(result, stdout, stderr));
+  }
 
   child.stdout.on("data", chunk => {
-    stdout += chunk.toString("utf8");
+    appendLimitedOutput(stdout, chunk);
   });
 
   child.stderr.on("data", chunk => {
-    stderr += chunk.toString("utf8");
+    appendLimitedOutput(stderr, chunk);
   });
 
   child.on("error", error => {
-    if (settled) return;
-    settled = true;
-    callback({
+    finish({
       ok: false,
       pass: false,
       exitCode: null,
       error: error.message,
-      stdout,
-      stderr
+      command: "validate-recycle-config-fixture.js --input",
+      input: inputLabel
     });
   });
 
   child.on("close", exitCode => {
-    if (settled) return;
-    settled = true;
-    callback({
+    finish({
       ok: true,
       pass: exitCode === 0,
       exitCode,
       command: "validate-recycle-config-fixture.js --input",
-      input: inputLabel,
-      stdout,
-      stderr
+      input: inputLabel
     });
   });
 }
