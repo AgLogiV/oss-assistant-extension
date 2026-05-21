@@ -74,6 +74,18 @@ The browser cannot provide command text or file paths. The endpoint validates on
 
 There are still no write endpoints, no edit/export logic, no runtime imports, and no extension runtime dependency.
 
+## Candidate JSON Export
+
+The page can export the currently loaded fixture data as a candidate JSON file from browser memory.
+
+Use the `Export Candidate JSON` button. The browser downloads a file named like:
+
+```text
+recycle-device-catalog.candidate.dev-current.json
+```
+
+This uses `Blob` and `URL.createObjectURL` in the browser. The server does not write files, does not expose a save endpoint, and does not accept candidate paths.
+
 Future candidate JSON exports should be validated with:
 
 ```bash

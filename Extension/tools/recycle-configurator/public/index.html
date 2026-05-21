@@ -43,10 +43,17 @@
             <p class="eyebrow">Dev-only validation</p>
             <h2 id="validation-heading">Current Fixture Validation</h2>
           </div>
-          <button id="validate-fixture-btn" type="button">Validate Fixture</button>
+          <div class="button-row">
+            <button id="export-candidate-btn" type="button" disabled>Export Candidate JSON</button>
+            <button id="validate-fixture-btn" type="button">Validate Fixture</button>
+          </div>
         </div>
 
         <dl class="summary-grid validation-grid" aria-label="Fixture validation summary">
+          <div>
+            <dt>Candidate export</dt>
+            <dd id="export-status">Waiting for fixture</dd>
+          </div>
           <div>
             <dt>Status</dt>
             <dd id="validation-status">Not run</dd>

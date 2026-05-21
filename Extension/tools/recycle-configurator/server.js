@@ -54,7 +54,39 @@ function normalizeDevice(device) {
   };
 }
 
+function isPlainObject(value) {
+  return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+function normalizeCandidateDevice(device) {
+  const source = device && typeof device === "object" ? device : {};
+  return {
+    deviceId: String(source.deviceId || "").trim(),
+    categoryId: String(source.categoryId || "").trim(),
+    displayName: String(source.displayName || "").trim(),
+    materialId: String(source.materialId || "").trim(),
+    legacyMaterialIds: Array.isArray(source.legacyMaterialIds) ? source.legacyMaterialIds.map(id => String(id || "").trim()) : [],
+    imagePath: String(source.imagePath || "").trim(),
+    helpImagePath: String(source.helpImagePath || "").trim(),
+    warningText: String(source.warningText || "").trim(),
+    validationProfileId: String(source.validationProfileId || "").trim(),
+    enabled: source.enabled !== false
+  };
+}
+
+function buildCandidateFixture(fixture) {
+  return {
+    schemaVersion: fixture.schemaVersion,
+    revision: String(fixture.revision || "").trim(),
+    devices: Array.isArray(fixture.devices) ? fixture.devices.map(normalizeCandidateDevice) : [],
+    categoryHelp: isPlainObject(fixture.categoryHelp) ? fixture.categoryHelp : {},
+    validationProfiles: Array.isArray(fixture.validationProfiles) ? fixture.validationProfiles.map(profile => String(profile || "").trim()) : [],
+    generatedMaterialFilters: isPlainObject(fixture.generatedMaterialFilters) ? fixture.generatedMaterialFilters : {}
+  };
+}
+
 function buildFixtureResponse(fixture) {
+  const candidate = buildCandidateFixture(fixture);
   const devices = Array.isArray(fixture.devices) ? fixture.devices.map(normalizeDevice) : [];
   const categoriesById = new Map();
 
@@ -83,7 +115,8 @@ function buildFixtureResponse(fixture) {
     disabledDeviceCount: devices.filter(device => !device.enabled).length,
     categoryCount: categoriesById.size,
     categories: Array.from(categoriesById.values()).sort((left, right) => left.categoryId.localeCompare(right.categoryId)),
-    devices
+    devices,
+    candidate
   };
 }
 

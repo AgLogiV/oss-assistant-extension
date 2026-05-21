@@ -2,6 +2,7 @@
 
 const endpoint = "/api/fixture";
 const validationEndpoint = "/api/validate-fixture";
+let currentCandidate = null;
 
 function byId(id) {
   return document.getElementById(id);
@@ -69,7 +70,9 @@ function renderDevices(devices) {
 }
 
 function renderFixture(data) {
+  currentCandidate = data.candidate || null;
   setText("fixture-status", data.ok ? "Loaded" : "Failed");
+  setText("export-status", currentCandidate ? "Ready" : "Unavailable");
   setText("fixture-source", data.source || "Extension/config/recycle-device-catalog.fixture.json");
   setText("schema-version", String(data.schemaVersion ?? "-"));
   setText("revision", data.revision || "-");
@@ -78,10 +81,14 @@ function renderFixture(data) {
   setText("category-count", String(data.categoryCount ?? "-"));
   renderCategories(data.categories);
   renderDevices(data.devices);
+  setExportReady(Boolean(currentCandidate));
 }
 
 function renderError(error) {
+  currentCandidate = null;
   setText("fixture-status", "Failed");
+  setText("export-status", "Unavailable");
+  setExportReady(false);
   const body = byId("device-table-body");
   if (body) {
     body.textContent = "";
@@ -92,6 +99,41 @@ function renderError(error) {
     row.appendChild(cell);
     body.appendChild(row);
   }
+}
+
+function setExportReady(isReady) {
+  const button = byId("export-candidate-btn");
+  if (button) button.disabled = !isReady;
+}
+
+function candidateFileName(candidate) {
+  const revision = String(candidate && candidate.revision || "dev-current")
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "dev-current";
+  return `recycle-device-catalog.candidate.${revision}.json`;
+}
+
+function exportCandidate() {
+  if (!currentCandidate) {
+    setText("export-status", "Fixture not loaded");
+    return;
+  }
+
+  const json = `${JSON.stringify(currentCandidate, null, 2)}\n`;
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const filename = candidateFileName(currentCandidate);
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  setText("export-status", `Downloaded ${filename}`);
 }
 
 function setValidationRunning(isRunning) {
@@ -156,4 +198,9 @@ loadFixture();
 const validateButton = byId("validate-fixture-btn");
 if (validateButton) {
   validateButton.addEventListener("click", validateFixture);
+}
+
+const exportButton = byId("export-candidate-btn");
+if (exportButton) {
+  exportButton.addEventListener("click", exportCandidate);
 }
