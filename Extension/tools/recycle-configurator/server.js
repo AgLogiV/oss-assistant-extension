@@ -20,6 +20,21 @@ const MAX_CANDIDATE_BODY_BYTES = 1024 * 1024;
 const VALIDATOR_TIMEOUT_MS = 20 * 1000;
 const MAX_VALIDATOR_OUTPUT_BYTES = 128 * 1024;
 const TEMP_DIR_PREFIX = "oss-recycle-configurator-";
+const ASSET_EXTENSIONS = new Set([".webp", ".png", ".jpg", ".jpeg"]);
+const ASSET_POLICIES = [
+  {
+    key: "deviceImages",
+    kind: "deviceImage",
+    extensionPrefix: "images/devices/16x9/",
+    directory: path.join(EXTENSION_ROOT, "images", "devices", "16x9")
+  },
+  {
+    key: "helpImages",
+    kind: "helpImage",
+    extensionPrefix: "images/recycle-help/",
+    directory: path.join(EXTENSION_ROOT, "images", "recycle-help")
+  }
+];
 
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -45,6 +60,62 @@ function sendJson(request, response, statusCode, payload) {
     "Cache-Control": "no-store"
   });
   response.end(request.method === "HEAD" ? undefined : JSON.stringify(payload, null, 2));
+}
+
+function toExtensionRelativePath(prefix, fileName) {
+  return `${prefix}${fileName}`.replace(/\\/g, "/");
+}
+
+function listAssetsForPolicy(policy, callback) {
+  fs.readdir(policy.directory, { withFileTypes: true }, (error, entries) => {
+    if (error) {
+      callback(error);
+      return;
+    }
+
+    const assets = entries
+      .filter(entry => entry.isFile())
+      .map(entry => entry.name)
+      .filter(fileName => ASSET_EXTENSIONS.has(path.extname(fileName).toLowerCase()))
+      .map(fileName => ({
+        path: toExtensionRelativePath(policy.extensionPrefix, fileName),
+        fileName,
+        kind: policy.kind
+      }))
+      .sort((left, right) => left.path.localeCompare(right.path));
+
+    callback(null, assets);
+  });
+}
+
+function buildAssetInventory(callback) {
+  const result = {
+    ok: true,
+    policies: ASSET_POLICIES.map(policy => ({
+      key: policy.key,
+      kind: policy.kind,
+      extensionPrefix: policy.extensionPrefix
+    }))
+  };
+  let remaining = ASSET_POLICIES.length;
+  let settled = false;
+
+  ASSET_POLICIES.forEach(policy => {
+    listAssetsForPolicy(policy, (error, assets) => {
+      if (settled) return;
+      if (error) {
+        settled = true;
+        callback(error);
+        return;
+      }
+
+      result[policy.key] = assets;
+      remaining -= 1;
+      if (remaining === 0) {
+        callback(null, result);
+      }
+    });
+  });
 }
 
 function cleanupTempCandidate(tempDir, tempFile, callback) {
@@ -219,6 +290,22 @@ function buildFixtureResponse(fixture) {
   };
 }
 
+function serveAssets(request, response) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    sendJson(request, response, 405, { ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  buildAssetInventory((error, inventory) => {
+    if (error) {
+      sendJson(request, response, 500, { ok: false, error: "Cannot read recycle configurator asset inventory" });
+      return;
+    }
+
+    sendJson(request, response, 200, inventory);
+  });
+}
+
 function serveFixture(request, response) {
   if (request.method !== "GET" && request.method !== "HEAD") {
     sendJson(request, response, 405, { ok: false, error: "Method not allowed" });
@@ -389,6 +476,11 @@ function serveStatic(request, response) {
 
   if (url.pathname === "/api/fixture") {
     serveFixture(request, response);
+    return;
+  }
+
+  if (url.pathname === "/api/assets") {
+    serveAssets(request, response);
     return;
   }
 

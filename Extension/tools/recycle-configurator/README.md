@@ -62,6 +62,25 @@ Use `Revert changes` to reset the browser-memory candidate back to the original 
 
 There are still no save endpoints, no runtime imports, and no extension runtime dependency.
 
+## Asset Inventory
+
+The configurator exposes a read-only asset inventory for future path selectors:
+
+```text
+GET /api/assets
+```
+
+The endpoint returns extension-relative paths only. It does not return absolute local filesystem paths, drive letters, or filesystem roots. Config JSON should keep paths like `images/devices/16x9/example.webp` or `images/recycle-help/example.webp`.
+
+Allowed asset directories:
+
+- `Extension/images/devices/16x9/` as `deviceImages`
+- `Extension/images/recycle-help/` as `helpImages`
+
+Only `.webp`, `.png`, `.jpg`, and `.jpeg` files are included. Results include `path`, `fileName`, and `kind`, and are sorted by `path`.
+
+Asset preview and upload are not implemented yet. The endpoint accepts no asset path input and performs no writes.
+
 ## Validation Panel
 
 The page also has a dev-only validation button for the fixed fixture.
