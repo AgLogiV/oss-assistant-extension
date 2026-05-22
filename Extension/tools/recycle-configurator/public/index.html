@@ -51,11 +51,18 @@
             <h2 id="validation-heading">Current Fixture Validation</h2>
           </div>
           <div class="button-row">
+            <label class="file-button">
+              Import Candidate JSON
+              <input id="import-candidate-input" type="file" accept=".json,application/json">
+            </label>
             <button id="export-candidate-btn" type="button" disabled>Export Candidate JSON</button>
             <button id="validate-candidate-btn" type="button" disabled>Validate Candidate</button>
             <button id="validate-fixture-btn" type="button">Validate Fixture</button>
+            <button id="reload-fixture-btn" type="button">Reload fixture</button>
           </div>
         </div>
+
+        <p class="source-path" id="import-status">Import status: No candidate imported.</p>
 
         <dl class="summary-grid validation-grid" aria-label="Fixture validation summary">
           <div>

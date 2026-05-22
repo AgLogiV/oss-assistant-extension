@@ -132,6 +132,12 @@ recycle-device-catalog.candidate.dev-current.json
 
 This uses `Blob` and `URL.createObjectURL` in the browser. The server does not write files, does not expose a save endpoint, and does not accept candidate paths.
 
+## Candidate JSON Import
+
+Use `Import Candidate JSON` to load an exported candidate file back into browser memory with the browser File API. The selected file must be a JSON file under 1 MB and must pass basic top-level shape checks for `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
+
+Imported candidates are not written to `Extension/config` or any project file. Basic shape checks are not full validation; use `Validate Candidate` after importing. `Revert changes` resets to the currently loaded baseline, which is the imported candidate after import. Use `Reload fixture` to discard the imported candidate and load the project fixture again; if browser-memory edits are dirty, the UI asks for confirmation first.
+
 ## Candidate Validation
 
 The page can validate the currently loaded candidate JSON without saving it permanently.

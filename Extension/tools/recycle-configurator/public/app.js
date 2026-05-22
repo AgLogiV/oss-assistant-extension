@@ -4,6 +4,7 @@ const endpoint = "/api/fixture";
 const assetsEndpoint = "/api/assets";
 const assetPreviewEndpoint = "/api/asset-preview";
 const validationEndpoint = "/api/validate-fixture";
+const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
 let currentCandidate = null;
 let originalCandidateJson = "";
 let isDirty = false;
@@ -68,6 +69,10 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function isPlainObject(value) {
+  return Object.prototype.toString.call(value) === "[object Object]";
+}
+
 function normalizeString(value) {
   return String(value || "").trim();
 }
@@ -121,6 +126,17 @@ function setFormControlsReady(isReady) {
     const control = byId(id);
     if (control) control.disabled = !isReady;
   });
+}
+
+function resetFilterControls() {
+  activeSearch = "";
+  activeCategory = "";
+
+  const search = byId("device-search");
+  if (search) search.value = "";
+
+  const category = byId("category-filter");
+  if (category) category.value = "";
 }
 
 function updateRevertButton() {
@@ -266,6 +282,19 @@ function candidateForAction() {
 function candidateValidationFingerprint() {
   const candidate = candidateForAction();
   return candidate ? JSON.stringify(candidate) : "";
+}
+
+function resetValidationUi(message) {
+  lastCandidateValidationJson = "";
+  candidateValidationHasRun = false;
+  setText("validation-target", "-");
+  setResultBadge("validation-status", "neutral", "Not run");
+  setResultBadge("candidate-validation-status", "neutral", "Not validated");
+  setText("validation-exit-code", "-");
+  setText("validation-input", "temp-candidate.json");
+  setText("validation-stdout", "Validation output will appear here.");
+  setText("validation-stderr", "Validation errors will appear here.");
+  setValidationHint(message || "Run Validate Candidate to validate the current browser-memory candidate.");
 }
 
 function markCandidateValidationStaleIfNeeded() {
@@ -521,15 +550,12 @@ function renderFixture(data) {
   currentCandidate = data.candidate ? cloneJson(data.candidate) : null;
   originalCandidateJson = currentCandidate ? JSON.stringify(currentCandidate) : "";
   selectedDeviceIndex = null;
-  lastCandidateValidationJson = "";
-  candidateValidationHasRun = false;
+  resetFilterControls();
   setText("fixture-status", data.ok ? "Loaded" : "Failed");
   setText("export-status", currentCandidate ? "Ready" : "Unavailable");
-  setText("validation-target", "-");
-  setResultBadge("validation-status", "neutral", "Not run");
-  setResultBadge("candidate-validation-status", "neutral", "Not run");
-  setValidationHint("Run Validate Fixture or Validate Candidate to see the latest validation result.");
-  setText("fixture-source", data.source || "Extension/config/recycle-device-catalog.fixture.json");
+  resetValidationUi("Loaded the project fixture. Run Validate Fixture or Validate Candidate to see the latest validation result.");
+  setText("import-status", "Import status: No candidate imported.");
+  setText("fixture-source", `Fixture: ${data.source || "Extension/config/recycle-device-catalog.fixture.json"}`);
   setText("schema-version", String(data.schemaVersion ?? "-"));
   setText("revision", data.revision || "-");
   setText("device-count", String(data.deviceCount ?? "-"));
@@ -559,6 +585,7 @@ function renderError(error) {
   activeCategory = "";
   setText("fixture-status", "Failed");
   setText("export-status", "Unavailable");
+  setText("import-status", "Import status: Fixture load failed.");
   setText("validation-target", "-");
   setResultBadge("validation-status", "error", "ERROR");
   setResultBadge("candidate-validation-status", "neutral", "Not run");
@@ -593,16 +620,88 @@ function revertCandidate() {
 
   currentCandidate = JSON.parse(originalCandidateJson);
   selectedDeviceIndex = null;
-  lastCandidateValidationJson = "";
-  candidateValidationHasRun = false;
   setText("export-status", "Ready");
-  setText("validation-target", "-");
-  setResultBadge("candidate-validation-status", "neutral", "Not run");
-  setResultBadge("validation-status", "neutral", "Not run");
-  setValidationHint("Reverted to the loaded fixture. Run Validate Candidate to validate the current browser-memory candidate.");
+  resetValidationUi("Reverted to the loaded baseline. Run Validate Candidate to validate the current browser-memory candidate.");
   updateSummaryFromCandidate();
   renderFilteredDevices();
   updateDirtyState();
+}
+
+function validateImportedCandidateShape(candidate) {
+  const errors = [];
+
+  if (!isPlainObject(candidate)) {
+    return ["JSON root must be an object."];
+  }
+
+  if (candidate.schemaVersion === undefined) errors.push("schemaVersion is missing.");
+  if (!normalizeString(candidate.revision)) errors.push("revision is missing.");
+  if (!Array.isArray(candidate.devices)) errors.push("devices must be an array.");
+  if (!isPlainObject(candidate.categoryHelp)) errors.push("categoryHelp must be an object.");
+  if (!Array.isArray(candidate.validationProfiles)) errors.push("validationProfiles must be an array.");
+  if (!isPlainObject(candidate.generatedMaterialFilters)) errors.push("generatedMaterialFilters must be an object.");
+
+  return errors;
+}
+
+function setCurrentCandidateFromImport(candidate, fileName) {
+  currentCandidate = cloneJson(candidate);
+  originalCandidateJson = JSON.stringify(currentCandidate);
+  selectedDeviceIndex = null;
+  resetFilterControls();
+  setText("fixture-status", "Imported");
+  setText("fixture-source", `Imported candidate: ${fileName}`);
+  setText("import-status", `Import status: Loaded ${fileName}.`);
+  setText("export-status", "Ready");
+  resetValidationUi("Imported candidate loaded. Basic shape checks passed, but Validate Candidate is still required.");
+  updateSummaryFromCandidate();
+  renderFilteredDevices();
+  updateDirtyState();
+  setExportReady(true);
+  setFormControlsReady(true);
+}
+
+async function importCandidateFile(file) {
+  if (!file) return;
+
+  const isJsonFile = /\.json$/i.test(file.name || "") || file.type === "application/json";
+  if (!isJsonFile) {
+    setText("import-status", `Import status: ${file.name || "Selected file"} is not a JSON file.`);
+    setValidationHint("Candidate import failed before loading. Choose a .json or application/json file.", "fail");
+    return;
+  }
+
+  if (file.size > MAX_IMPORT_FILE_BYTES) {
+    setText("import-status", `Import status: ${file.name} is too large. Limit is 1 MB.`);
+    setValidationHint("Candidate import failed before loading. Choose a JSON file under 1 MB.", "fail");
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch (error) {
+    setText("import-status", `Import status: ${file.name} is not valid JSON.`);
+    setValidationHint("Candidate import failed because the selected file is not valid JSON.", "fail");
+    return;
+  }
+
+  const shapeErrors = validateImportedCandidateShape(parsed);
+  if (shapeErrors.length) {
+    setText("import-status", `Import status: ${file.name} failed basic shape checks.`);
+    setValidationHint(`Candidate import failed: ${shapeErrors.join(" ")}`, "fail");
+    return;
+  }
+
+  setCurrentCandidateFromImport(parsed, file.name);
+}
+
+function reloadFixture() {
+  if (isDirty && !window.confirm("Discard browser-memory edits and reload the project fixture?")) {
+    return;
+  }
+
+  loadFixture();
 }
 
 function handleEditorTextInput(event) {
@@ -908,4 +1007,19 @@ if (categoryFilter) {
 const revertButton = byId("revert-candidate-btn");
 if (revertButton) {
   revertButton.addEventListener("click", revertCandidate);
+}
+
+const importCandidateInput = byId("import-candidate-input");
+if (importCandidateInput) {
+  importCandidateInput.addEventListener("change", event => {
+    const file = event.target.files && event.target.files[0];
+    importCandidateFile(file).finally(() => {
+      event.target.value = "";
+    });
+  });
+}
+
+const reloadFixtureButton = byId("reload-fixture-btn");
+if (reloadFixtureButton) {
+  reloadFixtureButton.addEventListener("click", reloadFixture);
 }

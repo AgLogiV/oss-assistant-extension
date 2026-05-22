@@ -85,6 +85,29 @@ button {
   font-weight: 700;
 }
 
+.file-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  overflow: hidden;
+  border: 1px solid #b00020;
+  border-radius: 6px;
+  padding: 8px 14px;
+  background: #ffffff;
+  color: #b00020;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
