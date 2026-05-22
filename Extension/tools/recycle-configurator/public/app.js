@@ -1,12 +1,17 @@
 "use strict";
 
 const endpoint = "/api/fixture";
+const assetsEndpoint = "/api/assets";
 const validationEndpoint = "/api/validate-fixture";
 let currentCandidate = null;
 let originalCandidateJson = "";
 let isDirty = false;
 let activeSearch = "";
 let activeCategory = "";
+let assetInventory = {
+  deviceImages: [],
+  helpImages: []
+};
 
 function byId(id) {
   return document.getElementById(id);
@@ -62,6 +67,12 @@ function validationProfileOptions() {
   return Array.isArray(currentCandidate && currentCandidate.validationProfiles)
     ? currentCandidate.validationProfiles.map(profile => normalizeString(profile)).filter(Boolean)
     : [];
+}
+
+function assetOptionsForField(field) {
+  if (field === "imagePath") return assetInventory.deviceImages;
+  if (field === "helpImagePath") return assetInventory.helpImages;
+  return [];
 }
 
 function categorySummaries(devices) {
@@ -246,6 +257,11 @@ function updateDeviceField(index, field, value) {
   updateFilterStatus(filteredDeviceEntries().length);
 }
 
+function syncAssetSelect(select, value) {
+  const normalized = normalizeString(value);
+  select.value = Array.from(select.options).some(option => option.value === normalized) ? normalized : "";
+}
+
 function inputCell(row, device, index, field, options = {}) {
   const cell = document.createElement("td");
   const control = options.multiline ? document.createElement("textarea") : document.createElement("input");
@@ -258,6 +274,49 @@ function inputCell(row, device, index, field, options = {}) {
   });
 
   cell.appendChild(control);
+  row.appendChild(cell);
+}
+
+function assetPathCell(row, device, index, field) {
+  const cell = document.createElement("td");
+  const wrapper = document.createElement("div");
+  const input = document.createElement("input");
+  const select = document.createElement("select");
+  const options = assetOptionsForField(field);
+
+  wrapper.className = "asset-path-control";
+  input.value = normalizeString(device[field]);
+  input.dataset.deviceIndex = String(index);
+  input.dataset.field = field;
+  input.addEventListener("input", event => {
+    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
+    syncAssetSelect(select, event.target.value);
+  });
+
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "Manual / empty";
+  select.appendChild(emptyOption);
+
+  options.forEach(asset => {
+    const option = document.createElement("option");
+    option.value = asset.path;
+    option.textContent = asset.fileName;
+    select.appendChild(option);
+  });
+
+  syncAssetSelect(select, device[field]);
+  select.dataset.deviceIndex = String(index);
+  select.dataset.field = field;
+  select.addEventListener("change", event => {
+    if (!event.target.value) return;
+    input.value = event.target.value;
+    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
+  });
+
+  wrapper.appendChild(input);
+  wrapper.appendChild(select);
+  cell.appendChild(wrapper);
   row.appendChild(cell);
 }
 
@@ -333,8 +392,8 @@ function renderDevices(entries) {
     inputCell(row, device, index, "displayName");
     inputCell(row, device, index, "materialId");
     inputCell(row, device, index, "legacyMaterialIds", { multiline: true, format: legacyMaterialIdsToText });
-    inputCell(row, device, index, "imagePath");
-    inputCell(row, device, index, "helpImagePath");
+    assetPathCell(row, device, index, "imagePath");
+    assetPathCell(row, device, index, "helpImagePath");
     inputCell(row, device, index, "warningText", { multiline: true });
     validationProfileCell(row, device, index);
     enabledCell(row, device, index);
@@ -560,7 +619,32 @@ async function loadFixture() {
   }
 }
 
-loadFixture();
+async function loadAssetInventory() {
+  try {
+    const response = await fetch(assetsEndpoint, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    assetInventory = {
+      deviceImages: Array.isArray(data.deviceImages) ? data.deviceImages : [],
+      helpImages: Array.isArray(data.helpImages) ? data.helpImages : []
+    };
+  } catch (error) {
+    assetInventory = {
+      deviceImages: [],
+      helpImages: []
+    };
+    console.warn("Cannot load asset inventory", error);
+  }
+}
+
+async function initialize() {
+  await loadAssetInventory();
+  await loadFixture();
+}
+
+initialize();
 
 const validateButton = byId("validate-fixture-btn");
 if (validateButton) {

@@ -283,6 +283,16 @@ td textarea {
   resize: vertical;
 }
 
+.asset-path-control {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.asset-path-control select {
+  color: #415064;
+}
+
 .checkbox-label {
   display: inline-flex;
   align-items: center;

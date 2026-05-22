@@ -56,6 +56,8 @@ The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and re
 
 The device table can be filtered by search text across `deviceId`, `categoryId`, `displayName`, and `materialId`, plus a category dropdown based on the loaded candidate categories.
 
+`imagePath` and `helpImagePath` keep their manual text inputs and also offer compact selectors populated from `GET /api/assets`. The selectors write only extension-relative paths into the browser-memory candidate, such as `images/devices/16x9/example.webp` or `images/recycle-help/example.webp`. Empty paths remain valid, and paths not present in the asset inventory remain visible in the manual field.
+
 Edits are kept only in browser memory and are reflected by the dirty state indicator. Before candidate export or candidate validation, `generatedMaterialFilters` is regenerated from enabled devices with non-empty trimmed `materialId` values, grouped by `categoryId` in device order.
 
 Use `Revert changes` to reset the browser-memory candidate back to the original loaded fixture data. This does not read or write project files.
