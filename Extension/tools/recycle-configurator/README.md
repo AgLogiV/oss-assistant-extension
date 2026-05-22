@@ -57,6 +57,8 @@ Select a row in the list to edit that existing device in the side panel. `device
 
 The device table can be filtered by search text across `deviceId`, `categoryId`, `displayName`, and `materialId`, plus a category dropdown based on the loaded candidate categories.
 
+Use `Add Device` to switch the side editor into a browser-memory draft form for adding one new device to the current candidate. The draft supports only safe catalog metadata fields: `deviceId`, `categoryId`, `displayName`, `materialId`, `legacyMaterialIds`, `imagePath`, `helpImagePath`, `warningText`, `validationProfileId`, and `enabled`. It does not support `sortOrder`, delete, duplicate, category move, or runtime behavior changes. `categoryId` choices come from loaded normal device categories and exclude `cam_modules` and `modems`. `deviceId` must be unique lower snake-case, material IDs must be digits-only when present, and `validationProfileId` must come from the loaded profile list.
+
 `imagePath` and `helpImagePath` keep their manual text inputs and also offer compact selectors populated from `GET /api/assets`. The selectors write only extension-relative paths into the browser-memory candidate, such as `images/devices/16x9/example.webp` or `images/recycle-help/example.webp`. Empty paths remain valid, and paths not present in the asset inventory remain visible in the manual field.
 
 Recycle device `imagePath` values should use packaged `images/devices/16x9/...` paths. Current recycle devices all have explicit `imagePath` values. `helpImagePath` is separate from `imagePath` and is used for serial/help UI, normally with `images/recycle-help/...` paths. The configurator must not store absolute local filesystem paths in candidate JSON.

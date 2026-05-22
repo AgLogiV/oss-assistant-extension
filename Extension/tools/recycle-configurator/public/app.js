@@ -5,12 +5,16 @@ const assetsEndpoint = "/api/assets";
 const assetPreviewEndpoint = "/api/asset-preview";
 const validationEndpoint = "/api/validate-fixture";
 const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
+const EXCLUDED_ADD_CATEGORIES = new Set(["cam_modules", "modems"]);
+const safeDeviceIdPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 let currentCandidate = null;
 let originalCandidateJson = "";
 let isDirty = false;
 let activeSearch = "";
 let activeCategory = "";
 let selectedDeviceIndex = null;
+let editorMode = "edit";
+let addDraft = null;
 let lastCandidateValidationJson = "";
 let candidateValidationHasRun = false;
 let assetInventory = {
@@ -94,6 +98,13 @@ function validationProfileOptions() {
     : [];
 }
 
+function addDeviceCategoryOptions() {
+  const devices = Array.isArray(currentCandidate && currentCandidate.devices) ? currentCandidate.devices : [];
+  return Array.from(new Set(devices.map(device => normalizeString(device.categoryId)).filter(Boolean)))
+    .filter(categoryId => !EXCLUDED_ADD_CATEGORIES.has(categoryId))
+    .sort((left, right) => left.localeCompare(right));
+}
+
 function assetOptionsForField(field) {
   if (field === "imagePath") return assetInventory.deviceImages;
   if (field === "helpImagePath") return assetInventory.helpImages;
@@ -122,7 +133,7 @@ function categorySummaries(devices) {
 }
 
 function setFormControlsReady(isReady) {
-  ["device-search", "category-filter"].forEach(id => {
+  ["device-search", "category-filter", "add-device-btn"].forEach(id => {
     const control = byId(id);
     if (control) control.disabled = !isReady;
   });
@@ -142,6 +153,16 @@ function resetFilterControls() {
 function updateRevertButton() {
   const button = byId("revert-candidate-btn");
   if (button) button.disabled = !currentCandidate || !isDirty;
+}
+
+function setAddDeviceActionsVisible(isVisible) {
+  ["commit-add-device-btn", "cancel-add-device-btn"].forEach(id => {
+    const button = byId(id);
+    if (button) button.hidden = !isVisible;
+  });
+
+  const addButton = byId("add-device-btn");
+  if (addButton) addButton.disabled = !currentCandidate || isVisible;
 }
 
 function populateCategoryFilter(categories) {
@@ -329,6 +350,7 @@ function updateDirtyState() {
   isDirty = JSON.stringify(currentCandidate) !== originalCandidateJson;
   setText("edit-status", isDirty ? "Edited in browser memory" : "Clean");
   updateRevertButton();
+  setAddDeviceActionsVisible(editorMode === "add");
 }
 
 function updateDeviceField(index, field, value) {
@@ -352,6 +374,92 @@ function updateDeviceField(index, field, value) {
   markCandidateValidationStaleIfNeeded();
   setText("export-status", isDirty ? "Edited candidate ready" : "Ready");
   updateFilterStatus(filteredDeviceEntries().length);
+}
+
+function createEmptyAddDraft() {
+  const categories = addDeviceCategoryOptions();
+  return {
+    deviceId: "",
+    categoryId: categories[0] || "",
+    displayName: "",
+    materialId: "",
+    legacyMaterialIds: [],
+    imagePath: "",
+    helpImagePath: "",
+    warningText: "",
+    validationProfileId: "",
+    enabled: true
+  };
+}
+
+function updateAddDraftField(field, value) {
+  if (!addDraft) return;
+
+  if (field === "legacyMaterialIds") {
+    addDraft.legacyMaterialIds = parseLegacyMaterialIds(value);
+  } else if (field === "enabled") {
+    addDraft.enabled = Boolean(value);
+  } else {
+    addDraft[field] = normalizeString(value);
+  }
+
+  setText("add-device-status", addDeviceCategoryWarning(addDraft.categoryId));
+}
+
+function addDeviceCategoryWarning(categoryId) {
+  if (categoryId === "gpon" || categoryId === "austrian") {
+    return "Warning: this category has validator material filter/order guards. Run Validate Candidate before using the export.";
+  }
+  return "";
+}
+
+function validateAddDraft() {
+  const errors = [];
+  const profiles = new Set(validationProfileOptions());
+  const categories = new Set(addDeviceCategoryOptions());
+  const deviceId = normalizeString(addDraft && addDraft.deviceId);
+  const categoryId = normalizeString(addDraft && addDraft.categoryId);
+  const displayName = normalizeString(addDraft && addDraft.displayName);
+  const materialId = normalizeString(addDraft && addDraft.materialId);
+  const validationProfileId = normalizeString(addDraft && addDraft.validationProfileId);
+  const legacyMaterialIds = Array.isArray(addDraft && addDraft.legacyMaterialIds) ? addDraft.legacyMaterialIds.map(normalizeString).filter(Boolean) : [];
+  const existingDeviceIds = new Set(((currentCandidate && currentCandidate.devices) || []).map(device => normalizeString(device.deviceId)));
+  const invalidLegacyMaterialIds = legacyMaterialIds.filter(id => !/^\d+$/.test(id));
+
+  if (!deviceId) errors.push("deviceId is required.");
+  else if (!safeDeviceIdPattern.test(deviceId)) errors.push("deviceId must use lower snake-case with lowercase letters, numbers, and underscores.");
+  else if (existingDeviceIds.has(deviceId)) errors.push(`deviceId ${deviceId} already exists.`);
+
+  if (!categoryId) errors.push("categoryId is required.");
+  else if (!categories.has(categoryId)) errors.push("categoryId must be one of the loaded normal device categories.");
+
+  if (!displayName) errors.push("displayName is required.");
+
+  if (materialId && !/^\d+$/.test(materialId)) errors.push("materialId must contain digits only.");
+  if (invalidLegacyMaterialIds.length) errors.push(`legacyMaterialIds must contain digits only: ${invalidLegacyMaterialIds.join(", ")}.`);
+
+  if (!validationProfileId) errors.push("validationProfileId is required.");
+  else if (!profiles.has(validationProfileId)) errors.push("validationProfileId must be selected from the loaded validationProfiles list.");
+
+  const device = {
+    deviceId,
+    categoryId,
+    displayName,
+    materialId,
+    legacyMaterialIds,
+    imagePath: normalizeString(addDraft && addDraft.imagePath),
+    helpImagePath: normalizeString(addDraft && addDraft.helpImagePath),
+    warningText: normalizeString(addDraft && addDraft.warningText),
+    validationProfileId,
+    enabled: addDraft ? addDraft.enabled !== false : true
+  };
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warning: addDeviceCategoryWarning(categoryId),
+    device
+  };
 }
 
 function syncAssetSelect(select, value) {
@@ -406,6 +514,9 @@ function enabledListCell(row, device) {
 }
 
 function selectDevice(index) {
+  editorMode = "edit";
+  addDraft = null;
+  setText("add-device-status", "");
   selectedDeviceIndex = index;
   renderFilteredDevices();
 }
@@ -496,9 +607,16 @@ function populateAssetSelect(select, field, value) {
   syncAssetSelect(select, value);
 }
 
-function populateValidationProfileSelect(select, value) {
+function populateValidationProfileSelect(select, value, options = {}) {
   if (!select) return;
   select.textContent = "";
+
+  if (options.includeBlank) {
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "Select validationProfileId";
+    select.appendChild(blank);
+  }
 
   validationProfileOptions().forEach(profileId => {
     const option = document.createElement("option");
@@ -510,11 +628,80 @@ function populateValidationProfileSelect(select, value) {
   select.value = normalizeString(value);
 }
 
+function populateAddCategorySelect(select, value) {
+  if (!select) return;
+  select.textContent = "";
+
+  addDeviceCategoryOptions().forEach(categoryId => {
+    const option = document.createElement("option");
+    option.value = categoryId;
+    option.textContent = categoryId;
+    select.appendChild(option);
+  });
+
+  select.value = normalizeString(value);
+}
+
+function setAddOnlyFieldsVisible(isVisible) {
+  Array.from(document.querySelectorAll(".add-only-field")).forEach(field => {
+    field.hidden = !isVisible;
+    Array.from(field.querySelectorAll("input, select, textarea")).forEach(control => {
+      control.disabled = !isVisible;
+    });
+  });
+}
+
 function renderDeviceEditor() {
+  if (editorMode === "add") {
+    const draft = addDraft || createEmptyAddDraft();
+    addDraft = draft;
+
+    setEditorControlsEnabled(true);
+    setAddOnlyFieldsVisible(true);
+    setAddDeviceActionsVisible(true);
+    setText("device-editor-heading", "Add device");
+    setText("selected-device-status", "Draft device");
+    setText("editor-deviceId", normalizeString(draft.deviceId) || "(new)");
+    setText("editor-categoryId", normalizeString(draft.categoryId) || "-");
+    setText("add-device-status", addDeviceCategoryWarning(draft.categoryId));
+
+    const deviceIdInput = byId("editor-deviceId-input");
+    if (deviceIdInput) deviceIdInput.value = normalizeString(draft.deviceId);
+    populateAddCategorySelect(byId("editor-categoryId-select"), draft.categoryId);
+
+    const textControls = {
+      "editor-displayName": normalizeString(draft.displayName),
+      "editor-materialId": normalizeString(draft.materialId),
+      "editor-legacyMaterialIds": legacyMaterialIdsToText(draft.legacyMaterialIds),
+      "editor-imagePath": normalizeString(draft.imagePath),
+      "editor-helpImagePath": normalizeString(draft.helpImagePath),
+      "editor-warningText": normalizeString(draft.warningText)
+    };
+
+    Object.entries(textControls).forEach(([id, value]) => {
+      const control = byId(id);
+      if (control) control.value = value;
+    });
+
+    populateAssetSelect(byId("editor-imagePath-select"), "imagePath", draft.imagePath);
+    populateAssetSelect(byId("editor-helpImagePath-select"), "helpImagePath", draft.helpImagePath);
+    populateValidationProfileSelect(byId("editor-validationProfileId"), draft.validationProfileId, { includeBlank: true });
+    setAssetPreview(byId("editor-imagePath-preview"), draft.imagePath);
+    setAssetPreview(byId("editor-helpImagePath-preview"), draft.helpImagePath);
+
+    const enabled = byId("editor-enabled");
+    if (enabled) enabled.checked = draft.enabled !== false;
+    return;
+  }
+
   const device = selectedDevice();
   const hasDevice = Boolean(device);
 
   setEditorControlsEnabled(hasDevice);
+  setAddOnlyFieldsVisible(false);
+  setAddDeviceActionsVisible(false);
+  setText("device-editor-heading", "Device editor");
+  setText("add-device-status", "");
   setText("editor-deviceId", hasDevice ? device.deviceId : "-");
   setText("editor-categoryId", hasDevice ? device.categoryId : "-");
 
@@ -550,6 +737,8 @@ function renderFixture(data) {
   currentCandidate = data.candidate ? cloneJson(data.candidate) : null;
   originalCandidateJson = currentCandidate ? JSON.stringify(currentCandidate) : "";
   selectedDeviceIndex = null;
+  editorMode = "edit";
+  addDraft = null;
   resetFilterControls();
   setText("fixture-status", data.ok ? "Loaded" : "Failed");
   setText("export-status", currentCandidate ? "Ready" : "Unavailable");
@@ -579,6 +768,8 @@ function renderError(error) {
   currentCandidate = null;
   originalCandidateJson = "";
   selectedDeviceIndex = null;
+  editorMode = "edit";
+  addDraft = null;
   lastCandidateValidationJson = "";
   candidateValidationHasRun = false;
   activeSearch = "";
@@ -620,6 +811,8 @@ function revertCandidate() {
 
   currentCandidate = JSON.parse(originalCandidateJson);
   selectedDeviceIndex = null;
+  editorMode = "edit";
+  addDraft = null;
   setText("export-status", "Ready");
   resetValidationUi("Reverted to the loaded baseline. Run Validate Candidate to validate the current browser-memory candidate.");
   updateSummaryFromCandidate();
@@ -648,6 +841,8 @@ function setCurrentCandidateFromImport(candidate, fileName) {
   currentCandidate = cloneJson(candidate);
   originalCandidateJson = JSON.stringify(currentCandidate);
   selectedDeviceIndex = null;
+  editorMode = "edit";
+  addDraft = null;
   resetFilterControls();
   setText("fixture-status", "Imported");
   setText("fixture-source", `Imported candidate: ${fileName}`);
@@ -705,6 +900,20 @@ function reloadFixture() {
 }
 
 function handleEditorTextInput(event) {
+  if (editorMode === "add") {
+    const field = event.target.dataset.editorField;
+    updateAddDraftField(field, event.target.value);
+
+    if (field === "imagePath") {
+      syncAssetSelect(byId("editor-imagePath-select"), event.target.value);
+      setAssetPreview(byId("editor-imagePath-preview"), event.target.value);
+    } else if (field === "helpImagePath") {
+      syncAssetSelect(byId("editor-helpImagePath-select"), event.target.value);
+      setAssetPreview(byId("editor-helpImagePath-preview"), event.target.value);
+    }
+    return;
+  }
+
   if (selectedDeviceIndex === null) return;
   const field = event.target.dataset.editorField;
   updateDeviceField(selectedDeviceIndex, field, event.target.value);
@@ -721,6 +930,22 @@ function handleEditorTextInput(event) {
 }
 
 function handleEditorSelectChange(event) {
+  if (editorMode === "add") {
+    const field = event.target.dataset.editorField;
+    const value = event.target.value;
+    const input = byId(`editor-${field}`);
+
+    if (input) input.value = value;
+    updateAddDraftField(field, value);
+
+    if (field === "imagePath") {
+      setAssetPreview(byId("editor-imagePath-preview"), value);
+    } else if (field === "helpImagePath") {
+      setAssetPreview(byId("editor-helpImagePath-preview"), value);
+    }
+    return;
+  }
+
   if (selectedDeviceIndex === null) return;
   const field = event.target.dataset.editorField;
   const value = event.target.value;
@@ -739,9 +964,75 @@ function handleEditorSelectChange(event) {
 }
 
 function handleEditorEnabledChange(event) {
+  if (editorMode === "add") {
+    updateAddDraftField("enabled", event.target.checked);
+    return;
+  }
+
   if (selectedDeviceIndex === null) return;
   updateDeviceField(selectedDeviceIndex, "enabled", event.target.checked);
   refreshDeviceList();
+}
+
+function handleAddTextInput(event) {
+  const field = event.target.dataset.addField;
+  updateAddDraftField(field, event.target.value);
+  if (field === "deviceId") {
+    setText("editor-deviceId", normalizeString(event.target.value) || "(new)");
+  }
+}
+
+function handleAddCategoryChange(event) {
+  updateAddDraftField("categoryId", event.target.value);
+  renderDeviceEditor();
+}
+
+function startAddDevice() {
+  if (!currentCandidate) return;
+  editorMode = "add";
+  addDraft = createEmptyAddDraft();
+  setText("add-device-status", "");
+  renderDeviceEditor();
+}
+
+function cancelAddDevice() {
+  editorMode = "edit";
+  addDraft = null;
+  setText("add-device-status", "");
+  renderFilteredDevices();
+}
+
+function commitAddDevice() {
+  if (!currentCandidate || !Array.isArray(currentCandidate.devices) || !addDraft) return;
+
+  const result = validateAddDraft();
+  if (!result.ok) {
+    setText("add-device-status", `Cannot add device: ${result.errors.join(" ")}`);
+    return;
+  }
+
+  currentCandidate.devices.push(result.device);
+  currentCandidate.generatedMaterialFilters = regenerateMaterialFilters(currentCandidate);
+  selectedDeviceIndex = currentCandidate.devices.length - 1;
+  editorMode = "edit";
+  addDraft = null;
+
+  activeSearch = "";
+  activeCategory = result.device.categoryId;
+  const search = byId("device-search");
+  if (search) search.value = "";
+  const category = byId("category-filter");
+  if (category) category.value = result.device.categoryId;
+
+  resetValidationUi("Added a browser-memory device. Run Validate Candidate before exporting or using the candidate JSON.");
+  updateSummaryFromCandidate();
+  const refreshedCategory = byId("category-filter");
+  if (refreshedCategory) refreshedCategory.value = result.device.categoryId;
+  activeCategory = result.device.categoryId;
+  renderFilteredDevices();
+  updateDirtyState();
+  setText("export-status", "Edited candidate ready");
+  setText("add-device-status", result.warning || "");
 }
 
 function setupEditorControls() {
@@ -768,6 +1059,12 @@ function setupEditorControls() {
 
   const enabled = byId("editor-enabled");
   if (enabled) enabled.addEventListener("change", handleEditorEnabledChange);
+
+  const addDeviceId = byId("editor-deviceId-input");
+  if (addDeviceId) addDeviceId.addEventListener("input", handleAddTextInput);
+
+  const addCategory = byId("editor-categoryId-select");
+  if (addCategory) addCategory.addEventListener("change", handleAddCategoryChange);
 }
 
 function setExportReady(isReady) {
@@ -1007,6 +1304,21 @@ if (categoryFilter) {
 const revertButton = byId("revert-candidate-btn");
 if (revertButton) {
   revertButton.addEventListener("click", revertCandidate);
+}
+
+const addDeviceButton = byId("add-device-btn");
+if (addDeviceButton) {
+  addDeviceButton.addEventListener("click", startAddDevice);
+}
+
+const commitAddDeviceButton = byId("commit-add-device-btn");
+if (commitAddDeviceButton) {
+  commitAddDeviceButton.addEventListener("click", commitAddDevice);
+}
+
+const cancelAddDeviceButton = byId("cancel-add-device-btn");
+if (cancelAddDeviceButton) {
+  cancelAddDeviceButton.addEventListener("click", cancelAddDevice);
 }
 
 const importCandidateInput = byId("import-candidate-input");

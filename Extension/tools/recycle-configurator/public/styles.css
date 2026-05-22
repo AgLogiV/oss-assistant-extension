@@ -414,6 +414,19 @@ td {
   margin-bottom: 16px;
 }
 
+.editor-header-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.add-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .selected-device-status {
   max-width: 180px;
   margin: 0;
@@ -421,6 +434,14 @@ td {
   font-size: 12px;
   line-height: 1.35;
   text-align: right;
+}
+
+.add-device-status {
+  min-height: 18px;
+  margin: 0 0 12px;
+  color: #8a5a00;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .readonly-grid {

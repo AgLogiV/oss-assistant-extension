@@ -150,6 +150,7 @@
               <option value="">All categories</option>
             </select>
           </label>
+          <button id="add-device-btn" type="button" disabled>Add Device</button>
           <button id="revert-candidate-btn" type="button" disabled>Revert changes</button>
           <p class="filter-status" id="filter-status">Waiting for fixture</p>
         </div>
@@ -180,8 +181,16 @@
                 <p class="eyebrow">Selected device</p>
                 <h3 id="device-editor-heading">Device editor</h3>
               </div>
-              <p class="selected-device-status" id="selected-device-status">No device selected</p>
+              <div class="editor-header-actions">
+                <p class="selected-device-status" id="selected-device-status">No device selected</p>
+                <div class="add-device-actions">
+                  <button id="commit-add-device-btn" type="button" hidden>Add to candidate</button>
+                  <button id="cancel-add-device-btn" type="button" hidden>Cancel</button>
+                </div>
+              </div>
             </div>
+
+            <p class="add-device-status" id="add-device-status"></p>
 
             <dl class="readonly-grid" aria-label="Selected device identity">
               <div>
@@ -195,6 +204,14 @@
             </dl>
 
             <div class="editor-form" id="device-editor-form">
+              <label class="add-only-field" hidden>
+                deviceId
+                <input id="editor-deviceId-input" data-add-field="deviceId" type="text" autocomplete="off" disabled>
+              </label>
+              <label class="add-only-field" hidden>
+                categoryId
+                <select id="editor-categoryId-select" data-add-field="categoryId" disabled></select>
+              </label>
               <label>
                 displayName
                 <input id="editor-displayName" data-editor-field="displayName" type="text" disabled>
