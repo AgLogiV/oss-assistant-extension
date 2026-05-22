@@ -83,6 +83,18 @@ Only `.webp`, `.png`, `.jpg`, and `.jpeg` files are included. Results include `p
 
 Asset preview and upload are not implemented yet. The endpoint accepts no asset path input and performs no writes.
 
+## Asset Preview
+
+The UI shows small thumbnails for non-empty `imagePath` and `helpImagePath` values by calling:
+
+```text
+GET /api/asset-preview?path=<extension-relative-path>
+```
+
+The preview endpoint accepts only extension-relative paths covered by the asset policy, such as `images/devices/16x9/example.webp` or `images/recycle-help/example.webp`. It rejects absolute paths, backslashes, URL-like paths, `file://` paths, and any path containing `..`. It resolves the request server-side and verifies the file stays inside the matched allowed directory before serving it.
+
+Preview URLs are UI-only. They are not written into the browser-memory candidate or exported JSON. Upload and save endpoints are still not implemented.
+
 ## Validation Panel
 
 The page also has a dev-only validation button for the fixed fixture.

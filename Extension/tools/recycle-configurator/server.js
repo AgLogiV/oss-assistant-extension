@@ -41,6 +41,8 @@ const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".webp": "image/webp"
@@ -64,6 +66,38 @@ function sendJson(request, response, statusCode, payload) {
 
 function toExtensionRelativePath(prefix, fileName) {
   return `${prefix}${fileName}`.replace(/\\/g, "/");
+}
+
+function isPathInside(parentPath, childPath) {
+  const relative = path.relative(parentPath, childPath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function resolveAllowedAssetPath(assetPath) {
+  const raw = String(assetPath || "").trim();
+  if (!raw) return { error: "Missing asset path" };
+  if (raw.includes("\\") || raw.includes("..")) return { error: "Asset path is not allowed" };
+  if (raw.startsWith("/") || /^[A-Za-z]:/.test(raw)) return { error: "Asset path must be extension-relative" };
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) || /^file:/i.test(raw)) return { error: "Asset path must not be a URL" };
+
+  const normalized = raw.replace(/\/+/g, "/");
+  const policy = ASSET_POLICIES.find(item => normalized.startsWith(item.extensionPrefix));
+  if (!policy) return { error: "Asset path is outside allowed directories" };
+
+  const fileName = normalized.slice(policy.extensionPrefix.length);
+  if (!fileName || fileName.includes("/")) return { error: "Asset path must reference a file in an allowed directory" };
+
+  const extension = path.extname(fileName).toLowerCase();
+  if (!ASSET_EXTENSIONS.has(extension)) return { error: "Asset extension is not allowed" };
+
+  const resolved = path.resolve(policy.directory, fileName);
+  if (!isPathInside(policy.directory, resolved)) return { error: "Asset path escaped allowed directory" };
+
+  return {
+    path: resolved,
+    extension,
+    contentType: MIME_TYPES[extension] || "application/octet-stream"
+  };
 }
 
 function listAssetsForPolicy(policy, callback) {
@@ -306,6 +340,35 @@ function serveAssets(request, response) {
   });
 }
 
+function serveAssetPreview(request, response, url) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    sendJson(request, response, 405, { ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  const resolved = resolveAllowedAssetPath(url.searchParams.get("path"));
+  if (resolved.error) {
+    sendJson(request, response, 400, { ok: false, error: resolved.error });
+    return;
+  }
+
+  fs.readFile(resolved.path, (error, content) => {
+    if (error) {
+      sendJson(request, response, error.code === "ENOENT" ? 404 : 500, {
+        ok: false,
+        error: error.code === "ENOENT" ? "Asset not found" : "Cannot read asset"
+      });
+      return;
+    }
+
+    response.writeHead(200, {
+      "Content-Type": resolved.contentType,
+      "Cache-Control": "no-store"
+    });
+    response.end(request.method === "HEAD" ? undefined : content);
+  });
+}
+
 function serveFixture(request, response) {
   if (request.method !== "GET" && request.method !== "HEAD") {
     sendJson(request, response, 405, { ok: false, error: "Method not allowed" });
@@ -481,6 +544,11 @@ function serveStatic(request, response) {
 
   if (url.pathname === "/api/assets") {
     serveAssets(request, response);
+    return;
+  }
+
+  if (url.pathname === "/api/asset-preview") {
+    serveAssetPreview(request, response, url);
     return;
   }
 

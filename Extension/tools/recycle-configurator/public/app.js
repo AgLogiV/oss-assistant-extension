@@ -2,6 +2,7 @@
 
 const endpoint = "/api/fixture";
 const assetsEndpoint = "/api/assets";
+const assetPreviewEndpoint = "/api/asset-preview";
 const validationEndpoint = "/api/validate-fixture";
 let currentCandidate = null;
 let originalCandidateJson = "";
@@ -262,6 +263,36 @@ function syncAssetSelect(select, value) {
   select.value = Array.from(select.options).some(option => option.value === normalized) ? normalized : "";
 }
 
+function previewUrlForAssetPath(value) {
+  const normalized = normalizeString(value);
+  if (!normalized) return "";
+  return `${assetPreviewEndpoint}?path=${encodeURIComponent(normalized)}`;
+}
+
+function setAssetPreview(preview, value) {
+  const url = previewUrlForAssetPath(value);
+  preview.textContent = "";
+
+  if (!url) {
+    preview.className = "asset-preview asset-preview-empty";
+    preview.textContent = "No preview";
+    return;
+  }
+
+  const image = document.createElement("img");
+  image.src = url;
+  image.alt = "";
+  image.loading = "lazy";
+  image.addEventListener("error", () => {
+    preview.textContent = "";
+    preview.className = "asset-preview asset-preview-empty";
+    preview.textContent = "No preview";
+  });
+
+  preview.className = "asset-preview";
+  preview.appendChild(image);
+}
+
 function inputCell(row, device, index, field, options = {}) {
   const cell = document.createElement("td");
   const control = options.multiline ? document.createElement("textarea") : document.createElement("input");
@@ -282,15 +313,18 @@ function assetPathCell(row, device, index, field) {
   const wrapper = document.createElement("div");
   const input = document.createElement("input");
   const select = document.createElement("select");
+  const preview = document.createElement("div");
   const options = assetOptionsForField(field);
 
   wrapper.className = "asset-path-control";
+  preview.className = "asset-preview asset-preview-empty";
   input.value = normalizeString(device[field]);
   input.dataset.deviceIndex = String(index);
   input.dataset.field = field;
   input.addEventListener("input", event => {
     updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
     syncAssetSelect(select, event.target.value);
+    setAssetPreview(preview, event.target.value);
   });
 
   const emptyOption = document.createElement("option");
@@ -312,10 +346,13 @@ function assetPathCell(row, device, index, field) {
     if (!event.target.value) return;
     input.value = event.target.value;
     updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
+    setAssetPreview(preview, event.target.value);
   });
 
+  setAssetPreview(preview, device[field]);
   wrapper.appendChild(input);
   wrapper.appendChild(select);
+  wrapper.appendChild(preview);
   cell.appendChild(wrapper);
   row.appendChild(cell);
 }
