@@ -148,6 +148,8 @@ The endpoint has a 1 MB request body limit. It does not create permanent project
 
 Candidate validation uses the same 20 second validator timeout and 128 KB per-stream output capture limit as fixture validation.
 
+The validation panel shows whether the latest result came from the fixed fixture or the browser-memory candidate. It uses PASS/FAIL badges plus short hints for fixture failures, candidate failures, and candidate edits made after the last candidate validation. Technical `stdout` and `stderr` output remain visible for debugging.
+
 Future candidate JSON exports should be validated with:
 
 ```bash

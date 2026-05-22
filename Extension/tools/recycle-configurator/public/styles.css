@@ -145,7 +145,72 @@ button:disabled {
 }
 
 .validation-grid {
-  grid-template-columns: 180px 180px 160px 140px minmax(0, 1fr);
+  grid-template-columns: 170px 190px 130px 130px 110px minmax(0, 1fr);
+}
+
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.result-neutral {
+  background: #eef2f6;
+  color: #415064;
+}
+
+.result-running {
+  background: #e8f1ff;
+  color: #174ea6;
+}
+
+.result-pass {
+  background: #e8f5ee;
+  color: #166534;
+}
+
+.result-fail,
+.result-error {
+  background: #fff0f1;
+  color: #b00020;
+}
+
+.result-stale {
+  background: #fff7df;
+  color: #8a5a00;
+}
+
+.validation-hint {
+  max-width: none;
+  margin: -8px 0 18px;
+  border-left: 4px solid #c7d1dc;
+  padding: 10px 12px;
+  background: #f9fbfc;
+  color: #415064;
+  font-size: 14px;
+}
+
+.validation-hint-pass {
+  border-left-color: #166534;
+  background: #f3fbf6;
+  color: #14532d;
+}
+
+.validation-hint-fail {
+  border-left-color: #b00020;
+  background: #fff5f7;
+  color: #4f1b25;
+}
+
+.validation-hint-stale {
+  border-left-color: #d99800;
+  background: #fff9e8;
+  color: #5f3f00;
 }
 
 .output-grid {

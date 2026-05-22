@@ -10,6 +10,8 @@ let isDirty = false;
 let activeSearch = "";
 let activeCategory = "";
 let selectedDeviceIndex = null;
+let lastCandidateValidationJson = "";
+let candidateValidationHasRun = false;
 let assetInventory = {
   deviceImages: [],
   helpImages: []
@@ -22,6 +24,22 @@ function byId(id) {
 function setText(id, value) {
   const element = byId(id);
   if (element) element.textContent = value;
+}
+
+function setResultBadge(id, state, text) {
+  const element = byId(id);
+  if (!element) return;
+
+  element.textContent = text;
+  element.className = `result-badge result-${state}`;
+}
+
+function setValidationHint(message, state = "neutral") {
+  const element = byId("validation-hint");
+  if (!element) return;
+
+  element.textContent = message;
+  element.className = `validation-hint validation-hint-${state}`;
 }
 
 function renderCategories(categories) {
@@ -245,6 +263,21 @@ function candidateForAction() {
   return candidate;
 }
 
+function candidateValidationFingerprint() {
+  const candidate = candidateForAction();
+  return candidate ? JSON.stringify(candidate) : "";
+}
+
+function markCandidateValidationStaleIfNeeded() {
+  if (!candidateValidationHasRun) return;
+
+  const currentJson = candidateValidationFingerprint();
+  if (currentJson && currentJson !== lastCandidateValidationJson) {
+    setResultBadge("candidate-validation-status", "stale", "Unvalidated changes");
+    setValidationHint("Candidate changed after the last validation. Run Validate Candidate again before exporting or publishing.", "stale");
+  }
+}
+
 function updateSummaryFromCandidate() {
   const devices = Array.isArray(currentCandidate && currentCandidate.devices) ? currentCandidate.devices : [];
   const categories = categorySummaries(devices);
@@ -287,6 +320,7 @@ function updateDeviceField(index, field, value) {
   }
 
   updateDirtyState();
+  markCandidateValidationStaleIfNeeded();
   setText("export-status", isDirty ? "Edited candidate ready" : "Ready");
   updateFilterStatus(filteredDeviceEntries().length);
 }
@@ -487,8 +521,14 @@ function renderFixture(data) {
   currentCandidate = data.candidate ? cloneJson(data.candidate) : null;
   originalCandidateJson = currentCandidate ? JSON.stringify(currentCandidate) : "";
   selectedDeviceIndex = null;
+  lastCandidateValidationJson = "";
+  candidateValidationHasRun = false;
   setText("fixture-status", data.ok ? "Loaded" : "Failed");
   setText("export-status", currentCandidate ? "Ready" : "Unavailable");
+  setText("validation-target", "-");
+  setResultBadge("validation-status", "neutral", "Not run");
+  setResultBadge("candidate-validation-status", "neutral", "Not run");
+  setValidationHint("Run Validate Fixture or Validate Candidate to see the latest validation result.");
   setText("fixture-source", data.source || "Extension/config/recycle-device-catalog.fixture.json");
   setText("schema-version", String(data.schemaVersion ?? "-"));
   setText("revision", data.revision || "-");
@@ -513,10 +553,16 @@ function renderError(error) {
   currentCandidate = null;
   originalCandidateJson = "";
   selectedDeviceIndex = null;
+  lastCandidateValidationJson = "";
+  candidateValidationHasRun = false;
   activeSearch = "";
   activeCategory = "";
   setText("fixture-status", "Failed");
   setText("export-status", "Unavailable");
+  setText("validation-target", "-");
+  setResultBadge("validation-status", "error", "ERROR");
+  setResultBadge("candidate-validation-status", "neutral", "Not run");
+  setValidationHint("Fixture could not be loaded. Check the error details and local server output.", "fail");
   updateFilterStatus(0);
   updateDirtyState();
   setExportReady(false);
@@ -547,8 +593,13 @@ function revertCandidate() {
 
   currentCandidate = JSON.parse(originalCandidateJson);
   selectedDeviceIndex = null;
+  lastCandidateValidationJson = "";
+  candidateValidationHasRun = false;
   setText("export-status", "Ready");
-  setText("candidate-validation-status", "Not run");
+  setText("validation-target", "-");
+  setResultBadge("candidate-validation-status", "neutral", "Not run");
+  setResultBadge("validation-status", "neutral", "Not run");
+  setValidationHint("Reverted to the loaded fixture. Run Validate Candidate to validate the current browser-memory candidate.");
   updateSummaryFromCandidate();
   renderFilteredDevices();
   updateDirtyState();
@@ -675,45 +726,72 @@ function setCandidateValidationRunning(isRunning) {
 }
 
 function renderValidationResult(data) {
-  setText("validation-status", data.pass ? "PASS" : "FAIL");
+  setText("validation-target", "Fixture");
+  setResultBadge("validation-status", data.pass ? "pass" : "fail", data.pass ? "PASS" : "FAIL");
   setText("validation-exit-code", data.exitCode === null || data.exitCode === undefined ? "-" : String(data.exitCode));
   setText("validation-input", data.input || "Extension/config/recycle-device-catalog.fixture.json");
   setText("validation-stdout", data.stdout || "(empty)");
   setText("validation-stderr", data.stderr || "(empty)");
+  setValidationHint(
+    data.pass
+      ? "Fixture validation passed. The checked project fixture is valid."
+      : "Fixture validation failed. This may indicate a project/config issue.",
+    data.pass ? "pass" : "fail"
+  );
 }
 
-function renderCandidateValidationResult(data) {
-  setText("candidate-validation-status", data.pass ? "PASS" : "FAIL");
+function renderCandidateValidationResult(data, candidateJson) {
+  candidateValidationHasRun = true;
+  lastCandidateValidationJson = candidateJson;
+  setText("validation-target", "Candidate");
+  setResultBadge("candidate-validation-status", data.pass ? "pass" : "fail", data.pass ? "PASS" : "FAIL");
+  setResultBadge("validation-status", data.pass ? "pass" : "fail", data.pass ? "PASS" : "FAIL");
   setText("validation-exit-code", data.exitCode === null || data.exitCode === undefined ? "-" : String(data.exitCode));
   setText("validation-input", data.input || "temp-candidate.json");
   setText("validation-stdout", data.stdout || "(empty)");
   setText("validation-stderr", data.stderr || "(empty)");
+  setValidationHint(
+    data.pass
+      ? "Candidate validation passed for the current browser-memory candidate."
+      : "Candidate validation failed. Check the errors below. If this was only a test edit, use Revert changes.",
+    data.pass ? "pass" : "fail"
+  );
 }
 
 function renderValidationError(error) {
-  setText("validation-status", "ERROR");
+  setText("validation-target", "Fixture");
+  setResultBadge("validation-status", "error", "ERROR");
   setText("validation-exit-code", "-");
   setText("validation-stdout", "(empty)");
   setText("validation-stderr", error.message);
+  setValidationHint("Fixture validation could not complete. This may indicate a local project/tooling issue.", "fail");
 }
 
 function renderCandidateValidationError(error) {
-  setText("candidate-validation-status", "ERROR");
+  setText("validation-target", "Candidate");
+  setResultBadge("candidate-validation-status", "error", "ERROR");
+  setResultBadge("validation-status", "error", "ERROR");
   setText("validation-exit-code", "-");
   setText("validation-input", "temp-candidate.json");
   setText("validation-stdout", "(empty)");
   setText("validation-stderr", error.message);
+  setValidationHint("Candidate validation could not complete. Check the errors below. If this was only a test edit, use Revert changes.", "fail");
 }
 
 async function validateCandidate() {
   const candidate = candidateForAction();
   if (!candidate) {
-    setText("candidate-validation-status", "No candidate loaded");
+    setResultBadge("candidate-validation-status", "error", "No candidate loaded");
+    setValidationHint("No browser-memory candidate is loaded yet.", "fail");
     return;
   }
+  const candidateJson = JSON.stringify(candidate);
 
   setCandidateValidationRunning(true);
-  setText("candidate-validation-status", "Running");
+  setText("validation-target", "Candidate");
+  setResultBadge("candidate-validation-status", "running", "Running");
+  setResultBadge("validation-status", "running", "Running");
+  setValidationHint("Candidate validation is running for the current browser-memory candidate.");
   setText("validation-exit-code", "-");
   setText("validation-input", "temp-candidate.json");
   setText("validation-stdout", "Running candidate validator...");
@@ -730,7 +808,7 @@ async function validateCandidate() {
     if (!response.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${response.status}`);
     }
-    renderCandidateValidationResult(data);
+    renderCandidateValidationResult(data, candidateJson);
   } catch (error) {
     renderCandidateValidationError(error);
   } finally {
@@ -740,7 +818,9 @@ async function validateCandidate() {
 
 async function validateFixture() {
   setValidationRunning(true);
-  setText("validation-status", "Running");
+  setText("validation-target", "Fixture");
+  setResultBadge("validation-status", "running", "Running");
+  setValidationHint("Fixture validation is running against the fixed project fixture.");
   setText("validation-exit-code", "-");
   setText("validation-stdout", "Running validator...");
   setText("validation-stderr", "(empty)");

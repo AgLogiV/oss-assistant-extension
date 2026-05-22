@@ -64,11 +64,15 @@
           </div>
           <div>
             <dt>Candidate validation</dt>
-            <dd id="candidate-validation-status">Not run</dd>
+            <dd id="candidate-validation-status" class="result-badge result-neutral">Not run</dd>
           </div>
           <div>
-            <dt>Status</dt>
-            <dd id="validation-status">Not run</dd>
+            <dt>Last target</dt>
+            <dd id="validation-target">-</dd>
+          </div>
+          <div>
+            <dt>Result</dt>
+            <dd id="validation-status" class="result-badge result-neutral">Not run</dd>
           </div>
           <div>
             <dt>Exit code</dt>
@@ -79,6 +83,8 @@
             <dd id="validation-input">Extension/config/recycle-device-catalog.fixture.json</dd>
           </div>
         </dl>
+
+        <p class="validation-hint" id="validation-hint">Run Validate Fixture or Validate Candidate to see the latest validation result.</p>
 
         <div class="output-grid">
           <div>
