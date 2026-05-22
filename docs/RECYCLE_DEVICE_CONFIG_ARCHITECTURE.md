@@ -39,13 +39,21 @@ The current recycle flow still keeps most business metadata in local JavaScript 
 The normalized local recycle catalog already drives:
 
 - recycle device cards after category selection;
-- 16:9 device card images where available;
+- 16:9 device card images through explicit `imagePath` metadata;
 - selected-device visual state;
 - selected-device validation context through `validationProfileId`;
 - selected-device help images through `helpImagePath`;
 - category material allowlists generated from catalog `materialId` values.
 
 Current selected-device behavior affects validation, help context, SAP/material quick-button ordering, and controlled SAP/material auto-fill. SAP/material quick-button filtering remains category-level: selected devices are prioritized first when their material buttons exist, but they do not restrict the grid to selected devices only. A per-flow material snapshot in `sessionStorage` captures category/device/material/serial/date context at valid recycle Continue time so the SAP/material step does not have to depend only on live shared selected-device state. `getRecycleMaterialFillCandidate(...)` evaluates a controlled fill candidate and returns `{ ok, materialId, reason }`; when the candidate is safe and the OSS `MaterialId` field is empty, runtime fills the material value without calling auto-continue again.
+
+Current recycle device image policy:
+
+- recycle devices should prefer explicit extension-relative `imagePath` values;
+- current recycle devices all have explicit `imagePath` values;
+- device `imagePath` values must use packaged `images/devices/16x9/...` paths, never absolute local filesystem paths;
+- the older runtime fallback image mapping still exists for future/legacy compatibility and must not be removed until a separate runtime cleanup is planned;
+- `helpImagePath` is separate from `imagePath` and is used by the serial/help UI, not by the normal device card image policy.
 
 Austrian is now partially device-based. `ADB Modem 2220` and `Huawei HA35-22 HIBRID` are local catalog devices with device cards, help images, device-level validation, and selected-device material fill through the same snapshot/controlled-fill flow. If no Austrian device is selected, the legacy Austrian preset fallback remains active for compatibility. `cam_modules` and `modems` remain special categories outside this migration.
 
@@ -182,7 +190,9 @@ A Chrome extension package should be treated as immutable at runtime. The safer 
 - `displayName` is UI text and may change more freely than `deviceId`.
 - `materialId` must be the canonical SAP/material ID.
 - `legacyMaterialIds` must be an array of string aliases/old IDs.
-- `imagePath` and `helpImagePath` must use allowed asset path prefixes or validated remote URLs.
+- Device `imagePath` must use packaged extension-relative `images/devices/16x9/...` paths.
+- `helpImagePath` must use the separate help asset policy, normally `images/recycle-help/...`.
+- Neither image field may use an absolute local filesystem path.
 - `warningText` must be plain text only.
 - `validationProfileId` must reference a predefined local profile.
 - `enabled` defaults to `true` when omitted.
@@ -349,6 +359,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
 1. **Local configurator UI / local tool**
    - A local editor can make device/category/material/help metadata easier for non-developers to edit.
    - It should generate schema-valid JSON and never write directly into packaged extension runtime files.
+   - Its asset selectors/previews should store only extension-relative config paths, such as `images/devices/16x9/...` for `imagePath` and `images/recycle-help/...` for `helpImagePath`.
 
 2. **GitHub or simple static hosting as the first remote MVP**
    - JSON and image assets can be published to GitHub or simple static hosting.

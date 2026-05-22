@@ -94,7 +94,9 @@ Explicit packaged image path for the recycle device card.
 imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp"
 ```
 
-If omitted, the code derives a 16:9 image path from the existing packaged image fallback.
+Recycle devices should prefer explicit extension-relative `imagePath` values. Current recycle devices all have explicit `imagePath` values. Use packaged `images/devices/16x9/...` paths only; do not use absolute local filesystem paths such as `D:\...` or `C:\...`.
+
+If omitted, the code can still derive a 16:9 image path from the existing packaged image fallback, but that fallback is now legacy/runtime compatibility and must not be removed until a separate runtime cleanup is planned.
 
 ### `helpImagePath`
 
@@ -103,6 +105,8 @@ Optional help image for selected-device recycle help UI.
 ```js
 helpImagePath: "images/recycle-help/netbox-zte-g5b1.webp"
 ```
+
+`helpImagePath` is separate from `imagePath`. It is used by the serial/help UI and should normally point to `images/recycle-help/...`; it must not be used as the normal device card image.
 
 Add only after the image exists and is available to the extension. When present, the image can be used by the floating help preview after an invalid non-empty serial and by the manual help menu opened from the yellow help button. Help UI is only visual guidance; it must not change serial values, SAP/material values, validation, or OSS navigation.
 
@@ -214,11 +218,13 @@ The current `normalizeSwapMaterialId` removes non-digits for matching, but the c
 
 ## 8. Image rules
 
-### Old packaged image fallback
+### Legacy packaged image fallback
 
 If `imagePath` is omitted, the recycle device card tries to derive a 16:9 path from the existing device image mapping through `deviceImageForModel(displayName)`.
 
 This means the `displayName` should remain close enough to existing material model names when relying on fallback.
+
+All current recycle devices now have explicit `imagePath` values, so new device work should treat fallback as compatibility behavior for future/legacy gaps, not as the preferred catalog model.
 
 ### 16:9 image location
 
@@ -233,6 +239,8 @@ Catalog paths should use the extension-relative path:
 ```js
 imagePath: "images/devices/16x9/Example_Device.webp"
 ```
+
+The dev-only recycle configurator asset selectors and previews follow the same policy: they show/select packaged assets through local helper endpoints, but candidate JSON stores only extension-relative paths.
 
 ### Filename consistency with existing device images
 

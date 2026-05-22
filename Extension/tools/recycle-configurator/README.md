@@ -58,6 +58,8 @@ The device table can be filtered by search text across `deviceId`, `categoryId`,
 
 `imagePath` and `helpImagePath` keep their manual text inputs and also offer compact selectors populated from `GET /api/assets`. The selectors write only extension-relative paths into the browser-memory candidate, such as `images/devices/16x9/example.webp` or `images/recycle-help/example.webp`. Empty paths remain valid, and paths not present in the asset inventory remain visible in the manual field.
 
+Recycle device `imagePath` values should use packaged `images/devices/16x9/...` paths. Current recycle devices all have explicit `imagePath` values. `helpImagePath` is separate from `imagePath` and is used for serial/help UI, normally with `images/recycle-help/...` paths. The configurator must not store absolute local filesystem paths in candidate JSON.
+
 Edits are kept only in browser memory and are reflected by the dirty state indicator. Before candidate export or candidate validation, `generatedMaterialFilters` is regenerated from enabled devices with non-empty trimmed `materialId` values, grouped by `categoryId` in device order.
 
 Use `Revert changes` to reset the browser-memory candidate back to the original loaded fixture data. This does not read or write project files.
@@ -81,7 +83,7 @@ Allowed asset directories:
 
 Only `.webp`, `.png`, `.jpg`, and `.jpeg` files are included. Results include `path`, `fileName`, and `kind`, and are sorted by `path`.
 
-Asset preview and upload are not implemented yet. The endpoint accepts no asset path input and performs no writes.
+Upload is not implemented. The inventory endpoint accepts no asset path input and performs no writes.
 
 ## Asset Preview
 
