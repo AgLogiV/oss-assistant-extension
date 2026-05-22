@@ -9,6 +9,7 @@ let originalCandidateJson = "";
 let isDirty = false;
 let activeSearch = "";
 let activeCategory = "";
+let selectedDeviceIndex = null;
 let assetInventory = {
   deviceImages: [],
   helpImages: []
@@ -186,10 +187,42 @@ function updateFilterStatus(visibleCount) {
   setText("filter-status", currentCandidate ? `${visibleCount} of ${totalCount} devices shown` : "Waiting for fixture");
 }
 
+function selectedDevice() {
+  if (!currentCandidate || !Array.isArray(currentCandidate.devices)) return null;
+  if (selectedDeviceIndex === null || selectedDeviceIndex === undefined) return null;
+  return currentCandidate.devices[selectedDeviceIndex] || null;
+}
+
+function selectedDeviceIsVisible(entries) {
+  return entries.some(entry => entry.index === selectedDeviceIndex);
+}
+
+function ensureSelectedDevice(entries) {
+  const devices = Array.isArray(currentCandidate && currentCandidate.devices) ? currentCandidate.devices : [];
+  if (!devices.length) {
+    selectedDeviceIndex = null;
+    return;
+  }
+
+  if (selectedDeviceIndex === null || !devices[selectedDeviceIndex]) {
+    selectedDeviceIndex = entries.length ? entries[0].index : 0;
+  }
+}
+
 function renderFilteredDevices() {
+  const entries = filteredDeviceEntries();
+  ensureSelectedDevice(entries);
+  renderDevices(entries);
+  updateFilterStatus(entries.length);
+  updateSelectedDeviceVisibility(entries);
+  renderDeviceEditor();
+}
+
+function refreshDeviceList() {
   const entries = filteredDeviceEntries();
   renderDevices(entries);
   updateFilterStatus(entries.length);
+  updateSelectedDeviceVisibility(entries);
 }
 
 function candidateForAction() {
@@ -270,6 +303,7 @@ function previewUrlForAssetPath(value) {
 }
 
 function setAssetPreview(preview, value) {
+  if (!preview) return;
   const url = previewUrlForAssetPath(value);
   preview.textContent = "";
 
@@ -293,116 +327,35 @@ function setAssetPreview(preview, value) {
   preview.appendChild(image);
 }
 
-function inputCell(row, device, index, field, options = {}) {
-  const cell = document.createElement("td");
-  const control = options.multiline ? document.createElement("textarea") : document.createElement("input");
-
-  control.value = options.format ? options.format(device[field]) : normalizeString(device[field]);
-  control.dataset.deviceIndex = String(index);
-  control.dataset.field = field;
-  control.addEventListener("input", event => {
-    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
-  });
-
-  cell.appendChild(control);
-  row.appendChild(cell);
-}
-
-function assetPathCell(row, device, index, field) {
-  const cell = document.createElement("td");
-  const wrapper = document.createElement("div");
-  const input = document.createElement("input");
-  const select = document.createElement("select");
-  const preview = document.createElement("div");
-  const options = assetOptionsForField(field);
-
-  wrapper.className = "asset-path-control";
-  preview.className = "asset-preview asset-preview-empty";
-  input.value = normalizeString(device[field]);
-  input.dataset.deviceIndex = String(index);
-  input.dataset.field = field;
-  input.addEventListener("input", event => {
-    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
-    syncAssetSelect(select, event.target.value);
-    setAssetPreview(preview, event.target.value);
-  });
-
-  const emptyOption = document.createElement("option");
-  emptyOption.value = "";
-  emptyOption.textContent = "Manual / empty";
-  select.appendChild(emptyOption);
-
-  options.forEach(asset => {
-    const option = document.createElement("option");
-    option.value = asset.path;
-    option.textContent = asset.fileName;
-    select.appendChild(option);
-  });
-
-  syncAssetSelect(select, device[field]);
-  select.dataset.deviceIndex = String(index);
-  select.dataset.field = field;
-  select.addEventListener("change", event => {
-    if (!event.target.value) return;
-    input.value = event.target.value;
-    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
-    setAssetPreview(preview, event.target.value);
-  });
-
-  setAssetPreview(preview, device[field]);
-  wrapper.appendChild(input);
-  wrapper.appendChild(select);
-  wrapper.appendChild(preview);
-  cell.appendChild(wrapper);
-  row.appendChild(cell);
-}
-
-function validationProfileCell(row, device, index) {
-  const cell = document.createElement("td");
-  const select = document.createElement("select");
-
-  validationProfileOptions().forEach(profileId => {
-    const option = document.createElement("option");
-    option.value = profileId;
-    option.textContent = profileId;
-    select.appendChild(option);
-  });
-
-  select.value = normalizeString(device.validationProfileId);
-  select.dataset.deviceIndex = String(index);
-  select.dataset.field = "validationProfileId";
-  select.addEventListener("change", event => {
-    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.value);
-  });
-
-  cell.appendChild(select);
-  row.appendChild(cell);
-}
-
-function enabledCell(row, device, index) {
-  const cell = document.createElement("td");
-  const label = document.createElement("label");
-  const input = document.createElement("input");
-
-  label.className = "checkbox-label";
-  input.type = "checkbox";
-  input.checked = device.enabled !== false;
-  input.dataset.deviceIndex = String(index);
-  input.dataset.field = "enabled";
-  input.addEventListener("change", event => {
-    updateDeviceField(Number(event.target.dataset.deviceIndex), event.target.dataset.field, event.target.checked);
-  });
-
-  label.appendChild(input);
-  label.append(" enabled");
-  cell.appendChild(label);
-  row.appendChild(cell);
-}
-
 function readonlyCell(row, value) {
   const cell = document.createElement("td");
   cell.textContent = value || "";
   row.appendChild(cell);
+}
+
+function enabledListCell(row, device) {
+  const cell = document.createElement("td");
+  const status = document.createElement("span");
+  status.className = device.enabled === false ? "status-badge status-disabled" : "status-badge status-enabled";
+  status.textContent = device.enabled === false ? "disabled" : "enabled";
+  cell.appendChild(status);
+  row.appendChild(cell);
+}
+
+function selectDevice(index) {
+  selectedDeviceIndex = index;
+  renderFilteredDevices();
+}
+
+function updateSelectedDeviceVisibility(entries) {
+  const device = selectedDevice();
+  if (!device) {
+    setText("selected-device-status", "No device selected");
+    return;
+  }
+
+  const suffix = selectedDeviceIsVisible(entries) ? "" : " (hidden by filters)";
+  setText("selected-device-status", `${device.deviceId}${suffix}`);
 }
 
 function renderDevices(entries) {
@@ -414,7 +367,7 @@ function renderDevices(entries) {
   if (!Array.isArray(entries) || !entries.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 10;
+    cell.colSpan = 5;
     cell.textContent = currentCandidate ? "No devices match the current filters." : "No devices found in fixture.";
     row.appendChild(cell);
     body.appendChild(row);
@@ -424,23 +377,116 @@ function renderDevices(entries) {
   entries.forEach(entry => {
     const { device, index } = entry;
     const row = document.createElement("tr");
+    row.className = index === selectedDeviceIndex ? "selected-row" : "";
+    row.tabIndex = 0;
+    row.dataset.deviceIndex = String(index);
+    row.addEventListener("click", () => selectDevice(index));
+    row.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectDevice(index);
+      }
+    });
     readonlyCell(row, device.deviceId);
     readonlyCell(row, device.categoryId);
-    inputCell(row, device, index, "displayName");
-    inputCell(row, device, index, "materialId");
-    inputCell(row, device, index, "legacyMaterialIds", { multiline: true, format: legacyMaterialIdsToText });
-    assetPathCell(row, device, index, "imagePath");
-    assetPathCell(row, device, index, "helpImagePath");
-    inputCell(row, device, index, "warningText", { multiline: true });
-    validationProfileCell(row, device, index);
-    enabledCell(row, device, index);
+    readonlyCell(row, device.displayName);
+    readonlyCell(row, device.materialId);
+    enabledListCell(row, device);
     body.appendChild(row);
   });
+}
+
+function setEditorControlsEnabled(isEnabled) {
+  [
+    "editor-displayName",
+    "editor-materialId",
+    "editor-legacyMaterialIds",
+    "editor-imagePath",
+    "editor-imagePath-select",
+    "editor-helpImagePath",
+    "editor-helpImagePath-select",
+    "editor-warningText",
+    "editor-validationProfileId",
+    "editor-enabled"
+  ].forEach(id => {
+    const control = byId(id);
+    if (control) control.disabled = !isEnabled;
+  });
+}
+
+function populateAssetSelect(select, field, value) {
+  if (!select) return;
+  select.textContent = "";
+
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "Manual / empty";
+  select.appendChild(emptyOption);
+
+  assetOptionsForField(field).forEach(asset => {
+    const option = document.createElement("option");
+    option.value = asset.path;
+    option.textContent = asset.fileName;
+    select.appendChild(option);
+  });
+
+  syncAssetSelect(select, value);
+}
+
+function populateValidationProfileSelect(select, value) {
+  if (!select) return;
+  select.textContent = "";
+
+  validationProfileOptions().forEach(profileId => {
+    const option = document.createElement("option");
+    option.value = profileId;
+    option.textContent = profileId;
+    select.appendChild(option);
+  });
+
+  select.value = normalizeString(value);
+}
+
+function renderDeviceEditor() {
+  const device = selectedDevice();
+  const hasDevice = Boolean(device);
+
+  setEditorControlsEnabled(hasDevice);
+  setText("editor-deviceId", hasDevice ? device.deviceId : "-");
+  setText("editor-categoryId", hasDevice ? device.categoryId : "-");
+
+  const textControls = {
+    "editor-displayName": hasDevice ? normalizeString(device.displayName) : "",
+    "editor-materialId": hasDevice ? normalizeString(device.materialId) : "",
+    "editor-legacyMaterialIds": hasDevice ? legacyMaterialIdsToText(device.legacyMaterialIds) : "",
+    "editor-imagePath": hasDevice ? normalizeString(device.imagePath) : "",
+    "editor-helpImagePath": hasDevice ? normalizeString(device.helpImagePath) : "",
+    "editor-warningText": hasDevice ? normalizeString(device.warningText) : ""
+  };
+
+  Object.entries(textControls).forEach(([id, value]) => {
+    const control = byId(id);
+    if (control) control.value = value;
+  });
+
+  populateAssetSelect(byId("editor-imagePath-select"), "imagePath", hasDevice ? device.imagePath : "");
+  populateAssetSelect(byId("editor-helpImagePath-select"), "helpImagePath", hasDevice ? device.helpImagePath : "");
+  populateValidationProfileSelect(byId("editor-validationProfileId"), hasDevice ? device.validationProfileId : "");
+  setAssetPreview(byId("editor-imagePath-preview"), hasDevice ? device.imagePath : "");
+  setAssetPreview(byId("editor-helpImagePath-preview"), hasDevice ? device.helpImagePath : "");
+
+  const enabled = byId("editor-enabled");
+  if (enabled) enabled.checked = hasDevice ? device.enabled !== false : false;
+
+  if (!hasDevice) {
+    setText("selected-device-status", currentCandidate ? "No device selected" : "Waiting for fixture");
+  }
 }
 
 function renderFixture(data) {
   currentCandidate = data.candidate ? cloneJson(data.candidate) : null;
   originalCandidateJson = currentCandidate ? JSON.stringify(currentCandidate) : "";
+  selectedDeviceIndex = null;
   setText("fixture-status", data.ok ? "Loaded" : "Failed");
   setText("export-status", currentCandidate ? "Ready" : "Unavailable");
   setText("fixture-source", data.source || "Extension/config/recycle-device-catalog.fixture.json");
@@ -456,6 +502,7 @@ function renderFixture(data) {
     renderCategories(data.categories);
     renderDevices((data.devices || []).map((device, index) => ({ device, index })));
     updateFilterStatus(0);
+    renderDeviceEditor();
   }
   updateDirtyState();
   setExportReady(Boolean(currentCandidate));
@@ -465,6 +512,7 @@ function renderFixture(data) {
 function renderError(error) {
   currentCandidate = null;
   originalCandidateJson = "";
+  selectedDeviceIndex = null;
   activeSearch = "";
   activeCategory = "";
   setText("fixture-status", "Failed");
@@ -478,11 +526,12 @@ function renderError(error) {
     body.textContent = "";
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 10;
+    cell.colSpan = 5;
     cell.textContent = `Cannot load fixture: ${error.message}`;
     row.appendChild(cell);
     body.appendChild(row);
   }
+  renderDeviceEditor();
 }
 
 function applyFiltersFromControls() {
@@ -497,11 +546,78 @@ function revertCandidate() {
   if (!originalCandidateJson) return;
 
   currentCandidate = JSON.parse(originalCandidateJson);
+  selectedDeviceIndex = null;
   setText("export-status", "Ready");
   setText("candidate-validation-status", "Not run");
   updateSummaryFromCandidate();
   renderFilteredDevices();
   updateDirtyState();
+}
+
+function handleEditorTextInput(event) {
+  if (selectedDeviceIndex === null) return;
+  const field = event.target.dataset.editorField;
+  updateDeviceField(selectedDeviceIndex, field, event.target.value);
+
+  if (field === "imagePath") {
+    syncAssetSelect(byId("editor-imagePath-select"), event.target.value);
+    setAssetPreview(byId("editor-imagePath-preview"), event.target.value);
+  } else if (field === "helpImagePath") {
+    syncAssetSelect(byId("editor-helpImagePath-select"), event.target.value);
+    setAssetPreview(byId("editor-helpImagePath-preview"), event.target.value);
+  }
+
+  refreshDeviceList();
+}
+
+function handleEditorSelectChange(event) {
+  if (selectedDeviceIndex === null) return;
+  const field = event.target.dataset.editorField;
+  const value = event.target.value;
+  const input = byId(`editor-${field}`);
+
+  if (input) input.value = value;
+  updateDeviceField(selectedDeviceIndex, field, value);
+
+  if (field === "imagePath") {
+    setAssetPreview(byId("editor-imagePath-preview"), value);
+  } else if (field === "helpImagePath") {
+    setAssetPreview(byId("editor-helpImagePath-preview"), value);
+  }
+
+  refreshDeviceList();
+}
+
+function handleEditorEnabledChange(event) {
+  if (selectedDeviceIndex === null) return;
+  updateDeviceField(selectedDeviceIndex, "enabled", event.target.checked);
+  refreshDeviceList();
+}
+
+function setupEditorControls() {
+  [
+    "editor-displayName",
+    "editor-materialId",
+    "editor-legacyMaterialIds",
+    "editor-imagePath",
+    "editor-helpImagePath",
+    "editor-warningText"
+  ].forEach(id => {
+    const control = byId(id);
+    if (control) control.addEventListener("input", handleEditorTextInput);
+  });
+
+  [
+    "editor-imagePath-select",
+    "editor-helpImagePath-select",
+    "editor-validationProfileId"
+  ].forEach(id => {
+    const control = byId(id);
+    if (control) control.addEventListener("change", handleEditorSelectChange);
+  });
+
+  const enabled = byId("editor-enabled");
+  if (enabled) enabled.addEventListener("change", handleEditorEnabledChange);
 }
 
 function setExportReady(isReady) {
@@ -677,6 +793,7 @@ async function loadAssetInventory() {
 }
 
 async function initialize() {
+  setupEditorControls();
   await loadAssetInventory();
   await loadFixture();
 }

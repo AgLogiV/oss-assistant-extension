@@ -50,9 +50,10 @@ The endpoint reads `Extension/config/recycle-device-catalog.fixture.json` and re
 - device count;
 - enabled and disabled device count;
 - category count/list;
-- editable existing-device rows for `displayName`, `materialId`, `legacyMaterialIds`, `imagePath`, `helpImagePath`, `warningText`, `validationProfileId`, and `enabled`.
+- a compact device list with `deviceId`, `categoryId`, `displayName`, `materialId`, and `enabled`;
+- a selected-device side editor for `displayName`, `materialId`, `legacyMaterialIds`, `imagePath`, `helpImagePath`, `warningText`, `validationProfileId`, and `enabled`.
 
-`deviceId` and `categoryId` are read-only. There is no device creation, deletion, or category moving. `validationProfileId` is selected from the loaded candidate `validationProfiles` list. `legacyMaterialIds` is edited as comma/newline separated text and stored as an array of strings.
+Select a row in the list to edit that existing device in the side panel. `deviceId` and `categoryId` are read-only. There is no device creation, deletion, or category moving. `validationProfileId` is selected from the loaded candidate `validationProfiles` list. `legacyMaterialIds` is edited as comma/newline separated text and stored as an array of strings.
 
 The device table can be filtered by search text across `deviceId`, `categoryId`, `displayName`, and `materialId`, plus a category dropdown based on the loaded candidate categories.
 

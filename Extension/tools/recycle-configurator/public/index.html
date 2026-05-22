@@ -141,28 +141,93 @@
           <p class="filter-status" id="filter-status">Waiting for fixture</p>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>deviceId</th>
-                <th>categoryId</th>
-                <th>displayName</th>
-                <th>materialId</th>
-                <th>legacyMaterialIds</th>
-                <th>imagePath</th>
-                <th>helpImagePath</th>
-                <th>warningText</th>
-                <th>validationProfileId</th>
-                <th>enabled</th>
-              </tr>
-            </thead>
-            <tbody id="device-table-body">
-              <tr>
-                <td colspan="6">Loading devices...</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="device-workspace">
+          <div class="table-wrap device-list-wrap">
+            <table class="device-list-table">
+              <thead>
+                <tr>
+                  <th>deviceId</th>
+                  <th>categoryId</th>
+                  <th>displayName</th>
+                  <th>materialId</th>
+                  <th>enabled</th>
+                </tr>
+              </thead>
+              <tbody id="device-table-body">
+                <tr>
+                  <td colspan="5">Loading devices...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <aside class="device-editor" id="device-editor" aria-labelledby="device-editor-heading">
+            <div class="editor-header">
+              <div>
+                <p class="eyebrow">Selected device</p>
+                <h3 id="device-editor-heading">Device editor</h3>
+              </div>
+              <p class="selected-device-status" id="selected-device-status">No device selected</p>
+            </div>
+
+            <dl class="readonly-grid" aria-label="Selected device identity">
+              <div>
+                <dt>deviceId</dt>
+                <dd id="editor-deviceId">-</dd>
+              </div>
+              <div>
+                <dt>categoryId</dt>
+                <dd id="editor-categoryId">-</dd>
+              </div>
+            </dl>
+
+            <div class="editor-form" id="device-editor-form">
+              <label>
+                displayName
+                <input id="editor-displayName" data-editor-field="displayName" type="text" disabled>
+              </label>
+              <label>
+                materialId
+                <input id="editor-materialId" data-editor-field="materialId" type="text" disabled>
+              </label>
+              <label>
+                legacyMaterialIds
+                <textarea id="editor-legacyMaterialIds" data-editor-field="legacyMaterialIds" disabled></textarea>
+              </label>
+              <label>
+                imagePath
+                <input id="editor-imagePath" data-editor-field="imagePath" type="text" disabled>
+              </label>
+              <div class="asset-path-control">
+                <select id="editor-imagePath-select" data-editor-field="imagePath" disabled>
+                  <option value="">Manual / empty</option>
+                </select>
+                <div class="asset-preview asset-preview-empty" id="editor-imagePath-preview">No preview</div>
+              </div>
+              <label>
+                helpImagePath
+                <input id="editor-helpImagePath" data-editor-field="helpImagePath" type="text" disabled>
+              </label>
+              <div class="asset-path-control">
+                <select id="editor-helpImagePath-select" data-editor-field="helpImagePath" disabled>
+                  <option value="">Manual / empty</option>
+                </select>
+                <div class="asset-preview asset-preview-empty" id="editor-helpImagePath-preview">No preview</div>
+              </div>
+              <label>
+                warningText
+                <textarea id="editor-warningText" data-editor-field="warningText" disabled></textarea>
+              </label>
+              <label>
+                validationProfileId
+                <select id="editor-validationProfileId" data-editor-field="validationProfileId" disabled></select>
+              </label>
+              <label class="checkbox-label editor-checkbox">
+                <input id="editor-enabled" data-editor-field="enabled" type="checkbox" disabled>
+                enabled
+              </label>
+            </div>
+          </aside>
         </div>
       </section>
     </main>
