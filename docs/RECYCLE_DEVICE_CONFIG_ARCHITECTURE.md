@@ -55,7 +55,7 @@ Current recycle device image policy:
 - the older runtime fallback image mapping still exists for future/legacy compatibility and must not be removed until a separate runtime cleanup is planned;
 - `helpImagePath` is separate from `imagePath` and is used by the serial/help UI, not by the normal device card image policy.
 
-Austrian is now partially device-based. `ADB Modem 2220` and `Huawei HA35-22 HIBRID` are local catalog devices with device cards, help images, device-level validation, and selected-device material fill through the same snapshot/controlled-fill flow. If no Austrian device is selected, the legacy Austrian preset fallback remains active for compatibility. `cam_modules` and `modems` remain special categories outside this migration.
+Austrian is now partially device-based. `ADB Modem 2220` and `Huawei HA35-22 HYBRID` are local catalog devices with device cards, help images, device-level validation, and selected-device material fill through the same snapshot/controlled-fill flow. If no Austrian device is selected, the legacy Austrian preset fallback remains active for compatibility. `cam_modules` and `modems` remain special categories outside this migration.
 
 ### Already dashboard-driven
 

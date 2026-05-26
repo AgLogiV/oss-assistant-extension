@@ -1791,8 +1791,8 @@
   const SWAP_MATERIAL_SIMILAR_WARNINGS = {
     "1000059633": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
     "1000055165": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
-    "124173": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
-    "121561": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството."
+    "124173": "Внимание: ZTE G5B и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
+    "121561": "Внимание: ZTE G5B и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството."
   };
 
   const SWAP_MATERIAL_MODELS_DEFAULT = [
@@ -1802,7 +1802,7 @@
     { id: "1-200-014-914", name: "HX520 Home" },
     { id: "1-200-014-928", name: "K562E-10 Home" },
     { id: "1-200-017-460", name: "Modem ADB 2220" },
-    { id: "1-200-017-462", name: "Huawei HA35-22 HIBRID" },
+    { id: "1-200-017-462", name: "Huawei HA35-22 HYBRID" },
     { id: "BG108322", name: "DTH Conax Smart Card" },
     { id: "BG108445", name: "DTH CAM Neotion CI+ 1.3 CP" },
     { id: "BG108892", name: "STB ZXV B700v5" },
@@ -1832,12 +1832,12 @@
     { id: "BG116081", name: "Huawei B311 Black" },
     { id: "BG116102", name: "KSTB6106 Zapper" },
     { id: "BG117174", name: "Huawei GPON HG8145V5" },
-    { id: "BG117336", name: "Deco M4, AC1200, 2xGbE, MU-MIMO" },
+    { id: "BG117336", name: "Deco M4 AC1200" },
     { id: "BG118542", name: "KSTB5019 XploreTV" },
     { id: "BG118543", name: "KSTB6106 Zapper" },
     { id: "BG118544", name: "KSTB5020 XploreTV" },
     { id: "BG118550", name: "Modem Technicolor7200" },
-    { id: "BG118551", name: "Deco M4, AC1200, 2xGbE, MU-MIMO" },
+    { id: "BG118551", name: "Deco M4 AC1200" },
     { id: "BG118552", name: "Archer A6/AC1200/DB LVA" },
     { id: "BG118560", name: "Huawei GPON HG8145V5" },
     { id: "BG118562", name: "CAM_sDTV CI+ CP OP (TAG) A1" },
@@ -1858,7 +1858,7 @@
     { id: "BG122944", name: "GPON ONT ZXHN F6600R" },
     { id: "BG123357", name: "ZTE ZXHN H3601P" },
     { id: "BG123451", name: "ZTE MF296R" },
-    { id: "BG124173", name: "ZTE G5B1" }
+    { id: "BG124173", name: "ZTE G5B" }
   ];
 
   // This list can be controlled dynamically from the dashboard when remote polling is enabled.
@@ -2193,9 +2193,9 @@
     { deviceId: "dth_nagra_dts3460", categoryId: "dth_kaon_nagra", displayName: "DTH Nagra DTS3460", materialId: "121961", imagePath: "images/devices/16x9/DTH_Nagra_DTS3460.webp", helpImagePath: "images/recycle-help/DTH Nagra DTS3460.webp", validationProfileId: "dth_11_digits_prefix_00" },
 
     { deviceId: "adb_modem_2220", categoryId: "austrian", displayName: "ADB Modem 2220", materialId: "1200017460", imagePath: "images/devices/16x9/Modem_ADB_VoIP_VV_2220_AT-removebg-preview.webp", helpImagePath: "images/recycle-help/ADB modem vv2220.webp", validationProfileId: "austrian_adb_vv2220" },
-    { deviceId: "huawei_ha35_22_hibrid", categoryId: "austrian", displayName: "Huawei HA35-22 HIBRID", materialId: "1200017462", imagePath: "images/devices/16x9/Huawei_HA35-22AM.webp", helpImagePath: "images/recycle-help/Huawei HA35-22 HIBRID.webp", validationProfileId: "austrian_huawei_ha35_22_hibrid" },
+    { deviceId: "huawei_ha35_22_hibrid", categoryId: "austrian", displayName: "Huawei HA35-22 HYBRID", materialId: "1200017462", imagePath: "images/devices/16x9/Huawei_HA35-22AM.webp", helpImagePath: "images/recycle-help/Huawei HA35-22 HIBRID.webp", validationProfileId: "austrian_huawei_ha35_22_hibrid" },
 
-    { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "124173", imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp" },
+    { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B", materialId: "124173", imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp" },
     { deviceId: "zte_mf296r", categoryId: "netbox", displayName: "ZTE MF296R", materialId: "123451", imagePath: "images/devices/16x9/ZTE_MF296R-removebg-preview.webp" },
     { deviceId: "zte_mc888a", categoryId: "netbox", displayName: "ZTE MC888A", materialId: "121561", imagePath: "images/devices/16x9/ZTE_MC888A_5G-removebg-preview.webp" },
     { deviceId: "zte_mf293n", categoryId: "netbox", displayName: "ZTE MF293N", materialId: "119442", imagePath: "images/devices/16x9/ZTE_MF293N_+_ext._Antenna-removebg-preview.webp" },
@@ -2209,7 +2209,7 @@
     { deviceId: "tp_link_nx220v", categoryId: "netbox", displayName: "TP Link NX220v", materialId: "1000055165", imagePath: "images/devices/16x9/TP_Link_NX220v_5G-removebg-preview.webp" },
 
     { deviceId: "tp_link_hx520_home", categoryId: "routers", displayName: "HX520 Home", materialId: "1200014914", imagePath: "images/devices/16x9/Router_TP_Link_HX520_Home_WiFi-removebg-preview.webp", helpImagePath: "images/recycle-help/HX520 Home.webp", validationProfileId: "router_13_alnum" },
-    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4, AC1200, 2xGbE, MU-MIMO", materialId: "118551", imagePath: "images/devices/16x9/TP-LINK_Deco_M4__AC1200__2xGbE__MU-MIMO-removebg-preview.webp", helpImagePath: "images/recycle-help/Deco M4, AC1200, 2xGbE, MU-MIMO.webp", validationProfileId: "router_13_alnum" },
+    { deviceId: "tp_link_deco_m4", categoryId: "routers", displayName: "Deco M4 AC1200", materialId: "118551", imagePath: "images/devices/16x9/TP-LINK_Deco_M4__AC1200__2xGbE__MU-MIMO-removebg-preview.webp", helpImagePath: "images/recycle-help/Deco M4, AC1200, 2xGbE, MU-MIMO.webp", validationProfileId: "router_13_alnum" },
     { deviceId: "tp_link_archer_a6", categoryId: "routers", displayName: "Archer A6/AC1200/DB LVA", materialId: "118552", imagePath: "images/devices/16x9/Router_TP-Link_Archer_A6AC1200DB_LVA-removebg-preview.webp" },
     { deviceId: "tp_link_ex220", categoryId: "routers", displayName: "TP-Link EX220", materialId: "121150", imagePath: "images/devices/16x9/Router_TP-Link_EX220-removebg-preview.webp", helpImagePath: "images/recycle-help/TP-Link EX220.webp", validationProfileId: "router_13_alnum" },
     { deviceId: "tp_link_ex220_home", categoryId: "routers", displayName: "TP-Link EX220 Home", materialId: "121376", imagePath: "images/devices/16x9/Router_TP-Link_EX220-removebg-preview.webp", helpImagePath: "images/recycle-help/TP-Link EX220 Home.webp", validationProfileId: "router_13_alnum" },

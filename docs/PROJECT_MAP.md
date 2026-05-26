@@ -352,7 +352,7 @@ Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopIm
 - `austrian`
   - No selected device keeps the current category fallback: at least 16 alphanumeric characters.
   - Selected `ADB Modem 2220` uses `austrian_adb_vv2220`: starts with `PI` and is exactly 19 alphanumeric characters total.
-  - Selected `Huawei HA35-22 HIBRID` uses `austrian_huawei_ha35_22_hibrid`: exactly 16 alphanumeric characters.
+  - Selected `Huawei HA35-22 HYBRID` uses `austrian_huawei_ha35_22_hibrid`: exactly 16 alphanumeric characters.
 - `dth_kaon_nagra`
   - Must be exactly 11 digits.
 - `cam_modules`
@@ -450,7 +450,7 @@ For recycle category `cam_modules`, empty material history is handled differentl
 Model sources:
 
 - `SWAP_MATERIAL_MODELS_DEFAULT` in `content.js` contains a built-in fallback list.
-- `ZTE G5B1` / `ZTE G5B1 5G` uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"`, the visible label, and packaged image path are intentionally unchanged.
+- `ZTE G5B` uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"` and packaged image path are intentionally unchanged.
 - Render dashboard polling is currently disabled by `SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED = false` because deployed Render data can still return stale material models and override the packaged fallback.
 - While disabled, production material buttons rely on packaged/local fallback model data.
 - The old Render dashboard polling path may be re-enabled only after its data source and override behavior are reviewed.
@@ -505,11 +505,11 @@ Unmapped categories keep the older full-list behavior.
 
 Current Austrian behavior:
 
-- `austrian` has device cards for `ADB Modem 2220` and `Huawei HA35-22 HIBRID`.
+- `austrian` has device cards for `ADB Modem 2220` and `Huawei HA35-22 HYBRID`.
 - A selected Austrian device can controlled-fill empty `MaterialId` through the per-flow snapshot.
 - Extension-filled Austrian material values do not auto-continue.
 - No selected Austrian device keeps the legacy preset fallback: `PI* -> 1200017460`, otherwise `1200017462`.
-- Known UI polish: `Huawei HA35-22 HIBRID` quick material button/card can render through the fallback material model even if no dedicated quick-button image is available yet.
+- Known UI polish: `Huawei HA35-22 HYBRID` quick material button/card can render through the fallback material model even if no dedicated quick-button image is available yet.
 - `cam_modules` is a separate flow. With empty `MaterialId`, it redirects back to the operation page and does not use the quick-buttons grid.
 - Controlled fill candidates still skip `cam_modules` and `modems`.
 

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Production patch: `ZTE G5B1` / `ZTE G5B1 5G` now uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"`, visible label, and image paths were intentionally kept unchanged.
+- Production patch: `ZTE G5B` now uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"` and image paths were intentionally kept unchanged.
 - Temporarily disabled Render dashboard material-model override so production uses packaged/local fallback material models until the old dashboard data source and replacement behavior are reviewed.
 - Added local recycle device catalog cards with 16:9 device images, visual multi-select, shared cross-tab category/device selection state, and selected-device validation profiles.
 - Added selected-device recycle help UI: invalid non-empty serials can show a floating preview, the yellow help button opens a separate manual help menu, and Android/IPTV currently has device-level help images.
@@ -15,7 +15,7 @@
 - Added a per-flow SAP/material snapshot in `sessionStorage` so selected-device ordering can use the category/device/material/serial/date context from the valid recycle Continue step without changing auto-fill or auto-continue behavior.
 - Added a recycle material fill-candidate helper that returns `{ ok, materialId, reason }` and is used by controlled auto-fill without changing auto-continue.
 - Added controlled recycle SAP/material auto-fill: when a valid per-flow snapshot has one safe material candidate and the OSS `MaterialId` field is empty, the extension fills the value without triggering auto-continue or changing the category-scoped material grid.
-- Added Austrian device-based recycle behavior for `ADB Modem 2220` and `Huawei HA35-22 HIBRID`, including device cards, selected-device validation, and selected-device material fill via the snapshot/controlled-fill flow.
+- Added Austrian device-based recycle behavior for `ADB Modem 2220` and `Huawei HA35-22 HYBRID`, including device cards, selected-device validation, and selected-device material fill via the snapshot/controlled-fill flow.
 - Added a dev-only recycle config fixture exporter that reads `Extension/content.js` as text and writes the current config-shaped JSON to stdout for future packaged JSON readiness checks, including top-level key, device count, Austrian filter, and GPON order parity guards.
 - Added a dev-only generated/reference recycle config fixture at `Extension/config/recycle-device-catalog.fixture.json` plus `--compare-fixture` workflow for intentional metadata review before future packaged JSON work.
 - Documented the readiness gate for any future runtime packaged JSON loader: validator and fixture compare must pass, schema/merge/fallback must be documented, `manifest.json` exposure must be reviewed, and dashboard override must remain optional.

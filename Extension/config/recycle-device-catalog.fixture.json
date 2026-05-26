@@ -113,7 +113,7 @@
     {
       "deviceId": "huawei_ha35_22_hibrid",
       "categoryId": "austrian",
-      "displayName": "Huawei HA35-22 HIBRID",
+      "displayName": "Huawei HA35-22 HYBRID",
       "materialId": "1200017462",
       "legacyMaterialIds": [],
       "imagePath": "images/devices/16x9/Huawei_HA35-22AM.webp",
@@ -125,7 +125,7 @@
     {
       "deviceId": "zte_g5b1",
       "categoryId": "netbox",
-      "displayName": "ZTE G5B1",
+      "displayName": "ZTE G5B",
       "materialId": "124173",
       "legacyMaterialIds": [],
       "imagePath": "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp",
@@ -281,7 +281,7 @@
     {
       "deviceId": "tp_link_deco_m4",
       "categoryId": "routers",
-      "displayName": "Deco M4, AC1200, 2xGbE, MU-MIMO",
+      "displayName": "Deco M4 AC1200",
       "materialId": "118551",
       "legacyMaterialIds": [],
       "imagePath": "images/devices/16x9/TP-LINK_Deco_M4__AC1200__2xGbE__MU-MIMO-removebg-preview.webp",

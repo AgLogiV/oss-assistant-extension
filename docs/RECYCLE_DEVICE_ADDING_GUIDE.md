@@ -57,7 +57,7 @@ Use only one of the current allowed category IDs listed below.
 Visible name used in the recycle device cards.
 
 ```js
-displayName: "ZTE G5B1"
+displayName: "ZTE G5B"
 ```
 
 This may change later if business naming changes. Do not use it as identity.
@@ -166,7 +166,7 @@ Avoid:
 
 ```js
 deviceId: "123580"
-deviceId: "ZTE G5B1"
+deviceId: "ZTE G5B"
 deviceId: "нетбокс_zte"
 ```
 
@@ -371,7 +371,7 @@ For Austrian devices, also verify selected-device validation, selected-device ma
 {
   deviceId: "zte_g5b1",
   categoryId: "netbox",
-  displayName: "ZTE G5B1",
+  displayName: "ZTE G5B",
   materialId: "124173",
   legacyMaterialIds: [],
   imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp",
@@ -388,7 +388,7 @@ Shorter entries are acceptable when defaults are enough:
 {
   deviceId: "zte_g5b1",
   categoryId: "netbox",
-  displayName: "ZTE G5B1",
+  displayName: "ZTE G5B",
   materialId: "124173"
 }
 ```

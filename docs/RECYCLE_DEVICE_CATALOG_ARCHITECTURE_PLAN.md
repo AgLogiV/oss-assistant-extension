@@ -38,7 +38,7 @@ Recommended future device shape:
 {
   deviceId: "zte_g5b1",
   categoryId: "netbox",
-  displayName: "ZTE G5B1",
+  displayName: "ZTE G5B",
   materialId: "124173",
   legacyMaterialIds: [],
   imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp",

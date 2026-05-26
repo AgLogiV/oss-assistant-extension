@@ -62,7 +62,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
   - GPON confirmed devices: 16 alphanumeric characters.
   - Routers: confirmed TP-Link/Deco/HX520 devices use 13 alphanumeric characters; ZTE H3601P uses `ZTE` prefix and 15 total characters.
   - Austrian ADB Modem 2220: starts with `PI` and is exactly 19 alphanumeric characters total.
-  - Austrian Huawei HA35-22 HIBRID: exactly 16 alphanumeric characters.
+  - Austrian Huawei HA35-22 HYBRID: exactly 16 alphanumeric characters.
 - For invalid serials, confirm the page does not advance and the serial field keeps focus.
 - For invalid non-empty serials with help content, confirm the floating help preview appears on the right side and hides after about 5 seconds.
 - Click outside the floating help preview and confirm it hides without changing serial, category, selected devices, or OSS navigation.
@@ -93,14 +93,14 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
 - After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
 - With one selected recycle device, a valid per-flow snapshot, and an empty `MaterialId`, confirm controlled auto-fill writes the expected SAP/material value without auto-continuing.
-- For `ZTE G5B1`, confirm the quick-button card and `MaterialId` use `124173`, remain `124173` after waiting more than 30 seconds, and still show the ZTE G5B1 / ZTE MC888A similar-device warning.
+- For `ZTE G5B`, confirm the quick-button card and `MaterialId` use `124173`, remain `124173` after waiting more than 30 seconds, and still show the ZTE G5B / ZTE MC888A similar-device warning.
 - With multiple selected recycle devices that have different SAP/material IDs, confirm there is no auto-fill.
 - With a prefilled OSS `MaterialId`, confirm the extension does not overwrite the value.
 - Confirm selected recycle devices do not restrict the grid to selected devices only.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
 - For unmapped categories, confirm the older full-list behavior remains.
 - For `austrian`, select `ADB Modem 2220` and confirm valid serial fills `1200017460` without auto-continuing.
-- For `austrian`, select `Huawei HA35-22 HIBRID` and confirm valid serial fills `1200017462` without auto-continuing.
+- For `austrian`, select `Huawei HA35-22 HYBRID` and confirm valid serial fills `1200017462` without auto-continuing.
 - For `austrian`, confirm invalid ADB/Huawei serial lengths or non-alphanumeric values are blocked.
 - For `austrian` with no selected device, confirm the legacy preset fallback still applies.
 - For `austrian`, note whether the Huawei quick material button/card has a dedicated image; text/material fallback is acceptable for now.

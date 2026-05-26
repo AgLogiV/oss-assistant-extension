@@ -263,7 +263,7 @@ Future device-level rule:
 - serial is exactly 13 characters;
 - letters and digits are allowed.
 
-### Deco M4, AC1200, 2xGbE, MU-MIMO
+### Deco M4 AC1200
 
 Future device-level rule:
 
