@@ -89,6 +89,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With toggle `OFF` and a mapped recycle category, confirm the quick button grid is filtered to the selected recycle category.
 - Set the toggle back to `ON` and confirm following material pages with prefilled `MaterialId` auto-continue again.
 - For mapped categories (`xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, `gpon`, `austrian`), confirm only the expected allowlisted material buttons appear.
+- Confirm known legacy SAP/material IDs are not visible as quick buttons, while OSS-prefilled legacy values still rewrite to the current SAP before continuing.
 - With one selected recycle device in a mapped category, confirm its material button is shown first when it exists in the current material model list.
 - With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
 - After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.

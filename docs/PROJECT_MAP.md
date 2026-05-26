@@ -409,6 +409,8 @@ Constants:
 - `BG108322` -> `108322`
 - `118550_DISMANTLED` -> `118550`
 
+Legacy SAP/material IDs that are known replacements are not shown as quick buttons in `SWAP_MATERIAL_MODELS_DEFAULT`. They remain only in `rewriteMap`, so OSS-prefilled legacy values are rewritten to the current SAP while operators select only current visible quick buttons.
+
 ### Existing SAP Value and Auto-Continue
 
 `autoContinueSwapMaterialIfReady`:
@@ -450,6 +452,7 @@ For recycle category `cam_modules`, empty material history is handled differentl
 Model sources:
 
 - `SWAP_MATERIAL_MODELS_DEFAULT` in `content.js` contains a built-in fallback list.
+- Legacy SAP/material aliases are excluded from the visible fallback list; `rewriteMap` still handles OSS-prefilled old values.
 - `ZTE G5B` uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"` and packaged image path are intentionally unchanged.
 - Render dashboard polling is currently disabled by `SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED = false` because deployed Render data can still return stale material models and override the packaged fallback.
 - While disabled, production material buttons rely on packaged/local fallback model data.

@@ -4,6 +4,7 @@
 
 - Production patch: `ZTE G5B` now uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"` and image paths were intentionally kept unchanged.
 - Temporarily disabled Render dashboard material-model override so production uses packaged/local fallback material models until the old dashboard data source and replacement behavior are reviewed.
+- Removed legacy SAP/material quick buttons from the visible material grid while keeping old-to-new SAP rewrite active for OSS-prefilled legacy values.
 - Added local recycle device catalog cards with 16:9 device images, visual multi-select, shared cross-tab category/device selection state, and selected-device validation profiles.
 - Added selected-device recycle help UI: invalid non-empty serials can show a floating preview, the yellow help button opens a separate manual help menu, and Android/IPTV currently has device-level help images.
 - Selected-device validation now uses predefined local profiles only when device cards are selected; no selected devices keeps category-level validation, and selected devices without implemented profiles fall back safely.
