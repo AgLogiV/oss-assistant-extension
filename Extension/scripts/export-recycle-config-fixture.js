@@ -28,7 +28,7 @@ const EXPECTED_MATERIAL_FILTERS = {
   dth_kaon_nagra: ["114915", "121961"],
   austrian: ["1200017460", "1200017462"],
   netbox: [
-    "123580",
+    "124173",
     "123451",
     "121561",
     "119442",

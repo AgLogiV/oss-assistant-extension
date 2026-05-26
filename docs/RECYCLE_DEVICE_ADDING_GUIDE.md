@@ -67,7 +67,7 @@ This may change later if business naming changes. Do not use it as identity.
 SAP/material ID used for SAP/material quick-button filtering and material filling.
 
 ```js
-materialId: "123580"
+materialId: "124173"
 ```
 
 This is business data, not identity.
@@ -81,7 +81,7 @@ These fields are supported by the normalized catalog contract. Add them only whe
 Aliases or old SAP/material IDs. Keep as strings.
 
 ```js
-legacyMaterialIds: ["BG123580"]
+legacyMaterialIds: []
 ```
 
 Current runtime material filtering uses `materialId`, not this field.
@@ -372,8 +372,8 @@ For Austrian devices, also verify selected-device validation, selected-device ma
   deviceId: "zte_g5b1",
   categoryId: "netbox",
   displayName: "ZTE G5B1",
-  materialId: "123580",
-  legacyMaterialIds: ["BG123580"],
+  materialId: "124173",
+  legacyMaterialIds: [],
   imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp",
   helpImagePath: "",
   warningText: "",
@@ -389,7 +389,7 @@ Shorter entries are acceptable when defaults are enough:
   deviceId: "zte_g5b1",
   categoryId: "netbox",
   displayName: "ZTE G5B1",
-  materialId: "123580"
+  materialId: "124173"
 }
 ```
 

@@ -126,7 +126,7 @@
       "deviceId": "zte_g5b1",
       "categoryId": "netbox",
       "displayName": "ZTE G5B1",
-      "materialId": "123580",
+      "materialId": "124173",
       "legacyMaterialIds": [],
       "imagePath": "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp",
       "helpImagePath": "",
@@ -483,7 +483,7 @@
       "1200017462"
     ],
     "netbox": [
-      "123580",
+      "124173",
       "123451",
       "121561",
       "119442",

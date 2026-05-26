@@ -93,6 +93,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
 - After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
 - With one selected recycle device, a valid per-flow snapshot, and an empty `MaterialId`, confirm controlled auto-fill writes the expected SAP/material value without auto-continuing.
+- For `ZTE G5B1`, confirm the quick-button card and `MaterialId` use `124173`, remain `124173` after waiting more than 30 seconds, and still show the ZTE G5B1 / ZTE MC888A similar-device warning.
 - With multiple selected recycle devices that have different SAP/material IDs, confirm there is no auto-fill.
 - With a prefilled OSS `MaterialId`, confirm the extension does not overwrite the value.
 - Confirm selected recycle devices do not restrict the grid to selected devices only.

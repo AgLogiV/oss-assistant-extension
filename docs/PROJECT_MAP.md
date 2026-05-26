@@ -450,8 +450,10 @@ For recycle category `cam_modules`, empty material history is handled differentl
 Model sources:
 
 - `SWAP_MATERIAL_MODELS_DEFAULT` in `content.js` contains a built-in fallback list.
-- `refreshSwapMaterialModelsFromDashboard` polls `https://oss-assistant.onrender.com/api/models`.
-- If dashboard returns a valid non-empty model signature, it replaces `swapMaterialModels`.
+- `ZTE G5B1` / `ZTE G5B1 5G` uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"`, the visible label, and packaged image path are intentionally unchanged.
+- Render dashboard polling is currently disabled by `SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED = false` because deployed Render data can still return stale material models and override the packaged fallback.
+- While disabled, production material buttons rely on packaged/local fallback model data.
+- The old Render dashboard polling path may be re-enabled only after its data source and override behavior are reviewed.
 
 Images:
 
@@ -528,6 +530,7 @@ Current dashboard status:
 - The existing dashboard/API is useful for Swap Shop/SAP material models, but it should not be treated as the final architecture for recycle device catalog/config work.
 - Future recycle config should follow the hybrid roadmap in `docs/RECYCLE_DEVICE_CONFIG_ARCHITECTURE.md`: local configurator/export first, GitHub or static hosted config as an MVP, optional validated remote overlay later, and a proper hosted admin panel only after schema/fallback/validation are stable.
 - Remote config must stay optional and validated; invalid or missing remote data must not block local recycle behavior.
+- Future GitHub JSON configurator/admin-panel work must use a separate validated config path and must not depend on the old Render material-model polling mechanism.
 
 Files:
 
@@ -551,7 +554,7 @@ Risks:
 
 - `ADMIN_TOKEN` defaults to `RC112900` if env var is missing. Treat as a security/configuration risk, not a runtime extension concern.
 - `loadModels` contains mojibake Bulgarian category aliases (`Рё...`) rather than normal Cyrillic; verify whether this is accidental legacy encoding or harmless.
-- Dashboard data can replace the built-in material list. If remote dashboard data is incomplete, some default quick buttons may disappear.
+- Dashboard data can replace the built-in material list when polling is enabled. If remote dashboard data is stale or incomplete, wrong or missing quick buttons may appear.
 - The local `models.json` may not exactly match the currently deployed dashboard data.
 
 ## Images and Assets

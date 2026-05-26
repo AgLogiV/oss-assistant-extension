@@ -68,7 +68,9 @@ Dashboard-backed data can provide:
 - broad material category;
 - optional material button image URL/upload path.
 
-The dashboard can replace the in-memory material model list after a successful fetch. This is separate from the recycle catalog architecture described here.
+The old Render dashboard polling path is currently disabled in production with `SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED = false` because deployed dashboard material data can be stale and override the packaged fallback. The extension currently relies on packaged/local fallback material model data for production safety. Re-enable the old Render polling only after its data source and override behavior are reviewed.
+
+This is separate from the recycle catalog architecture described here.
 
 ### State, not config
 
@@ -365,11 +367,13 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - JSON and image assets can be published to GitHub or simple static hosting.
    - Git history gives review, version history, and rollback.
    - Run `node Extension/scripts/check-recycle-config.js` before publishing config changes.
+   - This should be implemented as a separate validated config path and must not depend on the old Render material-model polling mechanism.
 
 3. **Optional validated remote overlay**
    - The extension may later read remote config only as an optional validated overlay.
    - Invalid, missing, or offline remote config must fall back to the embedded/local catalog.
    - Remote config must not hard-replace the local fallback.
+   - Keep the rule local-first: packaged fallback first, optional validated remote override second.
 
 4. **Proper hosted admin panel later**
    - A hosted admin panel can add persistence, image upload, validation, revisioning, rollback, and simple roles.

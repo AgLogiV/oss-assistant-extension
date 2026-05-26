@@ -1791,7 +1791,7 @@
   const SWAP_MATERIAL_SIMILAR_WARNINGS = {
     "1000059633": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
     "1000055165": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
-    "123580": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
+    "124173": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
     "121561": "Внимание: ZTE G5B1 и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството."
   };
 
@@ -1858,10 +1858,10 @@
     { id: "BG122944", name: "GPON ONT ZXHN F6600R" },
     { id: "BG123357", name: "ZTE ZXHN H3601P" },
     { id: "BG123451", name: "ZTE MF296R" },
-    { id: "BG123580", name: "ZTE G5B1" }
+    { id: "BG124173", name: "ZTE G5B1" }
   ];
 
-  // This list is controlled dynamically from the dashboard.
+  // This list can be controlled dynamically from the dashboard when remote polling is enabled.
   let swapMaterialModels = SWAP_MATERIAL_MODELS_DEFAULT;
   let swapMaterialModelsSig = SWAP_MATERIAL_MODELS_DEFAULT.map(m => String(m.id || "")).join(",");
 
@@ -1877,6 +1877,7 @@
     return fallback.length ? list.concat(fallback) : list;
   }
 
+  const SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED = false;
   const SWAP_MATERIAL_DASHBOARD_URLS = [
     "https://oss-assistant.onrender.com/api/models"
   ];
@@ -1884,6 +1885,7 @@
   let __swapDashboardPollStarted = false;
 
   async function refreshSwapMaterialModelsFromDashboard() {
+    if (!SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED) return false;
     if (__swapDashboardInFlight) return false;
     __swapDashboardInFlight = true;
     try {
@@ -1947,6 +1949,7 @@
   }
 
   function startSwapMaterialDashboardPolling() {
+    if (!SWAP_MATERIAL_REMOTE_DASHBOARD_ENABLED) return;
     if (__swapDashboardPollStarted) return;
     __swapDashboardPollStarted = true;
 
@@ -2192,7 +2195,7 @@
     { deviceId: "adb_modem_2220", categoryId: "austrian", displayName: "ADB Modem 2220", materialId: "1200017460", imagePath: "images/devices/16x9/Modem_ADB_VoIP_VV_2220_AT-removebg-preview.webp", helpImagePath: "images/recycle-help/ADB modem vv2220.webp", validationProfileId: "austrian_adb_vv2220" },
     { deviceId: "huawei_ha35_22_hibrid", categoryId: "austrian", displayName: "Huawei HA35-22 HIBRID", materialId: "1200017462", imagePath: "images/devices/16x9/Huawei_HA35-22AM.webp", helpImagePath: "images/recycle-help/Huawei HA35-22 HIBRID.webp", validationProfileId: "austrian_huawei_ha35_22_hibrid" },
 
-    { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "123580", imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp" },
+    { deviceId: "zte_g5b1", categoryId: "netbox", displayName: "ZTE G5B1", materialId: "124173", imagePath: "images/devices/16x9/ZTE_G5B1_5G-removebg-preview.webp" },
     { deviceId: "zte_mf296r", categoryId: "netbox", displayName: "ZTE MF296R", materialId: "123451", imagePath: "images/devices/16x9/ZTE_MF296R-removebg-preview.webp" },
     { deviceId: "zte_mc888a", categoryId: "netbox", displayName: "ZTE MC888A", materialId: "121561", imagePath: "images/devices/16x9/ZTE_MC888A_5G-removebg-preview.webp" },
     { deviceId: "zte_mf293n", categoryId: "netbox", displayName: "ZTE MF293N", materialId: "119442", imagePath: "images/devices/16x9/ZTE_MF293N_+_ext._Antenna-removebg-preview.webp" },
