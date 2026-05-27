@@ -511,7 +511,7 @@
     if (n.includes("mf283u")) return "images/devices/ZTE_MF283U+ext._Antenna-removebg-preview.webp";
     if (n.includes("mf293n")) return "images/devices/ZTE_MF293N_+_ext._Antenna-removebg-preview.webp";
     if (n.includes("mf296r")) return "images/devices/ZTE_MF296R-removebg-preview.webp";
-    if (n.includes("g5b1")) return "images/devices/ZTE_G5B1_5G-removebg-preview.webp";
+    if (n.includes("g5b")) return "images/devices/ZTE_G5B1_5G-removebg-preview.webp";
     if (n.includes("kstb6106")) return "images/devices/Kaon_KSTB6106_DVB-C_Zapper-removebg-preview.webp";
     if (n.includes("kstb5020")) return "images/devices/Kaon_KSTB5020_XploreTV.webp";
     if (n.includes("kstb5019")) return "images/devices/Kaon_KSTB5019_XploreTV_IP_only__BCM7268_-removebg-preview.webp";
