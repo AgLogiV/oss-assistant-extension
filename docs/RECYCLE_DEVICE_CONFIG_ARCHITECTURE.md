@@ -368,12 +368,18 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Git history gives review, version history, and rollback.
    - Run `node Extension/scripts/check-recycle-config.js` before publishing config changes.
    - This should be implemented as a separate validated config path and must not depend on the old Render material-model polling mechanism.
+   - The preferred shape is a separate public config repository, not the full extension repository. Business has confirmed the recycle config/device/image data may be public, but the repo and configurator must never contain secrets, tokens, internal credentials, customer data, or other sensitive information.
+   - Suggested repository layout: `config/recycle-device-catalog.json`, `config/recycle-device-catalog.schema.json`, `config/assets-manifest.json`, `images/devices/16x9/`, `images/recycle-help/`, and `configurator/index.html`, `configurator/app.js`, `configurator/styles.css`, with optional GitHub Action validation.
+   - A GitHub Pages configurator should be static-only at first: load JSON from a URL or browser file upload, use `assets-manifest.json` instead of the local `/api/assets` endpoint, use static image URLs instead of `/api/asset-preview`, and download candidate JSON for manual PR/upload.
+   - Do not add GitHub write access from the browser in the MVP. Keep tokens, OAuth flows, and secrets out of the static configurator. Validation should initially run through local scripts and/or GitHub Actions rather than duplicated browser validation logic.
+   - A likely first technical step is a dev-only no-write `assets-manifest.json` generator that prints extension-relative paths from the packaged image folders.
 
 3. **Optional validated remote overlay**
    - The extension may later read remote config only as an optional validated overlay.
    - Invalid, missing, or offline remote config must fall back to the embedded/local catalog.
    - Remote config must not hard-replace the local fallback.
    - Keep the rule local-first: packaged fallback first, optional validated remote override second.
+   - Remote config loading is a later separate phase. When designed, it must merge safe metadata only, keep local fallback first, ignore invalid/offline remote data, and treat remote omissions as non-deleting; omission must not remove local devices.
 
 4. **Proper hosted admin panel later**
    - A hosted admin panel can add persistence, image upload, validation, revisioning, rollback, and simple roles.

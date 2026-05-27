@@ -534,7 +534,8 @@ Current dashboard status:
 - The existing dashboard/API is useful for Swap Shop/SAP material models, but it should not be treated as the final architecture for recycle device catalog/config work.
 - Future recycle config should follow the hybrid roadmap in `docs/RECYCLE_DEVICE_CONFIG_ARCHITECTURE.md`: local configurator/export first, GitHub or static hosted config as an MVP, optional validated remote overlay later, and a proper hosted admin panel only after schema/fallback/validation are stable.
 - Remote config must stay optional and validated; invalid or missing remote data must not block local recycle behavior.
-- Future GitHub JSON configurator/admin-panel work must use a separate validated config path and must not depend on the old Render material-model polling mechanism.
+- Future GitHub/static config work should use a separate public config repository, not the full extension repo. A likely shape is `config/recycle-device-catalog.json`, `config/recycle-device-catalog.schema.json`, `config/assets-manifest.json`, `images/devices/16x9/`, `images/recycle-help/`, and a static GitHub Pages `configurator/`.
+- The static configurator MVP should load JSON by URL or file upload, use `assets-manifest.json` for selectors, preview static image URLs, download candidate JSON for manual PR/upload, and avoid GitHub browser write access, tokens, OAuth, secrets, customer data, runtime JSON loading, and dependency on the old Render material-model polling mechanism.
 
 Files:
 
