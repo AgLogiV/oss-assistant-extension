@@ -45,6 +45,7 @@ const localConfiguratorAdapter = {
     });
   }
 };
+const configuratorAdapter = localConfiguratorAdapter;
 const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
 const EXCLUDED_ADD_CATEGORIES = new Set(["cam_modules", "modems"]);
 const safeDeviceIdPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
@@ -511,7 +512,7 @@ function syncAssetSelect(select, value) {
 function previewUrlForAssetPath(value) {
   const normalized = normalizeString(value);
   if (!normalized) return "";
-  return localConfiguratorAdapter.previewUrlForPath(normalized);
+  return configuratorAdapter.previewUrlForPath(normalized);
 }
 
 function setAssetPreview(preview, value) {
@@ -1235,7 +1236,7 @@ async function validateCandidate() {
   setText("validation-stderr", "(empty)");
 
   try {
-    const data = await localConfiguratorAdapter.validateCandidate(candidate);
+    const data = await configuratorAdapter.validateCandidate(candidate);
     renderCandidateValidationResult(data, candidateJson);
   } catch (error) {
     renderCandidateValidationError(error);
@@ -1254,7 +1255,7 @@ async function validateFixture() {
   setText("validation-stderr", "(empty)");
 
   try {
-    const data = await localConfiguratorAdapter.validateFixture();
+    const data = await configuratorAdapter.validateFixture();
     renderValidationResult(data);
   } catch (error) {
     renderValidationError(error);
@@ -1265,7 +1266,7 @@ async function validateFixture() {
 
 async function loadFixture() {
   try {
-    const data = await localConfiguratorAdapter.loadFixture();
+    const data = await configuratorAdapter.loadFixture();
     renderFixture(data);
   } catch (error) {
     renderError(error);
@@ -1274,7 +1275,7 @@ async function loadFixture() {
 
 async function loadAssetInventory() {
   try {
-    const data = await localConfiguratorAdapter.loadAssetInventory();
+    const data = await configuratorAdapter.loadAssetInventory();
     assetInventory = {
       deviceImages: Array.isArray(data.deviceImages) ? data.deviceImages : [],
       helpImages: Array.isArray(data.helpImages) ? data.helpImages : []
