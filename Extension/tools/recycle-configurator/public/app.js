@@ -1,9 +1,50 @@
 "use strict";
 
-const endpoint = "/api/fixture";
-const assetsEndpoint = "/api/assets";
-const assetPreviewEndpoint = "/api/asset-preview";
-const validationEndpoint = "/api/validate-fixture";
+const localConfiguratorAdapter = {
+  capabilities: {
+    canValidateCandidate: true,
+    canValidateFixture: true,
+    assetPreviewMode: "local-endpoint"
+  },
+  endpoints: {
+    fixture: "/api/fixture",
+    assets: "/api/assets",
+    assetPreview: "/api/asset-preview",
+    validateFixture: "/api/validate-fixture",
+    validateCandidate: "/api/validate-candidate"
+  },
+  async fetchJson(endpoint, options = {}) {
+    const response = await fetch(endpoint, options);
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    return data;
+  },
+  loadDefaultCandidate() {
+    return this.fetchJson(this.endpoints.fixture, { cache: "no-store" });
+  },
+  loadFixture() {
+    return this.loadDefaultCandidate();
+  },
+  loadAssetInventory() {
+    return this.fetchJson(this.endpoints.assets, { cache: "no-store" });
+  },
+  previewUrlForPath(assetPath) {
+    return `${this.endpoints.assetPreview}?path=${encodeURIComponent(assetPath)}`;
+  },
+  validateFixture() {
+    return this.fetchJson(this.endpoints.validateFixture, { cache: "no-store" });
+  },
+  validateCandidate(candidate) {
+    return this.fetchJson(this.endpoints.validateCandidate, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(candidate)
+    });
+  }
+};
 const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
 const EXCLUDED_ADD_CATEGORIES = new Set(["cam_modules", "modems"]);
 const safeDeviceIdPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
@@ -470,7 +511,7 @@ function syncAssetSelect(select, value) {
 function previewUrlForAssetPath(value) {
   const normalized = normalizeString(value);
   if (!normalized) return "";
-  return `${assetPreviewEndpoint}?path=${encodeURIComponent(normalized)}`;
+  return localConfiguratorAdapter.previewUrlForPath(normalized);
 }
 
 function setAssetPreview(preview, value) {
@@ -1194,16 +1235,7 @@ async function validateCandidate() {
   setText("validation-stderr", "(empty)");
 
   try {
-    const response = await fetch("/api/validate-candidate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify(candidate)
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
-    }
+    const data = await localConfiguratorAdapter.validateCandidate(candidate);
     renderCandidateValidationResult(data, candidateJson);
   } catch (error) {
     renderCandidateValidationError(error);
@@ -1222,11 +1254,7 @@ async function validateFixture() {
   setText("validation-stderr", "(empty)");
 
   try {
-    const response = await fetch(validationEndpoint, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
-    }
+    const data = await localConfiguratorAdapter.validateFixture();
     renderValidationResult(data);
   } catch (error) {
     renderValidationError(error);
@@ -1237,11 +1265,7 @@ async function validateFixture() {
 
 async function loadFixture() {
   try {
-    const response = await fetch(endpoint, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
-    }
+    const data = await localConfiguratorAdapter.loadFixture();
     renderFixture(data);
   } catch (error) {
     renderError(error);
@@ -1250,11 +1274,7 @@ async function loadFixture() {
 
 async function loadAssetInventory() {
   try {
-    const response = await fetch(assetsEndpoint, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      throw new Error(data.error || `HTTP ${response.status}`);
-    }
+    const data = await localConfiguratorAdapter.loadAssetInventory();
     assetInventory = {
       deviceImages: Array.isArray(data.deviceImages) ? data.deviceImages : [],
       helpImages: Array.isArray(data.helpImages) ? data.helpImages : []
