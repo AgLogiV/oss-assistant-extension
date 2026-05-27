@@ -2240,6 +2240,21 @@
     return deviceImageForModel(device?.displayName);
   }
 
+  function getRecycleDeviceImagePathByMaterialId(materialId) {
+    const id = normalizeSwapMaterialId(materialId);
+    if (!id) return "";
+    const device = RECYCLE_DEVICE_CATALOG.find(d => {
+      if (!isRecycleDeviceEnabled(d)) return false;
+      if (normalizeSwapMaterialId(d.materialId) !== id) return false;
+      return Boolean(String(d.imagePath || "").trim());
+    });
+    return device ? String(device.imagePath || "").trim() : "";
+  }
+
+  function getSwapMaterialImageForModel(model) {
+    return getRecycleDeviceImagePathByMaterialId(model?.id) || deviceImageForModel(model?.name);
+  }
+
   function buildSwapMaterialRecycleFiltersFromDeviceCatalog() {
     return RECYCLE_DEVICE_CATALOG.reduce((filters, device) => {
       if (!isRecycleDeviceEnabled(device)) return filters;
@@ -2675,7 +2690,7 @@
           : `${dashboardOrigin}${remote.startsWith("/") ? "" : "/"}${remote}`;
         imgHtml = `<img alt="" data-remote-url="${escapeHtml(abs)}" style="width:100%;object-fit:contain;background:#4f4f4f;border-radius:6px;display:block;margin-bottom:6px" />`;
       } else {
-        const imgPath = deviceImageForModel(m.name);
+        const imgPath = getSwapMaterialImageForModel(m);
         const imgUrl = imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
           ? chrome.runtime.getURL(imgPath)
           : null;
