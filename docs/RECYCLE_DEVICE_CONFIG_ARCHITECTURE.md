@@ -427,6 +427,9 @@ Config/admin must not control DOM selectors, OSS navigation, CAM flow, arbitrary
    - Candidate config validation command for future local configurator exports: `node Extension/scripts/validate-recycle-config-fixture.js --input path/to/candidate.json`.
    - Candidate mode validates schema, shape, data, assets, validation profile references, and generated material filters, but it does not require exact parity with current `Extension/content.js`.
    - Candidate validation is dev-only readiness for future local configurator exports. The extension runtime still does not load JSON config.
+   - Candidate review command before runtime metadata merge: `node Extension/scripts/review-recycle-config-candidate.js --input path/to/candidate.json`.
+   - Candidate review is dev-only/no-write. It compares the candidate to the current runtime-shaped export by stable `deviceId` and reports added, edited, missing, reordered, material-filter, unknown-field, and manual-review-only changes.
+   - Review does not merge, write `Extension/content.js`, regenerate the fixture, or add runtime JSON loading. If the review is acceptable, make a manual/Codex-assisted patch to `RECYCLE_DEVICE_CATALOG_RAW`, regenerate the fixture from `Extension/content.js`, run `node Extension/scripts/check-recycle-config.js`, review the diff, and commit.
    - `validate-recycle-config-fixture.js` validates fixture or candidate schema/data. `load-recycle-config-fixture.js` proves fixture JSON can be loaded and normalized into a future in-memory adapter shape with `devicesById`, `devicesByCategory`, `categoryHelp`, `validationProfiles`, and `materialFilters`.
 
 3. **Packaged JSON read-only experiment**

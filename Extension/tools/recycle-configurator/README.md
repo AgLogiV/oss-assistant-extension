@@ -164,4 +164,14 @@ Future candidate JSON exports should be validated with:
 node Extension/scripts/validate-recycle-config-fixture.js --input path/to/candidate.json
 ```
 
+Before merging an exported candidate into runtime metadata, review it with:
+
+```bash
+node Extension/scripts/review-recycle-config-candidate.js --input path/to/candidate.json
+```
+
+The review script is dev-only and no-write. It compares the candidate with the current runtime-shaped export by stable `deviceId`, reports added/edited/missing/reordered devices, material filter changes, unknown fields, and manual-review-only sections, but it does not merge, write `Extension/content.js`, regenerate the fixture, or add runtime JSON loading.
+
+If the review is acceptable, the intended merge path is: make a manual/Codex-assisted patch to `RECYCLE_DEVICE_CATALOG_RAW`, regenerate `Extension/config/recycle-device-catalog.fixture.json` from `Extension/content.js`, run `node Extension/scripts/check-recycle-config.js`, review the diff, and commit.
+
 The extension runtime still uses `Extension/content.js` as the recycle source of truth and does not load JSON config.
