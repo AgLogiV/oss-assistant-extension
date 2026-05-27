@@ -372,7 +372,8 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Suggested repository layout: `config/recycle-device-catalog.json`, `config/recycle-device-catalog.schema.json`, `config/assets-manifest.json`, `images/devices/16x9/`, `images/recycle-help/`, and `configurator/index.html`, `configurator/app.js`, `configurator/styles.css`, with optional GitHub Action validation.
    - A GitHub Pages configurator should be static-only at first: load JSON from a URL or browser file upload, use `assets-manifest.json` instead of the local `/api/assets` endpoint, use static image URLs instead of `/api/asset-preview`, and download candidate JSON for manual PR/upload.
    - Do not add GitHub write access from the browser in the MVP. Keep tokens, OAuth flows, and secrets out of the static configurator. Validation should initially run through local scripts and/or GitHub Actions rather than duplicated browser validation logic.
-   - A likely first technical step is a dev-only no-write `assets-manifest.json` generator that prints extension-relative paths from the packaged image folders.
+   - Current dev-only assets manifest exporter: `node Extension/scripts/export-recycle-assets-manifest.js`.
+   - The exporter prints JSON to stdout for a future `config/assets-manifest.json`, scans only `Extension/images/devices/16x9/` and `Extension/images/recycle-help/`, outputs only extension-relative `images/...` paths, and does not create files, publish anything, or change runtime behavior.
 
 3. **Optional validated remote overlay**
    - The extension may later read remote config only as an optional validated overlay.
@@ -417,6 +418,7 @@ Config/admin must not control DOM selectors, OSS navigation, CAM flow, arbitrary
    - Main dev-only readiness command: `node Extension/scripts/check-recycle-config.js`.
    - Current dev-only checker: `node Extension/scripts/validate-recycle-catalog.js`.
    - Current dev-only fixture exporter: `node Extension/scripts/export-recycle-config-fixture.js`.
+   - Current dev-only assets manifest exporter for future static/GitHub Pages support: `node Extension/scripts/export-recycle-assets-manifest.js`.
    - Current dev-only fixture validator: `node Extension/scripts/validate-recycle-config-fixture.js`.
    - Current dev-only loader adapter prototype: `node Extension/scripts/load-recycle-config-fixture.js`.
    - The exporter reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
