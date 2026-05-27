@@ -374,6 +374,17 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Do not add GitHub write access from the browser in the MVP. Keep tokens, OAuth flows, and secrets out of the static configurator. Validation should initially run through local scripts and/or GitHub Actions rather than duplicated browser validation logic.
    - Current dev-only assets manifest exporter: `node Extension/scripts/export-recycle-assets-manifest.js`.
    - The exporter prints JSON to stdout for a future `config/assets-manifest.json`, scans only `Extension/images/devices/16x9/` and `Extension/images/recycle-help/`, outputs only extension-relative `images/...` paths, and does not create files, publish anything, or change runtime behavior.
+   - Static package contract before implementation:
+     - `config/recycle-device-catalog.json`
+     - `config/assets-manifest.json`
+     - `images/devices/16x9/`
+     - `images/recycle-help/`
+     - `configurator/index.html`
+     - `configurator/app.js`
+     - `configurator/styles.css`
+   - The static configurator must not call `/api/*`. It should load config JSON by relative URL and/or file upload, load assets from `config/assets-manifest.json`, render previews only for manifest-approved images, and keep exported JSON paths as `images/...` values rather than static URLs.
+   - Full validation is not available in the browser static MVP. Use `node Extension/scripts/validate-recycle-config-fixture.js --input path/to/candidate.json`, `node Extension/scripts/review-recycle-config-candidate.js --input path/to/candidate.json`, or a future GitHub Action.
+   - Do not add browser GitHub writes, OAuth, tokens, or secrets. The first future code step should likely be a dev-only package/export script that writes a preview package only to an explicit output directory, never runtime paths.
 
 3. **Optional validated remote overlay**
    - The extension may later read remote config only as an optional validated overlay.

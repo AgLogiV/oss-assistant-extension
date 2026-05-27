@@ -175,3 +175,21 @@ The review script is dev-only and no-write. It compares the candidate with the c
 If the review is acceptable, the intended merge path is: make a manual/Codex-assisted patch to `RECYCLE_DEVICE_CATALOG_RAW`, regenerate `Extension/config/recycle-device-catalog.fixture.json` from `Extension/content.js`, run `node Extension/scripts/check-recycle-config.js`, review the diff, and commit.
 
 The extension runtime still uses `Extension/content.js` as the recycle source of truth and does not load JSON config.
+
+## Future Static Package Contract
+
+A future GitHub Pages/static configurator package should live in a separate config repo, not as extension runtime code. The planned package shape is:
+
+```text
+config/recycle-device-catalog.json
+config/assets-manifest.json
+images/devices/16x9/
+images/recycle-help/
+configurator/index.html
+configurator/app.js
+configurator/styles.css
+```
+
+The static configurator must not call `/api/*`. It should load config JSON by relative URL and/or file upload, load assets from `config/assets-manifest.json`, render previews only for manifest-approved images, and keep exported JSON paths as `images/...` values rather than static URLs.
+
+Full validation is not available in the browser static MVP. Use `validate-recycle-config-fixture.js --input`, `review-recycle-config-candidate.js --input`, or a future GitHub Action. Do not add GitHub writes from the browser, OAuth, tokens, secrets, runtime JSON loading, or writes to extension runtime paths.

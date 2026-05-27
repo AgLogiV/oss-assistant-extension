@@ -537,6 +537,7 @@ Current dashboard status:
 - Future GitHub/static config work should use a separate public config repository, not the full extension repo. A likely shape is `config/recycle-device-catalog.json`, `config/recycle-device-catalog.schema.json`, `config/assets-manifest.json`, `images/devices/16x9/`, `images/recycle-help/`, and a static GitHub Pages `configurator/`.
 - The static configurator MVP should load JSON by URL or file upload, use `assets-manifest.json` for selectors, preview static image URLs, download candidate JSON for manual PR/upload, and avoid GitHub browser write access, tokens, OAuth, secrets, customer data, runtime JSON loading, and dependency on the old Render material-model polling mechanism.
 - `node Extension/scripts/export-recycle-assets-manifest.js` is the dev-only no-write exporter for that future static asset manifest. It scans only packaged `Extension/images/devices/16x9/` and `Extension/images/recycle-help/` images and outputs extension-relative `images/...` paths to stdout.
+- Before implementing static mode, keep the package contract explicit: static configurator files should live under `configurator/`, load `config/recycle-device-catalog.json` and `config/assets-manifest.json`, never call `/api/*`, never store static preview URLs in exported JSON, and rely on local scripts or GitHub Actions for full validation.
 
 Files:
 
