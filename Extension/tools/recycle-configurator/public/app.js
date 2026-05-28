@@ -1,5 +1,22 @@
 "use strict";
 
+const STATIC_CATALOG_URL = "../config/recycle-device-catalog.json";
+const STATIC_ASSETS_MANIFEST_URL = "../config/assets-manifest.json";
+const STATIC_ASSET_POLICIES = [
+  {
+    key: "deviceImages",
+    kind: "deviceImage",
+    extensionPrefix: "images/devices/16x9/"
+  },
+  {
+    key: "helpImages",
+    kind: "helpImage",
+    extensionPrefix: "images/recycle-help/"
+  }
+];
+const STATIC_ASSET_EXTENSIONS = new Set([".webp", ".png", ".jpg", ".jpeg"]);
+const STATIC_VALIDATION_INSTRUCTIONS = "Full validation is not available in static mode. Export/download the candidate JSON, then run validate-recycle-config-fixture.js --input and review-recycle-config-candidate.js --input, or use a future GitHub Action.";
+
 const localConfiguratorAdapter = {
   capabilities: {
     canValidateCandidate: true,
@@ -45,10 +62,59 @@ const localConfiguratorAdapter = {
     });
   }
 };
+
+const staticConfiguratorAdapter = {
+  capabilities: {
+    canValidateCandidate: false,
+    canValidateFixture: false,
+    assetPreviewMode: "static-manifest"
+  },
+  urls: {
+    catalog: STATIC_CATALOG_URL,
+    assetsManifest: STATIC_ASSETS_MANIFEST_URL
+  },
+  approvedAssetPaths: new Set(),
+  async fetchJson(url) {
+    const response = await fetch(url, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return data;
+  },
+  async loadDefaultCandidate() {
+    return this.loadFixture();
+  },
+  async loadFixture() {
+    const catalog = await this.fetchJson(this.urls.catalog);
+    return buildFixtureResponseFromCatalog(catalog, this.urls.catalog);
+  },
+  async loadAssetInventory() {
+    const manifest = await this.fetchJson(this.urls.assetsManifest);
+    const inventory = buildAssetInventoryFromManifest(manifest);
+    this.approvedAssetPaths = new Set([
+      ...inventory.deviceImages.map(asset => asset.path),
+      ...inventory.helpImages.map(asset => asset.path)
+    ]);
+    return inventory;
+  },
+  previewUrlForPath(assetPath) {
+    const normalized = normalizeString(assetPath);
+    if (!this.approvedAssetPaths.has(normalized)) return "";
+    return staticPreviewUrlForPath(normalized);
+  },
+  validateFixture() {
+    return Promise.resolve(staticValidationUnavailableResult("../config/recycle-device-catalog.json"));
+  },
+  validateCandidate() {
+    return Promise.resolve(staticValidationUnavailableResult("downloaded-candidate.json"));
+  }
+};
 const CONFIGURATOR_MODE = "local";
 
 function createConfiguratorAdapter(mode) {
   if (mode === "local") return localConfiguratorAdapter;
+  if (mode === "static") return staticConfiguratorAdapter;
   throw new Error(`Unsupported configurator mode: ${mode}`);
 }
 
@@ -94,6 +160,143 @@ function canValidateFixture() {
 
 function assetPreviewMode() {
   return adapterCapabilities().assetPreviewMode || "none";
+}
+
+function staticValidationUnavailableResult(input) {
+  return {
+    ok: false,
+    pass: false,
+    exitCode: null,
+    input,
+    stdout: STATIC_VALIDATION_INSTRUCTIONS,
+    stderr: "",
+    error: "Validation is unavailable in static mode."
+  };
+}
+
+function validationReadyMessage(message) {
+  if (canValidateCandidate() || canValidateFixture()) return message;
+  return STATIC_VALIDATION_INSTRUCTIONS;
+}
+
+function normalizeCatalogListDevice(device) {
+  const source = isPlainObject(device) ? device : {};
+  return {
+    deviceId: normalizeString(source.deviceId),
+    categoryId: normalizeString(source.categoryId),
+    displayName: normalizeString(source.displayName),
+    materialId: normalizeString(source.materialId),
+    validationProfileId: normalizeString(source.validationProfileId),
+    enabled: source.enabled !== false
+  };
+}
+
+function normalizeCatalogCandidateDevice(device) {
+  const source = isPlainObject(device) ? device : {};
+  return {
+    deviceId: normalizeString(source.deviceId),
+    categoryId: normalizeString(source.categoryId),
+    displayName: normalizeString(source.displayName),
+    materialId: normalizeString(source.materialId),
+    legacyMaterialIds: Array.isArray(source.legacyMaterialIds) ? source.legacyMaterialIds.map(normalizeString) : [],
+    imagePath: normalizeString(source.imagePath),
+    helpImagePath: normalizeString(source.helpImagePath),
+    warningText: normalizeString(source.warningText),
+    validationProfileId: normalizeString(source.validationProfileId),
+    enabled: source.enabled !== false
+  };
+}
+
+function buildCandidateFromCatalog(catalog) {
+  const source = isPlainObject(catalog) ? catalog : {};
+  return {
+    schemaVersion: source.schemaVersion,
+    revision: normalizeString(source.revision),
+    devices: Array.isArray(source.devices) ? source.devices.map(normalizeCatalogCandidateDevice) : [],
+    categoryHelp: isPlainObject(source.categoryHelp) ? source.categoryHelp : {},
+    validationProfiles: Array.isArray(source.validationProfiles) ? source.validationProfiles.map(normalizeString) : [],
+    generatedMaterialFilters: isPlainObject(source.generatedMaterialFilters) ? source.generatedMaterialFilters : {}
+  };
+}
+
+function buildFixtureResponseFromCatalog(catalog, sourcePath) {
+  const source = isPlainObject(catalog) ? catalog : {};
+  const candidate = buildCandidateFromCatalog(source);
+  const devices = Array.isArray(source.devices) ? source.devices.map(normalizeCatalogListDevice) : [];
+  const categories = categorySummaries(devices);
+  const enabledDeviceCount = devices.filter(device => device.enabled).length;
+
+  return {
+    ok: true,
+    source: sourcePath,
+    schemaVersion: source.schemaVersion,
+    revision: source.revision || "",
+    deviceCount: devices.length,
+    enabledDeviceCount,
+    disabledDeviceCount: devices.length - enabledDeviceCount,
+    categoryCount: categories.length,
+    categories,
+    devices,
+    candidate
+  };
+}
+
+function staticAssetExtension(assetPath) {
+  const lastSlash = assetPath.lastIndexOf("/");
+  const fileName = lastSlash === -1 ? assetPath : assetPath.slice(lastSlash + 1);
+  const lastDot = fileName.lastIndexOf(".");
+  return lastDot === -1 ? "" : fileName.slice(lastDot).toLowerCase();
+}
+
+function safeStaticAssetPath(assetPath, policy) {
+  const normalized = normalizeString(assetPath);
+  if (!normalized.startsWith(policy.extensionPrefix)) return false;
+  if (normalized.includes("\\") || normalized.includes("..")) return false;
+  if (normalized.startsWith("/") || /^[A-Za-z]:/.test(normalized)) return false;
+  if (/^(file|https?):\/\//i.test(normalized)) return false;
+
+  const fileName = normalized.slice(policy.extensionPrefix.length);
+  if (!fileName || fileName.includes("/")) return false;
+  return STATIC_ASSET_EXTENSIONS.has(staticAssetExtension(normalized));
+}
+
+function normalizeManifestAsset(asset, policy) {
+  const source = isPlainObject(asset) ? asset : {};
+  const assetPath = normalizeString(source.path);
+  if (!safeStaticAssetPath(assetPath, policy)) return null;
+
+  const fileName = normalizeString(source.fileName) || assetPath.slice(policy.extensionPrefix.length);
+  return {
+    path: assetPath,
+    fileName,
+    kind: policy.kind
+  };
+}
+
+function buildAssetInventoryFromManifest(manifest) {
+  const source = isPlainObject(manifest) ? manifest : {};
+  const inventory = {
+    ok: true,
+    policies: STATIC_ASSET_POLICIES.map(policy => ({
+      key: policy.key,
+      kind: policy.kind,
+      extensionPrefix: policy.extensionPrefix
+    }))
+  };
+
+  STATIC_ASSET_POLICIES.forEach(policy => {
+    const assets = Array.isArray(source[policy.key]) ? source[policy.key] : [];
+    inventory[policy.key] = assets
+      .map(asset => normalizeManifestAsset(asset, policy))
+      .filter(Boolean)
+      .sort((left, right) => left.path.localeCompare(right.path));
+  });
+
+  return inventory;
+}
+
+function staticPreviewUrlForPath(assetPath) {
+  return `../${assetPath.split("/").map(segment => encodeURIComponent(segment)).join("/")}`;
 }
 
 function setResultBadge(id, state, text) {
@@ -380,7 +583,7 @@ function resetValidationUi(message) {
   setText("validation-input", "temp-candidate.json");
   setText("validation-stdout", "Validation output will appear here.");
   setText("validation-stderr", "Validation errors will appear here.");
-  setValidationHint(message || "Run Validate Candidate to validate the current browser-memory candidate.");
+  setValidationHint(validationReadyMessage(message || "Run Validate Candidate to validate the current browser-memory candidate."));
 }
 
 function markCandidateValidationStaleIfNeeded() {
@@ -1139,6 +1342,9 @@ function setExportReady(isReady) {
 
   const validateCandidateButton = byId("validate-candidate-btn");
   if (validateCandidateButton) validateCandidateButton.disabled = !isReady || !canValidateCandidate();
+
+  const validateFixtureButton = byId("validate-fixture-btn");
+  if (validateFixtureButton) validateFixtureButton.disabled = !canValidateFixture();
 }
 
 function candidateFileName(candidate) {
