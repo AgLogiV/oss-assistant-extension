@@ -36,6 +36,27 @@ const ASSET_COPY_POLICIES = [
     outputDir: path.join("images", "recycle-help")
   }
 ];
+const CONFIGURATOR_PUBLIC_DIR = path.join(EXTENSION_ROOT, "tools", "recycle-configurator", "public");
+const CONFIGURATOR_MODE_LOCAL_PATTERN = 'const CONFIGURATOR_MODE = "local";';
+const CONFIGURATOR_MODE_STATIC_PATTERN = 'const CONFIGURATOR_MODE = "static";';
+const CONFIGURATOR_UI_COPY_POLICIES = [
+  {
+    label: "configurator index",
+    sourcePath: path.join(CONFIGURATOR_PUBLIC_DIR, "index.html"),
+    outputPath: path.join("configurator", "index.html")
+  },
+  {
+    label: "configurator app",
+    sourcePath: path.join(CONFIGURATOR_PUBLIC_DIR, "app.js"),
+    outputPath: path.join("configurator", "app.js"),
+    transform: transformConfiguratorAppJs
+  },
+  {
+    label: "configurator styles",
+    sourcePath: path.join(CONFIGURATOR_PUBLIC_DIR, "styles.css"),
+    outputPath: path.join("configurator", "styles.css")
+  }
+];
 const PROTECTED_EXACT_OUTPUT_PATHS = [
   REPO_ROOT
 ];
@@ -59,7 +80,8 @@ function parseArgs(argv) {
     outDir: "",
     dryRun: false,
     force: false,
-    includeImages: false
+    includeImages: false,
+    includeConfiguratorUi: false
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -75,13 +97,15 @@ function parseArgs(argv) {
       options.force = true;
     } else if (arg === "--include-images") {
       options.includeImages = true;
+    } else if (arg === "--include-configurator-ui") {
+      options.includeConfiguratorUi = true;
     } else {
       failFast(`Unknown argument: ${arg}`);
     }
   }
 
   if (!options.outDir) {
-    failFast("Usage: node Extension/scripts/export-recycle-static-config-package.js --out path/to/output-dir [--dry-run] [--force]");
+    failFast("Usage: node Extension/scripts/export-recycle-static-config-package.js --out path/to/output-dir [--dry-run] [--force] [--include-images] [--include-configurator-ui]");
   }
 
   options.outDir = path.resolve(process.cwd(), options.outDir);
@@ -209,6 +233,21 @@ function assertRegularSourceImage(sourcePath, label) {
   }
 }
 
+function assertRegularSourceFile(sourcePath, label) {
+  let stat;
+  try {
+    stat = fs.lstatSync(sourcePath);
+  } catch (error) {
+    failFast(`${label} source file is missing: ${relativePath(sourcePath)}`);
+  }
+  if (stat.isSymbolicLink()) {
+    failFast(`${label} source file must not be a symlink: ${relativePath(sourcePath)}`);
+  }
+  if (!stat.isFile()) {
+    failFast(`${label} source file is not a file: ${relativePath(sourcePath)}`);
+  }
+}
+
 function buildImageCopyPlan(manifest, outDir) {
   const copies = [];
   const seenDestinations = new Set();
@@ -256,6 +295,46 @@ function buildImageCopyPlan(manifest, outDir) {
   return copies;
 }
 
+function transformConfiguratorAppJs(content) {
+  const parts = String(content || "").split(CONFIGURATOR_MODE_LOCAL_PATTERN);
+  if (parts.length !== 2) {
+    failFast("Expected exactly one local CONFIGURATOR_MODE declaration in configurator app.js");
+  }
+  return parts.join(CONFIGURATOR_MODE_STATIC_PATTERN);
+}
+
+function buildConfiguratorUiCopyPlan(outDir) {
+  const copies = [];
+  const sourceRoot = path.resolve(CONFIGURATOR_PUBLIC_DIR);
+  const outputRoot = path.resolve(outDir, "configurator");
+
+  CONFIGURATOR_UI_COPY_POLICIES.forEach(policy => {
+    const sourcePath = path.resolve(policy.sourcePath);
+    const destinationPath = path.resolve(outDir, policy.outputPath);
+
+    if (!isSameOrInside(sourceRoot, sourcePath)) {
+      failFast(`${policy.label} source escaped configurator public folder: ${relativePath(sourcePath)}`);
+    }
+    if (!isSameOrInside(outputRoot, destinationPath)) {
+      failFast(`${policy.label} destination escaped output configurator folder: ${policy.outputPath}`);
+    }
+    assertRegularSourceFile(sourcePath, policy.label);
+
+    const sourceContent = fs.readFileSync(sourcePath, "utf8");
+    const content = policy.transform ? policy.transform(sourceContent) : sourceContent;
+
+    copies.push({
+      label: policy.label,
+      sourcePath,
+      destinationPath,
+      content,
+      transformed: Boolean(policy.transform)
+    });
+  });
+
+  return copies;
+}
+
 function copyImages(copyPlan) {
   copyPlan.forEach(copy => {
     fs.mkdirSync(path.dirname(copy.destinationPath), { recursive: true });
@@ -276,6 +355,19 @@ function imageCopyCounts(copyPlan) {
     label: policy.label,
     count: copyPlan.filter(copy => copy.manifestKey === policy.manifestKey).length
   }));
+}
+
+function writeConfiguratorUi(copyPlan) {
+  copyPlan.forEach(copy => {
+    writePackageFile(copy.destinationPath, copy.content);
+  });
+}
+
+function configuratorUiCounts(copyPlan) {
+  return {
+    files: copyPlan.length,
+    transformed: copyPlan.filter(copy => copy.transformed).length
+  };
 }
 
 function validateCatalogFile(catalogPath) {
@@ -309,7 +401,7 @@ function writePackageFile(filePath, content) {
   fs.renameSync(tempFile, filePath);
 }
 
-function printSummary(options, written, copyPlan) {
+function printSummary(options, written, imageCopyPlan, configuratorUiCopyPlan) {
   console.log("Recycle static config package export");
   console.log("");
   console.log("Mode: dev-only");
@@ -317,6 +409,7 @@ function printSummary(options, written, copyPlan) {
   console.log(`Dry run: ${options.dryRun ? "yes" : "no"}`);
   console.log(`Force: ${options.force ? "yes" : "no"}`);
   console.log(`Include images: ${options.includeImages ? "yes" : "no"}`);
+  console.log(`Include configurator UI: ${options.includeConfiguratorUi ? "yes" : "no"}`);
   console.log("");
   console.log(options.dryRun ? "Planned files:" : "Written files:");
   written.forEach(filePath => {
@@ -325,9 +418,19 @@ function printSummary(options, written, copyPlan) {
   if (options.includeImages) {
     console.log("");
     console.log(options.dryRun ? "Planned image copies:" : "Copied images:");
-    imageCopyCounts(copyPlan).forEach(({ label, count }) => {
+    imageCopyCounts(imageCopyPlan).forEach(({ label, count }) => {
       console.log(`- ${label}: ${count}`);
     });
+  }
+  if (options.includeConfiguratorUi) {
+    const counts = configuratorUiCounts(configuratorUiCopyPlan);
+    console.log("");
+    console.log(options.dryRun ? "Planned configurator UI copy:" : "Copied configurator UI:");
+    console.log(`- files: ${counts.files}`);
+    console.log(`- app.js mode transforms: ${counts.transformed}`);
+    if (!options.includeImages) {
+      console.log("- warning: thumbnails need --include-images for a full static package");
+    }
   }
   console.log("");
   console.log("Validation: PASS");
@@ -346,10 +449,15 @@ function main() {
 
   const outputFiles = EXPECTED_OUTPUTS.map(relative => path.join(options.outDir, relative));
   const imageCopyPlan = options.includeImages ? buildImageCopyPlan(assetsManifest, options.outDir) : [];
+  const configuratorUiCopyPlan = options.includeConfiguratorUi ? buildConfiguratorUiCopyPlan(options.outDir) : [];
+  const plannedFiles = [
+    ...outputFiles,
+    ...configuratorUiCopyPlan.map(copy => copy.destinationPath)
+  ];
 
   if (options.dryRun) {
     validateCatalogText(catalogText);
-    printSummary(options, outputFiles, imageCopyPlan);
+    printSummary(options, plannedFiles, imageCopyPlan, configuratorUiCopyPlan);
     return;
   }
 
@@ -359,8 +467,11 @@ function main() {
     copyImages(imageCopyPlan);
     verifyCopiedImages(imageCopyPlan);
   }
+  if (options.includeConfiguratorUi) {
+    writeConfiguratorUi(configuratorUiCopyPlan);
+  }
   validateCatalogFile(outputFiles[0]);
-  printSummary(options, outputFiles, imageCopyPlan);
+  printSummary(options, plannedFiles, imageCopyPlan, configuratorUiCopyPlan);
 }
 
 main();
