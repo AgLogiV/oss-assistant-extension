@@ -45,7 +45,14 @@ const localConfiguratorAdapter = {
     });
   }
 };
-const configuratorAdapter = localConfiguratorAdapter;
+const CONFIGURATOR_MODE = "local";
+
+function createConfiguratorAdapter(mode) {
+  if (mode === "local") return localConfiguratorAdapter;
+  throw new Error(`Unsupported configurator mode: ${mode}`);
+}
+
+const configuratorAdapter = createConfiguratorAdapter(CONFIGURATOR_MODE);
 const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
 const EXCLUDED_ADD_CATEGORIES = new Set(["cam_modules", "modems"]);
 const safeDeviceIdPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
@@ -71,6 +78,22 @@ function byId(id) {
 function setText(id, value) {
   const element = byId(id);
   if (element) element.textContent = value;
+}
+
+function adapterCapabilities() {
+  return configuratorAdapter.capabilities || {};
+}
+
+function canValidateCandidate() {
+  return adapterCapabilities().canValidateCandidate !== false;
+}
+
+function canValidateFixture() {
+  return adapterCapabilities().canValidateFixture !== false;
+}
+
+function assetPreviewMode() {
+  return adapterCapabilities().assetPreviewMode || "none";
 }
 
 function setResultBadge(id, state, text) {
@@ -512,6 +535,7 @@ function syncAssetSelect(select, value) {
 function previewUrlForAssetPath(value) {
   const normalized = normalizeString(value);
   if (!normalized) return "";
+  if (assetPreviewMode() === "none") return "";
   return configuratorAdapter.previewUrlForPath(normalized);
 }
 
@@ -1110,10 +1134,11 @@ function setupEditorControls() {
 }
 
 function setExportReady(isReady) {
-  ["export-candidate-btn", "validate-candidate-btn"].forEach(id => {
-    const button = byId(id);
-    if (button) button.disabled = !isReady;
-  });
+  const exportButton = byId("export-candidate-btn");
+  if (exportButton) exportButton.disabled = !isReady;
+
+  const validateCandidateButton = byId("validate-candidate-btn");
+  if (validateCandidateButton) validateCandidateButton.disabled = !isReady || !canValidateCandidate();
 }
 
 function candidateFileName(candidate) {
@@ -1150,7 +1175,7 @@ function exportCandidate() {
 function setValidationRunning(isRunning) {
   const button = byId("validate-fixture-btn");
   if (button) {
-    button.disabled = isRunning;
+    button.disabled = isRunning || !canValidateFixture();
     button.textContent = isRunning ? "Validating..." : "Validate Fixture";
   }
 }
@@ -1158,7 +1183,7 @@ function setValidationRunning(isRunning) {
 function setCandidateValidationRunning(isRunning) {
   const button = byId("validate-candidate-btn");
   if (button) {
-    button.disabled = isRunning || !currentCandidate;
+    button.disabled = isRunning || !currentCandidate || !canValidateCandidate();
     button.textContent = isRunning ? "Validating Candidate..." : "Validate Candidate";
   }
 }
@@ -1217,6 +1242,11 @@ function renderCandidateValidationError(error) {
 }
 
 async function validateCandidate() {
+  if (!canValidateCandidate()) {
+    renderCandidateValidationError(new Error("Candidate validation is not available in this configurator mode."));
+    return;
+  }
+
   const candidate = candidateForAction();
   if (!candidate) {
     setResultBadge("candidate-validation-status", "error", "No candidate loaded");
@@ -1246,6 +1276,11 @@ async function validateCandidate() {
 }
 
 async function validateFixture() {
+  if (!canValidateFixture()) {
+    renderValidationError(new Error("Fixture validation is not available in this configurator mode."));
+    return;
+  }
+
   setValidationRunning(true);
   setText("validation-target", "Fixture");
   setResultBadge("validation-status", "running", "Running");
