@@ -19,6 +19,23 @@ const ALLOWED_ASSET_PREFIXES = [
   "images/devices/16x9/",
   "images/recycle-help/"
 ];
+const ALLOWED_IMAGE_EXTENSIONS = new Set([".webp", ".png", ".jpg", ".jpeg"]);
+const ASSET_COPY_POLICIES = [
+  {
+    manifestKey: "deviceImages",
+    label: "device images",
+    prefix: "images/devices/16x9/",
+    sourceDir: path.join(EXTENSION_ROOT, "images", "devices", "16x9"),
+    outputDir: path.join("images", "devices", "16x9")
+  },
+  {
+    manifestKey: "helpImages",
+    label: "help images",
+    prefix: "images/recycle-help/",
+    sourceDir: path.join(EXTENSION_ROOT, "images", "recycle-help"),
+    outputDir: path.join("images", "recycle-help")
+  }
+];
 const PROTECTED_EXACT_OUTPUT_PATHS = [
   REPO_ROOT
 ];
@@ -41,7 +58,8 @@ function parseArgs(argv) {
   const options = {
     outDir: "",
     dryRun: false,
-    force: false
+    force: false,
+    includeImages: false
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -55,6 +73,8 @@ function parseArgs(argv) {
       options.dryRun = true;
     } else if (arg === "--force") {
       options.force = true;
+    } else if (arg === "--include-images") {
+      options.includeImages = true;
     } else {
       failFast(`Unknown argument: ${arg}`);
     }
@@ -143,19 +163,119 @@ function assertSafeAssetManifest(manifest) {
   [...manifest.deviceImages, ...manifest.helpImages].forEach((asset, index) => {
     const assetPath = String(asset && asset.path || "");
     const label = `assets-manifest asset ${index}`;
-    if (!ALLOWED_ASSET_PREFIXES.some(prefix => assetPath.startsWith(prefix))) {
-      failFast(`${label} has unexpected path prefix: ${assetPath}`);
-    }
-    if (assetPath.includes("\\") || assetPath.includes("..")) {
-      failFast(`${label} has unsafe path: ${assetPath}`);
-    }
-    if (assetPath.startsWith("/") || /^[A-Za-z]:/.test(assetPath)) {
-      failFast(`${label} is not extension-relative: ${assetPath}`);
-    }
-    if (/^(file|https?):\/\//i.test(assetPath)) {
-      failFast(`${label} must not be a URL: ${assetPath}`);
+    assertSafeManifestAssetPath(assetPath, label);
+  });
+}
+
+function assertSafeManifestAssetPath(assetPath, label) {
+  if (/^(file|https?):\/\//i.test(assetPath)) {
+    failFast(`${label} must not be a URL: ${assetPath}`);
+  }
+  if (assetPath.includes("\\") || assetPath.includes("..")) {
+    failFast(`${label} has unsafe path: ${assetPath}`);
+  }
+  if (assetPath.startsWith("/") || /^[A-Za-z]:/.test(assetPath)) {
+    failFast(`${label} is not extension-relative: ${assetPath}`);
+  }
+
+  const matchingPrefix = ALLOWED_ASSET_PREFIXES.find(prefix => assetPath.startsWith(prefix));
+  if (!matchingPrefix) {
+    failFast(`${label} has unexpected path prefix: ${assetPath}`);
+  }
+
+  const fileName = assetPath.slice(matchingPrefix.length);
+  if (!fileName || fileName.includes("/")) {
+    failFast(`${label} must be a file directly under ${matchingPrefix}: ${assetPath}`);
+  }
+  if (!ALLOWED_IMAGE_EXTENSIONS.has(path.extname(fileName).toLowerCase())) {
+    failFast(`${label} has unsupported image extension: ${assetPath}`);
+  }
+
+  return { matchingPrefix, fileName };
+}
+
+function assertRegularSourceImage(sourcePath, label) {
+  let stat;
+  try {
+    stat = fs.lstatSync(sourcePath);
+  } catch (error) {
+    failFast(`${label} source image is missing: ${relativePath(sourcePath)}`);
+  }
+  if (stat.isSymbolicLink()) {
+    failFast(`${label} source image must not be a symlink: ${relativePath(sourcePath)}`);
+  }
+  if (!stat.isFile()) {
+    failFast(`${label} source image is not a file: ${relativePath(sourcePath)}`);
+  }
+}
+
+function buildImageCopyPlan(manifest, outDir) {
+  const copies = [];
+  const seenDestinations = new Set();
+
+  ASSET_COPY_POLICIES.forEach(policy => {
+    const assets = manifest[policy.manifestKey];
+    const sourceRoot = path.resolve(policy.sourceDir);
+    const outputRoot = path.resolve(outDir, policy.outputDir);
+
+    assets.forEach((asset, index) => {
+      const assetPath = String(asset && asset.path || "");
+      const label = `${policy.manifestKey}[${index}]`;
+      const { matchingPrefix, fileName } = assertSafeManifestAssetPath(assetPath, label);
+      if (matchingPrefix !== policy.prefix) {
+        failFast(`${label} is listed in ${policy.manifestKey} but uses ${matchingPrefix}`);
+      }
+
+      const sourcePath = path.resolve(sourceRoot, fileName);
+      if (!isSameOrInside(sourceRoot, sourcePath)) {
+        failFast(`${label} source escaped fixed asset folder: ${assetPath}`);
+      }
+      assertRegularSourceImage(sourcePath, label);
+
+      const destinationPath = path.resolve(outputRoot, fileName);
+      if (!isSameOrInside(outputRoot, destinationPath)) {
+        failFast(`${label} destination escaped output asset folder: ${assetPath}`);
+      }
+
+      const destinationKey = destinationPath.toLowerCase();
+      if (seenDestinations.has(destinationKey)) {
+        failFast(`${label} duplicates an output image path: ${assetPath}`);
+      }
+      seenDestinations.add(destinationKey);
+
+      copies.push({
+        manifestKey: policy.manifestKey,
+        label: policy.label,
+        assetPath,
+        sourcePath,
+        destinationPath
+      });
+    });
+  });
+
+  return copies;
+}
+
+function copyImages(copyPlan) {
+  copyPlan.forEach(copy => {
+    fs.mkdirSync(path.dirname(copy.destinationPath), { recursive: true });
+    fs.copyFileSync(copy.sourcePath, copy.destinationPath);
+  });
+}
+
+function verifyCopiedImages(copyPlan) {
+  copyPlan.forEach(copy => {
+    if (!fs.existsSync(copy.destinationPath) || !fs.statSync(copy.destinationPath).isFile()) {
+      failFast(`Copied image is missing after export: ${copy.assetPath}`);
     }
   });
+}
+
+function imageCopyCounts(copyPlan) {
+  return ASSET_COPY_POLICIES.map(policy => ({
+    label: policy.label,
+    count: copyPlan.filter(copy => copy.manifestKey === policy.manifestKey).length
+  }));
 }
 
 function validateCatalogFile(catalogPath) {
@@ -189,18 +309,26 @@ function writePackageFile(filePath, content) {
   fs.renameSync(tempFile, filePath);
 }
 
-function printSummary(options, written) {
+function printSummary(options, written, copyPlan) {
   console.log("Recycle static config package export");
   console.log("");
   console.log("Mode: dev-only");
   console.log(`Output: ${options.outDir}`);
   console.log(`Dry run: ${options.dryRun ? "yes" : "no"}`);
   console.log(`Force: ${options.force ? "yes" : "no"}`);
+  console.log(`Include images: ${options.includeImages ? "yes" : "no"}`);
   console.log("");
   console.log(options.dryRun ? "Planned files:" : "Written files:");
   written.forEach(filePath => {
     console.log(`- ${path.relative(options.outDir, filePath).replace(/\\/g, "/")}`);
   });
+  if (options.includeImages) {
+    console.log("");
+    console.log(options.dryRun ? "Planned image copies:" : "Copied images:");
+    imageCopyCounts(copyPlan).forEach(({ label, count }) => {
+      console.log(`- ${label}: ${count}`);
+    });
+  }
   console.log("");
   console.log("Validation: PASS");
 }
@@ -217,17 +345,22 @@ function main() {
   assertSafeAssetManifest(assetsManifest);
 
   const outputFiles = EXPECTED_OUTPUTS.map(relative => path.join(options.outDir, relative));
+  const imageCopyPlan = options.includeImages ? buildImageCopyPlan(assetsManifest, options.outDir) : [];
 
   if (options.dryRun) {
     validateCatalogText(catalogText);
-    printSummary(options, outputFiles);
+    printSummary(options, outputFiles, imageCopyPlan);
     return;
   }
 
   writePackageFile(outputFiles[0], catalogText);
   writePackageFile(outputFiles[1], assetsText);
+  if (options.includeImages) {
+    copyImages(imageCopyPlan);
+    verifyCopiedImages(imageCopyPlan);
+  }
   validateCatalogFile(outputFiles[0]);
-  printSummary(options, outputFiles);
+  printSummary(options, outputFiles, imageCopyPlan);
 }
 
 main();
