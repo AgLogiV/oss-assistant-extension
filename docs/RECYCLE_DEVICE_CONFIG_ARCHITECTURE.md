@@ -375,7 +375,8 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Current dev-only assets manifest exporter: `node Extension/scripts/export-recycle-assets-manifest.js`.
    - The exporter prints JSON to stdout for a future `config/assets-manifest.json`, scans only `Extension/images/devices/16x9/` and `Extension/images/recycle-help/`, outputs only extension-relative `images/...` paths, and does not create files, publish anything, or change runtime behavior.
    - Current dev-only static package exporter: `node Extension/scripts/export-recycle-static-config-package.js --out path/to/output-dir`.
-   - The package exporter writes only to an explicit output directory and currently creates `config/recycle-device-catalog.json` and `config/assets-manifest.json`. It reuses the existing catalog/assets exporters, validates the generated catalog, refuses unsafe output paths such as runtime/source folders, and does not copy images, copy configurator UI, create GitHub Pages files, or add runtime JSON loading.
+   - By default, the package exporter writes only `config/recycle-device-catalog.json` and `config/assets-manifest.json` to an explicit output directory. It reuses the existing catalog/assets exporters, validates the generated catalog, and refuses unsafe output paths such as runtime/source folders.
+   - Optional `--include-images` also copies only package images referenced by the generated `assets-manifest.json` into `images/devices/16x9/` and `images/recycle-help/`. This is manifest-driven, does not copy the configurator UI, does not create GitHub Pages files, and does not change runtime behavior. Future static/GitHub Pages hosting can serve those package images as static URLs; this phase does not add runtime downloading or caching.
    - Static package contract before implementation:
      - `config/recycle-device-catalog.json`
      - `config/assets-manifest.json`
@@ -432,7 +433,7 @@ Config/admin must not control DOM selectors, OSS navigation, CAM flow, arbitrary
    - Current dev-only checker: `node Extension/scripts/validate-recycle-catalog.js`.
    - Current dev-only fixture exporter: `node Extension/scripts/export-recycle-config-fixture.js`.
    - Current dev-only assets manifest exporter for future static/GitHub Pages support: `node Extension/scripts/export-recycle-assets-manifest.js`.
-   - Current dev-only static package exporter: `node Extension/scripts/export-recycle-static-config-package.js --out path/to/output-dir` with optional `--dry-run` and `--force`.
+   - Current dev-only static package exporter: `node Extension/scripts/export-recycle-static-config-package.js --out path/to/output-dir` with optional `--dry-run`, `--force`, and `--include-images`.
    - Current dev-only fixture validator: `node Extension/scripts/validate-recycle-config-fixture.js`.
    - Current dev-only loader adapter prototype: `node Extension/scripts/load-recycle-config-fixture.js`.
    - The exporter reads `Extension/content.js` as text and writes JSON to stdout with `schemaVersion`, `revision`, `devices`, `categoryHelp`, `validationProfiles`, and `generatedMaterialFilters`.
