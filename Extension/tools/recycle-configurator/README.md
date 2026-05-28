@@ -192,4 +192,6 @@ configurator/styles.css
 
 The static configurator must not call `/api/*`. It should load config JSON by relative URL and/or file upload, load assets from `config/assets-manifest.json`, render previews only for manifest-approved images, and keep exported JSON paths as `images/...` values rather than static URLs.
 
+The current dev-only package export workflow is `node Extension/scripts/export-recycle-static-config-package.js --out <output-dir> --include-images`. Smoke-tested output contains `config/recycle-device-catalog.json`, `config/assets-manifest.json`, `images/devices/16x9/`, and `images/recycle-help/` with `2` config files plus `59` images (`41` device images and `18` help images), `61` files total. This package is for a future separate config repo; it does not include configurator UI or GitHub Pages files, and it does not change extension runtime behavior.
+
 Full validation is not available in the browser static MVP. Use `validate-recycle-config-fixture.js --input`, `review-recycle-config-candidate.js --input`, or a future GitHub Action. Do not add GitHub writes from the browser, OAuth, tokens, secrets, runtime JSON loading, or writes to extension runtime paths.
