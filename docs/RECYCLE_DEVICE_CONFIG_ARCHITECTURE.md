@@ -392,6 +392,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      - Static config JSON: `https://oss-assistant.github.io/oss-assistant-config/config/recycle-device-catalog.json`
      - Static assets manifest: `https://oss-assistant.github.io/oss-assistant-config/config/assets-manifest.json`
      - Pages is enabled from the `main` branch root. The root URL showing the repo README is expected. The static configurator loads from GitHub Pages, but the extension runtime still does not load remote config; the optional remote config/runtime overlay remains a future separate task, and the browser configurator does not write to GitHub.
+     - The separate private extension repo is `https://github.com/oss-assistant/oss-assistant-extension`; use it for normal full-extension development history. The public `oss-assistant-config` repo now has GitHub Action validation for static package structure and path safety.
    - Static package contract before implementation:
      - `config/recycle-device-catalog.json`
      - `config/assets-manifest.json`

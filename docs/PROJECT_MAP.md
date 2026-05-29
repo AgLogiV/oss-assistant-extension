@@ -16,6 +16,13 @@ When adding new local recycle devices to the catalog, read `docs/RECYCLE_DEVICE_
 
 For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_RULES.md`. It is a human-authored input file for predefined local validation profiles; part of it is now implemented only when concrete recycle devices are selected.
 
+## GitHub Repositories
+
+- Private extension repo: `https://github.com/oss-assistant/oss-assistant-extension`. This is the full private extension project for local development history, backup, progress tracking, and normal extension commits. The main local branch is `main` and tracks `origin/main`; normal workflow is local patch, checks/tests, review, commit, then `git push origin main`.
+- Public config repo: `https://github.com/oss-assistant/oss-assistant-config`. This is the public static config package with config JSON, packaged images, the static configurator, GitHub Pages, and static package structure/path-safety validation through GitHub Actions. Normal static config workflow is generate the static package, validate/review it, publish it to `oss-assistant-config`, let the Action validate it, then serve through Pages.
+- Live GitHub Pages URLs: root `https://oss-assistant.github.io/oss-assistant-config/` and static configurator `https://oss-assistant.github.io/oss-assistant-config/configurator/`.
+- The runtime extension still does not load remote config. Remote config overlay remains a future separate task, and the browser configurator still does not write to GitHub.
+
 ## Project Structure
 
 - `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, background service worker, content script, and web-accessible image assets.
