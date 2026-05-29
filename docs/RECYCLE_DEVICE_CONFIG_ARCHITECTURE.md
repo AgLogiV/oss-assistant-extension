@@ -385,6 +385,13 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      - Expected GitHub Pages paths are `/config/recycle-device-catalog.json`, `/config/assets-manifest.json`, `/images/devices/16x9/...`, `/images/recycle-help/...`, and `/configurator/`.
      - Manual publish flow: generate the full package with `--include-images --include-configurator-ui`, validate the generated catalog, run the candidate review script, smoke test the static package, copy package contents into the config repo root, review the diff, then commit or open a PR.
      - Validation remains local-script based for now; a GitHub Action can later enforce schema/assets/review checks. Browser configurator writes to GitHub, runtime remote loading, and hard remote replacement remain out of scope.
+   - Live public static config deployment:
+     - Public repo: `https://github.com/oss-assistant/oss-assistant-config`
+     - GitHub Pages root: `https://oss-assistant.github.io/oss-assistant-config/`
+     - Static configurator: `https://oss-assistant.github.io/oss-assistant-config/configurator/`
+     - Static config JSON: `https://oss-assistant.github.io/oss-assistant-config/config/recycle-device-catalog.json`
+     - Static assets manifest: `https://oss-assistant.github.io/oss-assistant-config/config/assets-manifest.json`
+     - Pages is enabled from the `main` branch root. The root URL showing the repo README is expected. The static configurator loads from GitHub Pages, but the extension runtime still does not load remote config; the optional remote config/runtime overlay remains a future separate task, and the browser configurator does not write to GitHub.
    - Static package contract before implementation:
      - `config/recycle-device-catalog.json`
      - `config/assets-manifest.json`

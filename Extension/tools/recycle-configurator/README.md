@@ -194,4 +194,14 @@ The static configurator must not call `/api/*`. It should load config JSON by re
 
 The current dev-only full package export workflow is `node Extension/scripts/export-recycle-static-config-package.js --out <output-dir> --include-images --include-configurator-ui`. Smoke-tested output contains `config/recycle-device-catalog.json`, `config/assets-manifest.json`, `images/devices/16x9/`, `images/recycle-help/`, `configurator/index.html`, `configurator/app.js`, and `configurator/styles.css`. The copied `configurator/app.js` is transformed to static mode, while source `public/app.js` remains local mode. This package should run without `/api/*` endpoints, shows static validation as disabled/instructional, keeps exported JSON paths as `images/...`, and still does not create GitHub Pages files, `.nojekyll`, GitHub writes, OAuth, tokens, runtime JSON loading, or extension runtime changes.
 
+Live deployment:
+
+- Public config repo: `https://github.com/oss-assistant/oss-assistant-config`
+- GitHub Pages root: `https://oss-assistant.github.io/oss-assistant-config/`
+- Static configurator: `https://oss-assistant.github.io/oss-assistant-config/configurator/`
+- Static config JSON: `https://oss-assistant.github.io/oss-assistant-config/config/recycle-device-catalog.json`
+- Static assets manifest: `https://oss-assistant.github.io/oss-assistant-config/config/assets-manifest.json`
+
+Pages is enabled from the `main` branch root. The root URL showing README is expected. The static configurator loads from GitHub Pages, but the browser configurator does not write to GitHub. Extension runtime still does not load remote config; remote config/runtime overlay remains a future separate task.
+
 Full validation is not available in the browser static MVP. Use `validate-recycle-config-fixture.js --input`, `review-recycle-config-candidate.js --input`, or a future GitHub Action. Do not add GitHub writes from the browser, OAuth, tokens, secrets, runtime JSON loading, or writes to extension runtime paths.
