@@ -10,14 +10,13 @@
   <body>
     <main class="shell">
       <section class="panel">
-        <p class="eyebrow">Dev-only local tool</p>
+        <p class="eyebrow">Static config tool</p>
         <h1>Recycle Configurator</h1>
         <p>
-          Този dev-only skeleton преглежда fixture-а и редактира metadata за съществуващи устройства само в browser memory.
-          Не е свързан с extension runtime и не може да save-ва config.
+          Редактор в browser memory за recycle device catalog metadata. Промените остават само в текущата browser сесия, докато не export-неш candidate JSON и не го валидираш преди publish.
         </p>
         <p class="notice">
-          Промените са само в browser-memory. Те не се записват в project files, освен ако не export-неш и validate-неш отделен candidate JSON.
+          Промените са browser-memory only: не се записват автоматично и трябва да бъдат export-нати и валидирани преди publish.
         </p>
 
         <dl class="status-grid" aria-label="Current skeleton status">
