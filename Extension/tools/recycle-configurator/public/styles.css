@@ -6,9 +6,9 @@
   --bg: #07090e;
   --bg-deep: #030407;
   --bg-graphite: #10141c;
-  --glass: rgba(16, 20, 28, 0.74);
-  --glass-strong: rgba(18, 22, 31, 0.78);
-  --glass-soft: rgba(255, 255, 255, 0.075);
+  --glass: rgba(16, 20, 28, 0.68);
+  --glass-strong: rgba(18, 22, 31, 0.73);
+  --glass-soft: rgba(255, 255, 255, 0.082);
   --glass-red: rgba(227, 6, 19, 0.12);
   --glass-border: rgba(255, 255, 255, 0.18);
   --glass-border-strong: rgba(255, 255, 255, 0.28);
@@ -30,7 +30,7 @@
   --shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
   --shadow-soft: 0 14px 36px rgba(0, 0, 0, 0.28);
   --shadow-red: 0 24px 80px rgba(227, 6, 19, 0.16);
-  --blur: 18px;
+  --blur: 20px;
 }
 
 * {
@@ -141,6 +141,7 @@ textarea {
   padding: 30px;
   background:
     radial-gradient(circle at 10% 0%, rgba(227, 6, 19, 0.12), transparent 20rem),
+    linear-gradient(135deg, rgba(227, 6, 19, 0.045), rgba(255, 255, 255, 0.018) 42%, rgba(4, 7, 12, 0.08)),
     linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 0.6px),
     var(--glass);
   box-shadow:
@@ -159,7 +160,7 @@ textarea {
   .category-pill,
   .notice,
   .validation-hint {
-    backdrop-filter: blur(var(--blur));
+    backdrop-filter: blur(var(--blur)) saturate(155%);
   }
 }
 
@@ -625,7 +626,7 @@ pre {
   background:
     radial-gradient(circle at 20% 0%, rgba(227, 6, 19, 0.12), transparent 18rem),
     radial-gradient(circle at 88% 90%, rgba(72, 94, 132, 0.08), transparent 16rem),
-    rgba(8, 11, 17, 0.62);
+    rgba(8, 11, 17, 0.58);
   box-shadow:
     var(--shadow-soft),
     0 18px 54px rgba(227, 6, 19, 0.08),
@@ -682,10 +683,11 @@ td {
 
 .device-list-table tbody tr.selected-row {
   background:
-    linear-gradient(90deg, rgba(227, 6, 19, 0.25), rgba(227, 6, 19, 0.08) 42%, rgba(255, 255, 255, 0.045)),
+    linear-gradient(90deg, rgba(227, 6, 19, 0.32), rgba(227, 6, 19, 0.12) 42%, rgba(255, 255, 255, 0.045)),
     rgba(255, 255, 255, 0.035);
   box-shadow:
     inset 4px 0 0 var(--accent),
+    inset 8px 0 18px rgba(227, 6, 19, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset 0 -1px 0 rgba(255, 255, 255, 0.06);
 }
@@ -700,6 +702,7 @@ td {
   background:
     radial-gradient(circle at 14% 0%, rgba(227, 6, 19, 0.18), transparent 15rem),
     radial-gradient(circle at 88% 30%, rgba(255, 49, 64, 0.1), transparent 12rem),
+    linear-gradient(135deg, rgba(227, 6, 19, 0.04), rgba(255, 255, 255, 0.014) 48%, rgba(4, 7, 12, 0.1)),
     var(--glass-strong);
   box-shadow:
     var(--shadow),
