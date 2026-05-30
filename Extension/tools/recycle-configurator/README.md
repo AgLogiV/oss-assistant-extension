@@ -176,6 +176,14 @@ If the review is acceptable, the intended merge path is: make a manual/Codex-ass
 
 The extension runtime still uses `Extension/content.js` as the recycle source of truth and does not load JSON config.
 
+## UI Design Direction
+
+The configurator UI currently uses a dark red glassmorphism, ShadCN-inspired dashboard style. It is still plain static HTML/CSS/JS; there is no React, ShadCN, build step, or UI dependency.
+
+The visual system is implemented with CSS tokens, a viewport-fixed radial-gradient background, `backdrop-filter` blur/saturate, translucent glass panels, red underglow, softened white highlights, rounded cards, muted labels, and subtle native `title` help markers. Global background glows are fixed to the viewport so panels scroll over them, while panel/card underglows stay element-bound and scroll with their surfaces.
+
+Future UI polish should stay CSS/markup focused and must preserve all existing DOM ids, `data-editor-field`, `data-add-field`, button ids, selectors, form controls, and `public/app.js` behavior.
+
 ## Future Static Package Contract
 
 A future GitHub Pages/static configurator package should live in a separate config repo, not as extension runtime code. The planned package shape is:
