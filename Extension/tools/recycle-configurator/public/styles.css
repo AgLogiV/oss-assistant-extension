@@ -8,10 +8,10 @@
   --bg-graphite: #10141c;
   --glass: rgba(16, 20, 28, 0.68);
   --glass-strong: rgba(18, 22, 31, 0.73);
-  --glass-soft: rgba(255, 255, 255, 0.082);
+  --glass-soft: rgba(255, 255, 255, 0.076);
   --glass-red: rgba(227, 6, 19, 0.12);
-  --glass-border: rgba(255, 255, 255, 0.18);
-  --glass-border-strong: rgba(255, 255, 255, 0.28);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-border-strong: rgba(255, 255, 255, 0.24);
   --text: #f6f7fb;
   --text-soft: #d9dee8;
   --muted: #99a3b5;
@@ -141,13 +141,13 @@ textarea {
   padding: 30px;
   background:
     radial-gradient(circle at 10% 0%, rgba(227, 6, 19, 0.12), transparent 20rem),
-    linear-gradient(135deg, rgba(227, 6, 19, 0.045), rgba(255, 255, 255, 0.018) 42%, rgba(4, 7, 12, 0.08)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 0.6px),
+    linear-gradient(135deg, rgba(227, 6, 19, 0.045), rgba(255, 255, 255, 0.012) 42%, rgba(4, 7, 12, 0.08)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.085), transparent 0.6px),
     var(--glass);
   box-shadow:
     var(--shadow),
     var(--shadow-red),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.085);
 }
 
 @supports (backdrop-filter: blur(1px)) {
@@ -175,8 +175,8 @@ textarea {
 .panel::before {
   inset: 0;
   background:
-    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.16), transparent 22rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 20%);
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.105), transparent 22rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.066), transparent 20%);
 }
 
 .panel::after {
@@ -410,11 +410,11 @@ button:disabled,
   padding: 14px 16px;
   background:
     radial-gradient(circle at 18% 0%, rgba(227, 6, 19, 0.13), transparent 8rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.095), transparent),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.068), transparent),
     var(--glass-soft);
   box-shadow:
     0 10px 30px rgba(0, 0, 0, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.085);
 }
 
 .status-grid div::before,
@@ -424,7 +424,7 @@ button:disabled,
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.1), transparent 34%),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.068), transparent 34%),
     radial-gradient(circle at 92% 12%, rgba(255, 49, 64, 0.08), transparent 44%);
   content: "";
 }
@@ -751,7 +751,7 @@ td {
   box-shadow:
     var(--shadow),
     0 22px 70px rgba(227, 6, 19, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.085);
 }
 
 .device-editor::before,
@@ -774,7 +774,7 @@ td {
   inset: 0;
   z-index: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 22%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.082), transparent 22%);
 }
 
 .device-editor > * {
