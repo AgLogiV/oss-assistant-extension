@@ -2789,9 +2789,297 @@
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY = "wifi_oss_recycle_entry_material_snapshot";
+  const RECYCLE_HISTORY_TEMPLATE_KEY = "wifi_oss_recycle_history_url_template";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
+  const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
+  const RECYCLE_HISTORY_DAYS_BACK = 3;
+  const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
+  const RECYCLE_HISTORY_TO_PARAM = "RecycleDevicesByTechnician.To";
+  let recycleHistoryCache = {
+    key: "",
+    lookup: new Map(),
+    loaded: false,
+    inFlight: null
+  };
+  let recycleHistoryDuplicateOverrideSerial = "";
+  const recycleHistoryWarnedKeys = new Set();
+
+  function warnRecycleHistoryOnce(key, ...args) {
+    const k = String(key || "generic");
+    if (recycleHistoryWarnedKeys.has(k)) return;
+    recycleHistoryWarnedKeys.add(k);
+    try { console.warn("[recycleHistory]", ...args); } catch (e) {}
+  }
+
+  function normalizeRecycleHistorySerial(serialRaw) {
+    return String(serialRaw || "").trim().toUpperCase();
+  }
+
+  function formatRecycleHistoryDate(d) {
+    const date = d instanceof Date ? d : new Date();
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
+  }
+
+  function addRecycleHistoryDays(d, deltaDays) {
+    const date = d instanceof Date ? d : new Date();
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + Number(deltaDays || 0));
+  }
+
+  function sanitizeRecycleHistoryUrl(rawUrl) {
+    if (!rawUrl) return "";
+    try {
+      const url = new URL(String(rawUrl), window.location.href);
+      if (url.origin !== window.location.origin) return "";
+      const m = url.pathname.match(RECYCLE_HISTORY_PATH_RE);
+      if (!m) return "";
+      return m[1];
+    } catch (e) {}
+    return "";
+  }
+
+  function readRecycleHistoryTemplatePath() {
+    try {
+      const raw = String(localStorage.getItem(RECYCLE_HISTORY_TEMPLATE_KEY) || "");
+      const path = sanitizeRecycleHistoryUrl(raw);
+      if (path) return path;
+      if (raw) localStorage.removeItem(RECYCLE_HISTORY_TEMPLATE_KEY);
+    } catch (e) {}
+    return "";
+  }
+
+  function writeRecycleHistoryTemplatePath(path) {
+    const clean = sanitizeRecycleHistoryUrl(path);
+    if (!clean) return "";
+    try { localStorage.setItem(RECYCLE_HISTORY_TEMPLATE_KEY, clean); } catch (e) {}
+    return clean;
+  }
+
+  function discoverRecycleHistoryTemplateFromDom() {
+    const candidates = [];
+    try { candidates.push(window.location.href); } catch (e) {}
+    try {
+      document.querySelectorAll('a[href*="sap-recycle-devices-by-technician"]').forEach(a => {
+        candidates.push(a.getAttribute("href") || a.href || "");
+      });
+    } catch (e) {}
+
+    for (const raw of candidates) {
+      const clean = sanitizeRecycleHistoryUrl(raw);
+      if (clean) return writeRecycleHistoryTemplatePath(clean);
+    }
+    return readRecycleHistoryTemplatePath();
+  }
+
+  function buildRecycleHistoryUrlForDateRange(now = new Date()) {
+    const templatePath = discoverRecycleHistoryTemplateFromDom();
+    if (!templatePath) return "";
+    try {
+      const url = new URL(templatePath, window.location.origin);
+      url.search = "";
+      url.searchParams.set(RECYCLE_HISTORY_FROM_PARAM, formatRecycleHistoryDate(addRecycleHistoryDays(now, -RECYCLE_HISTORY_DAYS_BACK)));
+      url.searchParams.set(RECYCLE_HISTORY_TO_PARAM, formatRecycleHistoryDate(addRecycleHistoryDays(now, 1)));
+      return url.href;
+    } catch (e) {}
+    return "";
+  }
+
+  function findRecycleHistoryColumnIndex(headerCells, relName, textMatchers, fallbackIdx) {
+    const rel = String(relName || "").toLowerCase();
+    let idx = headerCells.findIndex(th => (th.getAttribute("rel") || "").toLowerCase() === rel);
+    if (idx < 0) {
+      idx = headerCells.findIndex(th => {
+        const text = (th.textContent || "").trim().toLowerCase();
+        return textMatchers.some(m => (typeof m === "string" ? text === m : m.test(text)));
+      });
+    }
+    return idx >= 0 ? idx : fallbackIdx;
+  }
+
+  function normalizeRecycleHistorySuccess(raw) {
+    const text = String(raw || "").replace(/\s+/g, " ").trim();
+    const lower = text.toLowerCase();
+    if (lower === "да") return "yes";
+    if (lower === "не") return "no";
+    return "";
+  }
+
+  function parseRecycleHistoryItemsFromDocument(doc) {
+    const root = doc?.getElementById?.(RECYCLE_LIST_ID);
+    if (!root) return [];
+    const table = root.querySelector("table");
+    if (!table) return [];
+
+    const headerCells = Array.from(table.querySelectorAll("tr th"));
+    const serialIdx = findRecycleHistoryColumnIndex(headerCells, "SerialNumber", ["сериен номер", /serial/], 4);
+    const sapIdx = findRecycleHistoryColumnIndex(headerCells, "SapId", ["sapid", "sap id"], 5);
+    const successIdx = findRecycleHistoryColumnIndex(headerCells, "IsSuccess", ["успешно рециклиран"], 6);
+
+    const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
+    const items = [];
+    for (const tr of rows) {
+      const tds = tr.querySelectorAll("td");
+      const serial = (tds[serialIdx]?.textContent || "").trim();
+      const serialKey = normalizeRecycleHistorySerial(serial);
+      if (!serialKey) continue;
+      const sapId = (tds[sapIdx]?.textContent || "").trim();
+      const successText = (tds[successIdx]?.textContent || "").trim();
+      const success = normalizeRecycleHistorySuccess(successText);
+      items.push({ serial, serialKey, sapId, successText, success });
+    }
+    return items;
+  }
+
+  function buildRecycleHistoryLookup(items) {
+    const lookup = new Map();
+    for (const item of Array.from(items || [])) {
+      const serialKey = normalizeRecycleHistorySerial(item?.serialKey || item?.serial);
+      if (!serialKey) continue;
+      if (item?.success !== "yes" && item?.success !== "no") continue;
+      if (!lookup.has(serialKey)) lookup.set(serialKey, { ...item, serialKey });
+    }
+    return lookup;
+  }
+
+  async function preloadRecycleHistoryCache({ force = false } = {}) {
+    const url = buildRecycleHistoryUrlForDateRange();
+    if (!url) {
+      warnRecycleHistoryOnce("missing-url", "History URL/template is unavailable; duplicate validation will fail open.");
+      return false;
+    }
+
+    if (!force && recycleHistoryCache.loaded && recycleHistoryCache.key === url) return true;
+    if (recycleHistoryCache.inFlight && recycleHistoryCache.key === url) return recycleHistoryCache.inFlight;
+
+    recycleHistoryCache.key = url;
+    recycleHistoryCache.inFlight = (async () => {
+      try {
+        const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        if (!doc.getElementById(RECYCLE_LIST_ID)) throw new Error("Recycle history list not found");
+        const items = parseRecycleHistoryItemsFromDocument(doc);
+        recycleHistoryCache.lookup = buildRecycleHistoryLookup(items);
+        recycleHistoryCache.loaded = true;
+        try { console.info("[recycleHistory] loaded", { url, rows: items.length }); } catch (e) {}
+        return true;
+      } catch (e) {
+        recycleHistoryCache.lookup = new Map();
+        recycleHistoryCache.loaded = false;
+        warnRecycleHistoryOnce(`fetch:${url}`, "History fetch/parse failed; duplicate validation will fail open.", e);
+        return false;
+      } finally {
+        recycleHistoryCache.inFlight = null;
+      }
+    })();
+
+    return recycleHistoryCache.inFlight;
+  }
+
+  function getRecycleHistoryDuplicateForSerial(serialRaw) {
+    if (!recycleHistoryCache.loaded || !(recycleHistoryCache.lookup instanceof Map)) return null;
+    const serialKey = normalizeRecycleHistorySerial(serialRaw);
+    if (!serialKey) return null;
+    return recycleHistoryCache.lookup.get(serialKey) || null;
+  }
+
+  function consumeRecycleHistoryDuplicateOverride(serialKey) {
+    const key = normalizeRecycleHistorySerial(serialKey);
+    if (!key) {
+      recycleHistoryDuplicateOverrideSerial = "";
+      return false;
+    }
+    if (recycleHistoryDuplicateOverrideSerial === key) {
+      recycleHistoryDuplicateOverrideSerial = "";
+      return true;
+    }
+    if (recycleHistoryDuplicateOverrideSerial) recycleHistoryDuplicateOverrideSerial = "";
+    return false;
+  }
+
+  function showRecycleDuplicateWarning(container, duplicate, serialInput, continueBtn) {
+    if (!container || !duplicate) return;
+    const serialKey = normalizeRecycleHistorySerial(duplicate.serialKey || duplicate.serial || serialInput?.value);
+    const recycled = duplicate.success === "yes";
+    const message = recycled
+      ? "Това устройство вече е рециклирано, искате ли да продължите?"
+      : "Това устройство вече е бракувано, искате ли да продължите?";
+
+    container.textContent = "";
+    container.dataset.wifiOssRecycleSerialAlertKind = "duplicate";
+    container.dataset.wifiOssRecycleDuplicateSerial = serialKey;
+    container.style.display = "inline-flex";
+    container.style.alignItems = "center";
+    container.style.flexWrap = "wrap";
+    container.style.gap = "8px";
+    container.style.boxSizing = "border-box";
+    container.style.padding = "7px 10px";
+    container.style.borderRadius = "6px";
+    container.style.border = "1px solid #d28a1d";
+    container.style.background = "#fff7e6";
+    container.style.color = "#7a4300";
+    container.style.fontWeight = "700";
+    container.style.fontSize = "13px";
+    container.style.lineHeight = "1.25";
+    container.style.verticalAlign = "middle";
+    container.setAttribute("role", "alert");
+
+    const text = document.createElement("span");
+    text.textContent = message;
+    text.style.minWidth = "0";
+    text.style.flex = "1 1 auto";
+    container.appendChild(text);
+
+    const yesBtn = document.createElement("button");
+    yesBtn.type = "button";
+    yesBtn.textContent = "Да";
+    yesBtn.style.padding = "5px 11px";
+    yesBtn.style.border = "1px solid #8a8a8a";
+    yesBtn.style.borderRadius = "4px";
+    yesBtn.style.background = "#eeeeee";
+    yesBtn.style.color = "#444";
+    yesBtn.style.fontWeight = "700";
+    yesBtn.style.cursor = "pointer";
+
+    const noBtn = document.createElement("button");
+    noBtn.type = "button";
+    noBtn.textContent = "Не";
+    noBtn.style.padding = "5px 11px";
+    noBtn.style.border = "1px solid #DA291C";
+    noBtn.style.borderRadius = "4px";
+    noBtn.style.background = "#DA291C";
+    noBtn.style.color = "#fff";
+    noBtn.style.fontWeight = "800";
+    noBtn.style.cursor = "pointer";
+
+    yesBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      recycleHistoryDuplicateOverrideSerial = serialKey;
+      clearRecycleInlineAlert(container);
+      try { continueBtn?.click?.(); } catch (e2) {}
+    }, true);
+
+    noBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { serialInput?.focus?.(); serialInput?.select?.(); } catch (e2) {}
+    }, true);
+
+    container.appendChild(yesBtn);
+    container.appendChild(noBtn);
+    playRecycleInlineAlertShake(container);
+    setTimeout(() => {
+      try { noBtn.focus({ preventScroll: true }); } catch (e) {
+        try { noBtn.focus(); } catch (e2) {}
+      }
+    }, 0);
+  }
 
   function clearRecycleEntrySelectedDevicesStorage() {
     try { localStorage.removeItem(RECYCLE_ENTRY_SELECTED_DEVICES_KEY); } catch (e) {}
@@ -3170,6 +3458,7 @@
     el.style.display = "none";
     el.removeAttribute("role");
     delete el.dataset.wifiOssRecycleSerialAlertKind;
+    delete el.dataset.wifiOssRecycleDuplicateSerial;
   }
 
   function isRecycleReducedMotionPreferred() {
@@ -4687,6 +4976,7 @@
     }
     fieldset.appendChild(panel);
     renderCategories();
+    try { preloadRecycleHistoryCache({ force: true }); } catch (e) {}
 
     const focusSerialInputOnce = () => {
       const active = document.activeElement;
@@ -4723,6 +5013,15 @@
         return;
       }
 
+      const duplicate = getRecycleHistoryDuplicateForSerial(serialInput.value);
+      if (duplicate && !consumeRecycleHistoryDuplicateOverride(duplicate.serialKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideRecycleSerialHelp();
+        showRecycleDuplicateWarning(serialMsg, duplicate, serialInput, continueBtn);
+        return;
+      }
+
       hideRecycleSerialHelp();
       // Store context for the next step (Material Id page).
       try {
@@ -4740,7 +5039,19 @@
       if (normalizeRecycleSerialKeydown(serialInput, e)) return;
       if (e.key === "Enter") guardContinue(e);
     }, true);
+    serialInput.addEventListener("focus", () => {
+      try { preloadRecycleHistoryCache(); } catch (e) {}
+    }, true);
     serialInput.addEventListener("input", () => {
+      try { preloadRecycleHistoryCache(); } catch (e) {}
+      if (serialMsg.dataset.wifiOssRecycleSerialAlertKind === "duplicate") {
+        if (serialMsg.dataset.wifiOssRecycleDuplicateSerial !== normalizeRecycleHistorySerial(serialInput.value)) {
+          clearSerialInlineAlert();
+        } else {
+          return;
+        }
+      }
+
       const cyrillicCheck = getRecycleSerialCyrillicValidation(serialInput.value);
       if (!cyrillicCheck.ok) {
         setSerialInlineAlert(cyrillicCheck.msg, "warning", cyrillicCheck.kind);
@@ -4768,6 +5079,7 @@
   function startRecycleEntryObserver() {
     installRecycleEntryStorageSync();
     const tryInject = () => {
+      try { discoverRecycleHistoryTemplateFromDom(); } catch (e) {}
       const injected = injectRecycleEntryCategoryPanel();
       if (!document.getElementById(RECYCLE_ENTRY_ROOT_ID)) hideRecycleSerialHelp();
       return injected;
