@@ -3068,6 +3068,11 @@
     noBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (serialInput && serialInput.value !== "") {
+        serialInput.value = "";
+        try { serialInput.dispatchEvent(new Event("input", { bubbles: true })); } catch (e2) {}
+        try { serialInput.dispatchEvent(new Event("change", { bubbles: true })); } catch (e2) {}
+      }
       try { serialInput?.focus?.(); serialInput?.select?.(); } catch (e2) {}
     }, true);
 
