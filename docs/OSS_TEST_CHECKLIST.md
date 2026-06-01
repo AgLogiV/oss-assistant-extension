@@ -34,6 +34,10 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm the serial input attributes: `id`, `name`, `class`, `value`, `readonly`, `disabled`.
 - Without choosing a category, enter a serial and press Continue. Expected: blocked with an inline message.
 - Test Continue by mouse click and by pressing Enter in the serial field.
+- Test a recycle-history duplicate where `_recycleDevicesByTechnician` has `Успешно рециклиран = Да`. Expected: duplicate warning appears and the flow does not continue without explicit `Да`.
+- Test a recycle-history duplicate where `_recycleDevicesByTechnician` has `Успешно рециклиран = Не`. Expected: duplicate warning appears and the flow does not continue without explicit `Да`.
+- Test a duplicate serial that appears more than once in `_recycleDevicesByTechnician` with conflicting `Да`/`Не` values. Expected MVP safety behavior: duplicate warning appears and the flow does not continue without explicit `Да`.
+- Note: the current MVP uses the first DOM row for the status message; a future improvement may prefer `Да` over `Не` when any successful recycle row exists.
 - Scan barcode `ABCDEFGHIJKLMNOPQRSTUVWXYZ:` with ENG layout. Expected: input remains `ABCDEFGHIJKLMNOPQRSTUVWXYZ:`.
 - Scan the same barcode with BG Phonetic/BGPT and BG/BDS layouts. Expected: input is normalized to `ABCDEFGHIJKLMNOPQRSTUVWXYZ:`.
 - Paste Cyrillic into the serial input. Expected: warning is shown and Continue is blocked.
