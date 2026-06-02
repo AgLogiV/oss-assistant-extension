@@ -5125,6 +5125,44 @@
     return true;
   }
 
+  const AFTER_RECYCLE_CAPTURE_SN_BTN_ID = "_wflowSavedTestPictureList_captureSn";
+  const AFTER_RECYCLE_CAPTURE_SN_LABEL = "СНИМКА НА S/N";
+
+  function relabelAfterRecycleCaptureSnButton() {
+    const btn = document.getElementById(AFTER_RECYCLE_CAPTURE_SN_BTN_ID);
+    if (!btn) return false;
+
+    const icon = btn.querySelector("span");
+    const nodes = Array.from(btn.childNodes);
+    const startIndex = icon ? nodes.indexOf(icon) + 1 : 0;
+    const textNode = nodes
+      .slice(Math.max(startIndex, 0))
+      .find(node => node.nodeType === Node.TEXT_NODE && String(node.nodeValue || "").trim());
+
+    if (textNode) {
+      if (textNode.nodeValue !== AFTER_RECYCLE_CAPTURE_SN_LABEL) {
+        textNode.nodeValue = AFTER_RECYCLE_CAPTURE_SN_LABEL;
+      }
+    } else if (icon && icon.nextSibling) {
+      btn.insertBefore(document.createTextNode(AFTER_RECYCLE_CAPTURE_SN_LABEL), icon.nextSibling);
+    } else {
+      btn.appendChild(document.createTextNode(AFTER_RECYCLE_CAPTURE_SN_LABEL));
+    }
+
+    return true;
+  }
+
+  function startAfterRecycleCaptureSnLabelObserver() {
+    const path = String(window.location?.pathname || "");
+    if (!path.includes("/wflow/after-recycle-state/")) return;
+    if (relabelAfterRecycleCaptureSnButton()) return;
+
+    const obs = new MutationObserver(() => {
+      if (relabelAfterRecycleCaptureSnButton()) obs.disconnect();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
   loadLastClipboardText();
   injectButton();
   startLabelsObservers();
@@ -5133,4 +5171,5 @@
   startDeviceFunctionsObserver();
   startRecycleEntryObserver();
   startCamModulesOperationHintObserver();
+  startAfterRecycleCaptureSnLabelObserver();
 })();
