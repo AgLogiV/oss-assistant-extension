@@ -42,6 +42,29 @@
   "content_scripts": [
     {
       "matches": [
+        "https://oss.a1.bg/bbs2_1/sap-warehouse-recycle*",
+        "https://oss.a1.bg/bbs2_1/wflow/device-recycle/*",
+        "https://oss.a1.bg/bbs2_1/wflow/device-history/*",
+        "https://oss.a1.bg/bbs2_1/wflow/recycle-state/*",
+        "https://oss.a1.bg/bbs2_1/wflow/after-recycle-state/*",
+        "https://oss.mobiltel.bg/bbs2_1/sap-warehouse-recycle*",
+        "https://oss.mobiltel.bg/bbs2_1/wflow/device-recycle/*",
+        "https://oss.mobiltel.bg/bbs2_1/wflow/device-history/*",
+        "https://oss.mobiltel.bg/bbs2_1/wflow/recycle-state/*",
+        "https://oss.mobiltel.bg/bbs2_1/wflow/after-recycle-state/*",
+        "https://srvvm-webtst-0.mobiltel.bg/bbs2_1/sap-warehouse-recycle*",
+        "https://srvvm-webtst-0.mobiltel.bg/bbs2_1/wflow/device-recycle/*",
+        "https://srvvm-webtst-0.mobiltel.bg/bbs2_1/wflow/device-history/*",
+        "https://srvvm-webtst-0.mobiltel.bg/bbs2_1/wflow/recycle-state/*",
+        "https://srvvm-webtst-0.mobiltel.bg/bbs2_1/wflow/after-recycle-state/*"
+      ],
+      "css": [
+        "recycle-theme.css"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://oss.a1.bg/*",
         "https://oss.mobiltel.bg/*",
         "https://srvvm-webtst-0.mobiltel.bg/*"

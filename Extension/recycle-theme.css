@@ -1,0 +1,264 @@
+/* Soft OSS Refresh MVP.
+   This file is loaded only on recycle-related OSS paths from manifest.json.
+   Keep rules cosmetic: no layout restructuring, no hidden state changes. */
+
+.box {
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
+  overflow: visible;
+}
+
+.box > h1 {
+  background: #eeeeee;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+fieldset {
+  border-color: #cfd5dc;
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+legend {
+  color: #d9251d;
+  padding: 0 6px;
+}
+
+input[id^="_recycleWarehouseList_"][type="text"],
+input[id^="_wflowDeviceHistoryList_"][type="text"],
+input[id^="_wflowChooseRecycleAction_"][type="text"],
+input[id^="_wflowAfterRecycleState_"][type="text"],
+textarea[id^="_wflowAfterRecycleState_"] {
+  border-color: #ccd3da;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+input[id^="_recycleWarehouseList_"][type="text"]:focus,
+input[id^="_wflowDeviceHistoryList_"][type="text"]:focus,
+input[id^="_wflowChooseRecycleAction_"][type="text"]:focus,
+input[id^="_wflowAfterRecycleState_"][type="text"]:focus,
+textarea[id^="_wflowAfterRecycleState_"]:focus {
+  border-color: #da291c;
+  box-shadow: 0 0 0 2px rgba(218, 41, 28, 0.14), inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  outline: none;
+}
+
+.chosen-container {
+  overflow: visible;
+}
+
+.chosen-container-active {
+  z-index: 10020;
+}
+
+.chosen-container .chosen-drop {
+  pointer-events: auto;
+  z-index: 10021;
+}
+
+.chosen-container .chosen-results {
+  overflow-y: auto;
+}
+
+input[id^="_recycleWarehouseList_"][disabled],
+input[id^="_wflowDeviceHistoryList_"][disabled],
+input[id^="_wflowChooseRecycleAction_"][disabled],
+input[id^="_wflowAfterRecycleState_"][disabled],
+input[id^="_recycleWarehouseList_"][readonly],
+input[id^="_wflowDeviceHistoryList_"][readonly],
+input[id^="_wflowChooseRecycleAction_"][readonly],
+input[id^="_wflowAfterRecycleState_"][readonly],
+textarea[id^="_wflowAfterRecycleState_"][disabled],
+textarea[id^="_wflowAfterRecycleState_"][readonly] {
+  background-color: #f5f6f7;
+  color: #777;
+}
+
+table:has(th[rel="Id"]),
+table:has(th[rel="MaterialId"]) {
+  border-radius: 6px;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+table:has(th[rel="Id"]) th,
+table:has(th[rel="MaterialId"]) th {
+  background: #eeeeee;
+}
+
+button[id^="_recycleWarehouseList_"],
+button[id^="_wflowDeviceHistoryList_"],
+button[id^="_wflowChooseRecycleAction_"],
+button[id^="_wflowAfterRecycleState_"],
+button[id^="_recycleDeviceSpeedTestResultList_"],
+button[id^="_wflowSavedTestPictureList_"] {
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+button[id^="_recycleWarehouseList_"]:hover,
+button[id^="_wflowDeviceHistoryList_"]:hover,
+button[id^="_wflowChooseRecycleAction_"]:hover,
+button[id^="_wflowAfterRecycleState_"]:hover,
+button[id^="_recycleDeviceSpeedTestResultList_"]:hover,
+button[id^="_wflowSavedTestPictureList_"]:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+}
+
+button[id^="_recycleWarehouseList_"]:not(.icon-only),
+button[id^="_wflowDeviceHistoryList_"],
+button[id^="_wflowChooseRecycleAction_"],
+button[id^="_wflowAfterRecycleState_"],
+button[id^="_recycleDeviceSpeedTestResultList_"],
+button[id^="_wflowSavedTestPictureList_"] {
+  background-color: #df2a20;
+  border-color: #c51f17;
+}
+
+button[id^="_recycleWarehouseList_"]:not(.icon-only):hover,
+button[id^="_wflowDeviceHistoryList_"]:hover,
+button[id^="_wflowChooseRecycleAction_"]:hover,
+button[id^="_wflowAfterRecycleState_"]:hover,
+button[id^="_recycleDeviceSpeedTestResultList_"]:hover,
+button[id^="_wflowSavedTestPictureList_"]:hover {
+  background-color: #c9251b;
+  border-color: #b31d15;
+}
+
+.action-button[rel],
+.action-button.edit,
+.action-button.delete {
+  border-radius: 4px;
+}
+
+#_wflowEnterDeviceDataForRecycle,
+#_wflowSwapShopMaterial {
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
+  overflow: visible;
+}
+
+#_wflowEnterDeviceDataForRecycle > h1,
+#_wflowSwapShopMaterial > h1 {
+  background: #eeeeee;
+  border-bottom: 1px solid #d9d9d9;
+}
+
+#_wflowEnterDeviceDataForRecycle fieldset,
+#_wflowSwapShopMaterial fieldset {
+  border-color: #cfd5dc;
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+#_wflowEnterDeviceDataForRecycle legend,
+#_wflowSwapShopMaterial legend {
+  color: #d9251d;
+  padding: 0 6px;
+}
+
+#_wflowEnterDeviceDataForRecycle input[type="text"],
+#_wflowSwapShopMaterial input[type="text"],
+#_wflowEnterDeviceDataForRecycle textarea,
+#_wflowSwapShopMaterial textarea {
+  border-color: #ccd3da;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+#_wflowEnterDeviceDataForRecycle input[type="text"]:focus,
+#_wflowSwapShopMaterial input[type="text"]:focus,
+#_wflowEnterDeviceDataForRecycle textarea:focus,
+#_wflowSwapShopMaterial textarea:focus {
+  border-color: #da291c;
+  box-shadow: 0 0 0 2px rgba(218, 41, 28, 0.14), inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  outline: none;
+}
+
+#_wflowEnterDeviceDataForRecycle input[disabled],
+#_wflowSwapShopMaterial input[disabled],
+#_wflowEnterDeviceDataForRecycle input[readonly],
+#_wflowSwapShopMaterial input[readonly],
+#_wflowEnterDeviceDataForRecycle textarea[disabled],
+#_wflowSwapShopMaterial textarea[disabled],
+#_wflowEnterDeviceDataForRecycle textarea[readonly],
+#_wflowSwapShopMaterial textarea[readonly] {
+  background-color: #f5f6f7;
+  color: #777;
+}
+
+#_wflowEnterDeviceDataForRecycle button:not([data-wifi-oss-recycle-cat]):not([data-wifi-oss-recycle-device]),
+#_wflowSwapShopMaterial button {
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+#_wflowEnterDeviceDataForRecycle button:not([data-wifi-oss-recycle-cat]):not([data-wifi-oss-recycle-device]):hover,
+#_wflowSwapShopMaterial button:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+}
+
+#_wflowEnterDeviceDataForRecycle button[id$="_save"],
+#_wflowSwapShopMaterial button[id$="_save"],
+#_wflowEnterDeviceDataForRecycle #wifi-oss-assistant-btn,
+#_wflowEnterDeviceDataForRecycle #wifi-oss-assistant-reset-btn {
+  background-color: #df2a20;
+  border-color: #c51f17;
+}
+
+#_wflowEnterDeviceDataForRecycle button[id$="_save"]:hover,
+#_wflowSwapShopMaterial button[id$="_save"]:hover,
+#_wflowEnterDeviceDataForRecycle #wifi-oss-assistant-btn:hover,
+#_wflowEnterDeviceDataForRecycle #wifi-oss-assistant-reset-btn:hover {
+  background-color: #c9251b;
+  border-color: #b31d15;
+}
+
+.wifi-oss-recycle-category-panel {
+  border-top-color: #dce1e6 !important;
+}
+
+.wifi-oss-recycle-category-panel button[data-wifi-oss-recycle-cat],
+.wifi-oss-recycle-category-panel button[data-wifi-oss-recycle-device] {
+  border-radius: 7px !important;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12) !important;
+}
+
+.wifi-oss-recycle-category-panel button[data-wifi-oss-recycle-cat][aria-pressed="true"],
+.wifi-oss-recycle-category-panel button[data-wifi-oss-recycle-device][aria-pressed="true"] {
+  box-shadow: 0 8px 22px rgba(218, 41, 28, 0.20) !important;
+}
+
+.wifi-oss-recycle-category-panel button[data-wifi-oss-recycle-cat] img,
+.wifi-oss-recycle-category-panel button[data-wifi-oss-recycle-device] img {
+  filter: saturate(1.02) contrast(1.02);
+}
+
+.wifi-oss-swap-material-panel {
+  border-top-color: #dce1e6 !important;
+  background: linear-gradient(#ffffff, #fbfcfd);
+  border-radius: 0 0 6px 6px;
+}
+
+.wifi-oss-swap-material-panel input[type="text"] {
+  border-color: #ccd3da !important;
+  border-radius: 4px !important;
+}
+
+.wifi-oss-swap-material-panel button {
+  border-radius: 6px !important;
+}
+
+.wifi-oss-swap-material-panel button[data-wifi-oss-swap-material-id] {
+  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.12) !important;
+}
+
+.wifi-oss-swap-material-panel button[data-wifi-oss-swap-material-id] img {
+  border-radius: 6px !important;
+  filter: saturate(1.02) contrast(1.02);
+}
