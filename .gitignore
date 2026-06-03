@@ -2,6 +2,7 @@
 *.zip
 *.rar
 *.7z
+release/
 
 # Dependencies
 node_modules/
