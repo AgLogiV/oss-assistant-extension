@@ -172,6 +172,8 @@ node Extension/scripts/review-recycle-config-candidate.js --input path/to/candid
 
 The review script is dev-only and no-write. It compares the candidate with the current runtime-shaped export by stable `deviceId`, reports added/edited/missing/reordered devices, material filter changes, unknown fields, and manual-review-only sections, but it does not merge, write `Extension/content.js`, regenerate the fixture, or add runtime JSON loading.
 
+For the temporary public static config workflow, keep exported candidate files outside both git repos. After validator/review acceptance, copy only the candidate JSON to `<oss-assistant-config>/config/recycle-device-catalog.json`. In `oss-assistant-config`, run `node .github/validate-static-package.js`, `git diff --stat`, `git diff --check`, and `git diff -- config/recycle-device-catalog.json`, then commit/push only `config/recycle-device-catalog.json`. If review reports `REVIEW_REQUIRED`, human review is required before publish. If the candidate references new images/assets, stop and split a separate asset publish task. Do not overwrite images, `config/assets-manifest.json`, configurator UI, or runtime files unless explicitly requested.
+
 If the review is acceptable, the intended merge path is: make a manual/Codex-assisted patch to `RECYCLE_DEVICE_CATALOG_RAW`, regenerate `Extension/config/recycle-device-catalog.fixture.json` from `Extension/content.js`, run `node Extension/scripts/check-recycle-config.js`, review the diff, and commit.
 
 The extension runtime still uses `Extension/content.js` as the recycle source of truth and does not load JSON config.
