@@ -413,6 +413,32 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Remote config must not hard-replace the local fallback.
    - Keep the rule local-first: packaged fallback first, optional validated remote override second.
    - Remote config loading is a later separate phase. When designed, it must merge safe metadata only, keep local fallback first, ignore invalid/offline remote data, and treat remote omissions as non-deleting; omission must not remove local devices.
+   - Runtime ownership should be split deliberately:
+     - `background.js` owns remote fetch, timeout, ETag/status handling, runtime-safe validation, and `chrome.storage.local` last-known-good cache.
+     - `content.js` remains local-first and later consumes only sanitized data through `chrome.runtime.sendMessage`.
+   - A future implementation needs an explicit `Extension/manifest.json` change for the `storage` permission and a GitHub Pages host permission, likely `https://oss-assistant.github.io/*`.
+   - Proposed `chrome.storage.local` keys:
+     - `wifi_oss_recycle_remote_config_lkg_v1` - sanitized last-known-good remote config or overlay payload.
+     - `wifi_oss_recycle_remote_config_meta_v1` - `revision`, `publishedAt`, `schemaVersion`, `sourceUrl`, `etag`, and `fetchedAt`.
+     - `wifi_oss_recycle_remote_config_status_v1` - `lastAttemptAt`, `lastSuccessAt`, `lastHttpStatus`, `lastError`, and result text.
+     - `wifi_oss_recycle_remote_config_enabled_v1` - explicit rollout/debug switch, default off until the overlay is proven.
+   - Refresh policy:
+     - Stage 2 should be manual/debug refresh only and must not apply the remote data.
+     - Later, first recycle panel use may trigger a stale-cache refresh.
+     - Production TTL should start around 6-12 hours.
+     - Presentation/debug shorter intervals are allowed only behind a debug flag.
+   - Runtime validation must reject remote JSON larger than 1 MB, wrong schema/top-level shape, unknown device fields, duplicate/missing `deviceId`, invalid `categoryId`, non-boolean `enabled`, unnormalized material IDs, or `validationProfileId` values not present in local predefined profile IDs.
+   - Runtime validation must keep `imagePath` and `helpImagePath` as extension-relative `images/...` paths only. Reject absolute paths, drive-letter paths, backslashes, `..`, `file://`, `http://`, and `https://`.
+   - Categories remain grouping/UX concepts. Per-device `validationProfileId` remains the validation selector, and remote JSON must not define new validation logic, regex, or JavaScript in the first design.
+   - First apply phase should be visual/help metadata only for existing `deviceId`s: `displayName`, `imagePath`, `helpImagePath`, and `warningText`.
+   - Broader fields such as `materialId`, `legacyMaterialIds`, `validationProfileId`, `enabled`, and added devices should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
+   - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
+   - Staged rollout:
+     1. docs/spec;
+     2. fetch + validate + cache, no apply;
+     3. debug/manual refresh status;
+     4. visual metadata overlay only;
+     5. broader catalog fields later.
 
 4. **Proper hosted admin panel later**
    - A hosted admin panel can add persistence, image upload, validation, revisioning, rollback, and simple roles.
