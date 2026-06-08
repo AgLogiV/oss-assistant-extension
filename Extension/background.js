@@ -395,6 +395,46 @@ async function recycleRemoteGetStatus() {
   };
 }
 
+function recycleRemoteProjectVisualOverlay(catalog) {
+  const devices = Array.isArray(catalog?.devices) ? catalog.devices : [];
+  return devices
+    .map(device => ({
+      deviceId: recycleRemoteTrim(device?.deviceId),
+      displayName: recycleRemoteTrim(device?.displayName),
+      imagePath: recycleRemoteTrim(device?.imagePath),
+      helpImagePath: recycleRemoteTrim(device?.helpImagePath),
+      warningText: recycleRemoteTrim(device?.warningText)
+    }))
+    .filter(device => device.deviceId);
+}
+
+async function recycleRemoteGetVisualOverlay() {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
+  const lkg = stored[keys.lkg] || null;
+  const meta = stored[keys.meta] || null;
+  const status = stored[keys.status] || null;
+
+  if (!lkg) {
+    return {
+      ok: true,
+      result: "no_data",
+      meta,
+      status,
+      overlay: []
+    };
+  }
+
+  const overlay = recycleRemoteProjectVisualOverlay(lkg);
+  return {
+    ok: true,
+    result: overlay.length ? "ok" : "no_overlay",
+    meta,
+    status,
+    overlay
+  };
+}
+
 async function recycleRemoteClearCache() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   await recycleRemoteChromeRemove([keys.lkg, keys.meta, keys.status, keys.enabled]);
@@ -550,6 +590,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.getRemoteStatus") {
         return respondOnce(await recycleRemoteGetStatus());
+      }
+
+      if (msg.type === "recycleConfig.getVisualOverlay") {
+        return respondOnce(await recycleRemoteGetVisualOverlay());
       }
 
       if (msg.type === "recycleConfig.clearRemoteCache") {

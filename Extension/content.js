@@ -8,6 +8,7 @@
     status: "recycleConfig.getRemoteStatus",
     clear: "recycleConfig.clearRemoteCache"
   };
+  const RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION = "applyVisualOverlay";
 
   function sendRecycleRemoteConfigDebugMessage(type) {
     return new Promise((resolve, reject) => {
@@ -45,6 +46,11 @@
       const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);
       console.info("[recycleRemoteConfig] clear", response);
       return response;
+    },
+    async applyVisualOverlay() {
+      const response = await applyRecycleRemoteVisualOverlay();
+      console.info("[recycleRemoteConfig] applyVisualOverlay", response);
+      return response;
     }
   };
 
@@ -54,11 +60,14 @@
     if (!data || data.source !== RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE || data.direction !== "request") return;
     const action = String(data.action || "");
     const type = RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES[action];
-    if (!type) return;
+    const isApplyVisualOverlay = action === RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION;
+    if (!type && !isApplyVisualOverlay) return;
 
     const requestId = String(data.requestId || "");
     try {
-      const response = await sendRecycleRemoteConfigDebugMessage(type);
+      const response = isApplyVisualOverlay
+        ? await applyRecycleRemoteVisualOverlay()
+        : await sendRecycleRemoteConfigDebugMessage(type);
       window.postMessage({
         source: RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE,
         direction: "response",
@@ -2286,6 +2295,15 @@
   ];
 
   const RECYCLE_DEVICE_CATALOG = RECYCLE_DEVICE_CATALOG_RAW.map(normalizeRecycleDeviceCatalogEntry);
+  const RECYCLE_DEVICE_ID_SET = new Set(RECYCLE_DEVICE_CATALOG.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
+  const RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS = ["displayName", "imagePath", "helpImagePath", "warningText"];
+  let recycleRemoteVisualOverlayByDeviceId = new Map();
+
+  function getRecycleDeviceVisualView(device) {
+    const id = String(device?.deviceId || "").trim();
+    if (!id || !recycleRemoteVisualOverlayByDeviceId.has(id)) return device;
+    return { ...device, ...recycleRemoteVisualOverlayByDeviceId.get(id) };
+  }
 
   function getRecycleDeviceById(deviceId) {
     const id = String(deviceId || "").trim();
@@ -3558,6 +3576,7 @@
     if (!selectedIds.length) return [];
     return selectedIds
       .map(id => getRecycleDeviceById(id))
+      .map(device => getRecycleDeviceVisualView(device))
       .filter(device => device && device.categoryId === category && String(device.helpImagePath || "").trim())
       .map(device => ({
         title: String(device.displayName || device.materialId || device.deviceId || "").trim(),
@@ -4331,6 +4350,66 @@
     return true;
   }
 
+  function refreshRecycleRemoteVisualOverlayPanels() {
+    const panels = Array.from(document.querySelectorAll(`.${RECYCLE_ENTRY_PANEL_CLASS}`));
+    let renderedPanels = 0;
+    panels.forEach(panel => {
+      if (refreshRecycleEntryCategoryPanel(panel)) renderedPanels += 1;
+    });
+    return renderedPanels;
+  }
+
+  function buildRecycleRemoteVisualOverlayMap(entries) {
+    const overlayMap = new Map();
+    const ignoredUnknownDeviceIds = [];
+    (Array.isArray(entries) ? entries : []).forEach(entry => {
+      const deviceId = String(entry?.deviceId || "").trim();
+      if (!deviceId) return;
+      if (!RECYCLE_DEVICE_ID_SET.has(deviceId)) {
+        ignoredUnknownDeviceIds.push(deviceId);
+        return;
+      }
+
+      const overlay = {};
+      RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS.forEach(field => {
+        if (typeof entry?.[field] !== "string") return;
+        const value = entry[field].trim();
+        if (!value) return;
+        overlay[field] = value;
+      });
+      if (Object.keys(overlay).length) overlayMap.set(deviceId, overlay);
+    });
+    return { overlayMap, ignoredUnknownDeviceIds };
+  }
+
+  async function applyRecycleRemoteVisualOverlay() {
+    const response = await sendRecycleRemoteConfigDebugMessage("recycleConfig.getVisualOverlay");
+    const sourceRevision = String(response?.meta?.revision || "").trim();
+
+    if (!response?.ok || response.result === "no_data" || response.result === "no_overlay" || !Array.isArray(response.overlay)) {
+      recycleRemoteVisualOverlayByDeviceId = new Map();
+      return {
+        ok: Boolean(response?.ok),
+        result: response?.result || "no_data",
+        sourceRevision,
+        appliedCount: 0,
+        ignoredUnknownDeviceIds: [],
+        renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+      };
+    }
+
+    const { overlayMap, ignoredUnknownDeviceIds } = buildRecycleRemoteVisualOverlayMap(response.overlay);
+    recycleRemoteVisualOverlayByDeviceId = overlayMap;
+    return {
+      ok: true,
+      result: "applied",
+      sourceRevision,
+      appliedCount: overlayMap.size,
+      ignoredUnknownDeviceIds,
+      renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+    };
+  }
+
   let recycleEntryStorageSyncInstalled = false;
   function installRecycleEntryStorageSync() {
     if (recycleEntryStorageSyncInstalled) return;
@@ -4823,9 +4902,10 @@
     };
 
     const createDeviceCard = (device) => {
+      const visualDevice = getRecycleDeviceVisualView(device);
       const red = "#DA291C";
       const materialId = normalizeSwapMaterialId(device?.materialId);
-      const displayName = String(device?.displayName || materialId || "").trim();
+      const displayName = String(visualDevice?.displayName || materialId || "").trim();
       const deviceId = String(device?.deviceId || "").trim();
       const card = document.createElement("button");
       card.type = "button";
@@ -4880,7 +4960,7 @@
         media.appendChild(fallback);
       };
 
-      const imgUrl = resolveDeviceImageUrl(device);
+      const imgUrl = resolveDeviceImageUrl(visualDevice);
       if (imgUrl) {
         const img = document.createElement("img");
         img.alt = "";
