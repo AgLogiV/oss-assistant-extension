@@ -2,6 +2,81 @@
   if (window.__wifiOssAssistantInjected) return;
   window.__wifiOssAssistantInjected = true;
 
+  const RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE = "wifiOssRecycleRemoteConfig";
+  const RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES = {
+    refresh: "recycleConfig.refreshRemote",
+    status: "recycleConfig.getRemoteStatus",
+    clear: "recycleConfig.clearRemoteCache"
+  };
+
+  function sendRecycleRemoteConfigDebugMessage(type) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!chrome?.runtime?.sendMessage) {
+          reject(new Error("chrome.runtime.sendMessage unavailable"));
+          return;
+        }
+        chrome.runtime.sendMessage({ type }, (response) => {
+          const lastError = chrome.runtime.lastError?.message;
+          if (lastError) {
+            reject(new Error(lastError));
+            return;
+          }
+          resolve(response);
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  window.__wifiOssRecycleRemoteConfig = {
+    async refresh() {
+      const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.refresh);
+      console.info("[recycleRemoteConfig] refresh", response);
+      return response;
+    },
+    async status() {
+      const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.status);
+      console.info("[recycleRemoteConfig] status", response);
+      return response;
+    },
+    async clear() {
+      const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);
+      console.info("[recycleRemoteConfig] clear", response);
+      return response;
+    }
+  };
+
+  window.addEventListener("message", async (event) => {
+    if (event.source !== window) return;
+    const data = event.data;
+    if (!data || data.source !== RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE || data.direction !== "request") return;
+    const action = String(data.action || "");
+    const type = RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES[action];
+    if (!type) return;
+
+    const requestId = String(data.requestId || "");
+    try {
+      const response = await sendRecycleRemoteConfigDebugMessage(type);
+      window.postMessage({
+        source: RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE,
+        direction: "response",
+        requestId,
+        ok: true,
+        response
+      }, "*");
+    } catch (error) {
+      window.postMessage({
+        source: RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE,
+        direction: "response",
+        requestId,
+        ok: false,
+        error: String(error?.message || error)
+      }, "*");
+    }
+  });
+
   const AUTO_MODE_KEY = "wifi_oss_auto_mode_enabled";
   const LAST_CLIPBOARD_KEY = "wifi_oss_last_clipboard_text";
 
