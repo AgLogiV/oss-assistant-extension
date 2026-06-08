@@ -10,13 +10,15 @@
   },
   "permissions": [
     "clipboardRead",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "host_permissions": [
     "https://oss.a1.bg/*",
     "https://oss.mobiltel.bg/*",
     "https://srvvm-webtst-0.mobiltel.bg/*",
-    "https://oss-assistant.onrender.com/*"
+    "https://oss-assistant.onrender.com/*",
+    "https://oss-assistant.github.io/*"
   ],
   "web_accessible_resources": [
     {
