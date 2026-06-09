@@ -4410,6 +4410,169 @@
     };
   }
 
+  function clearRecycleRemoteVisualOverlay(reason) {
+    recycleRemoteVisualOverlayByDeviceId = new Map();
+    return {
+      ok: true,
+      result: reason || "local_fallback",
+      sourceRevision: "",
+      appliedCount: 0,
+      ignoredUnknownDeviceIds: [],
+      renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+    };
+  }
+
+  function formatRecycleRemoteDebugStatus(action, response) {
+    const result = String(response?.result || (response?.ok ? "ok" : "error")).trim();
+    const meta = response?.meta || {};
+    const status = response?.status || {};
+    const revision = String(response?.sourceRevision || meta.revision || "").trim();
+    const lastSuccessAt = String(status.lastSuccessAt || meta.fetchedAt || "").trim();
+    const lastError = String(status.lastError || response?.error || "").trim();
+    const parts = [action, result].filter(Boolean);
+    if (revision) parts.push(`rev ${revision}`);
+    if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
+    if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
+    if (response?.hasLastKnownGood === true) parts.push("LKG yes");
+    if (response?.hasLastKnownGood === false) parts.push("LKG no");
+    if (lastSuccessAt) parts.push(`success ${lastSuccessAt}`);
+    if (lastError) parts.push(`error ${lastError}`);
+    if (Array.isArray(response?.errors) && response.errors.length) parts.push(`errors ${response.errors.length}`);
+    if (Array.isArray(response?.ignoredUnknownDeviceIds) && response.ignoredUnknownDeviceIds.length) {
+      parts.push(`ignored unknown ${response.ignoredUnknownDeviceIds.length}`);
+    }
+    return parts.join(" | ");
+  }
+
+  function ensureRecycleRemoteConfigDebugTray(panel) {
+    if (!panel) return null;
+    const existing = panel.querySelector("[data-wifi-oss-recycle-remote-debug-tray]");
+    if (existing) return existing;
+
+    const wrap = document.createElement("div");
+    wrap.dataset.wifiOssRecycleRemoteDebugTray = "1";
+    wrap.style.margin = "10px 0 0";
+    wrap.style.display = "flex";
+    wrap.style.justifyContent = "flex-end";
+    wrap.style.alignItems = "flex-start";
+
+    const details = document.createElement("details");
+    details.style.maxWidth = "520px";
+    details.style.width = "min(520px, 100%)";
+    details.style.border = "1px solid #dedede";
+    details.style.borderRadius = "6px";
+    details.style.background = "#fafafa";
+    details.style.color = "#555";
+    details.style.fontSize = "11px";
+    details.style.lineHeight = "1.35";
+    details.style.boxSizing = "border-box";
+    details.style.padding = "5px 7px";
+    details.style.opacity = "0.82";
+
+    const summary = document.createElement("summary");
+    summary.style.cursor = "pointer";
+    summary.style.userSelect = "none";
+    summary.style.display = "flex";
+    summary.style.alignItems = "center";
+    summary.style.justifyContent = "space-between";
+    summary.style.gap = "10px";
+
+    const label = document.createElement("span");
+    label.textContent = "Remote config debug";
+    label.style.fontWeight = "700";
+
+    const compactStatus = document.createElement("span");
+    compactStatus.dataset.wifiOssRecycleRemoteCompactStatus = "1";
+    compactStatus.textContent = "not checked";
+    compactStatus.style.fontWeight = "500";
+    compactStatus.style.color = "#777";
+    compactStatus.style.textAlign = "right";
+    compactStatus.style.overflow = "hidden";
+    compactStatus.style.textOverflow = "ellipsis";
+    compactStatus.style.whiteSpace = "nowrap";
+
+    summary.appendChild(label);
+    summary.appendChild(compactStatus);
+    details.appendChild(summary);
+
+    const controls = document.createElement("div");
+    controls.style.marginTop = "7px";
+    controls.style.display = "flex";
+    controls.style.flexWrap = "wrap";
+    controls.style.gap = "6px";
+    controls.style.justifyContent = "flex-end";
+
+    const resultText = document.createElement("div");
+    resultText.dataset.wifiOssRecycleRemoteResult = "1";
+    resultText.textContent = "Manual only. No startup auto-apply.";
+    resultText.style.marginTop = "6px";
+    resultText.style.padding = "5px 6px";
+    resultText.style.borderRadius = "4px";
+    resultText.style.background = "#fff";
+    resultText.style.border = "1px solid #ececec";
+    resultText.style.color = "#666";
+    resultText.style.overflowWrap = "anywhere";
+
+    const buttons = [];
+    const setBusy = (busy) => {
+      buttons.forEach(btn => { btn.disabled = busy; });
+      details.dataset.wifiOssRecycleRemoteBusy = busy ? "1" : "0";
+    };
+    const setStatus = (text, isError) => {
+      const value = String(text || "").trim() || "no status";
+      compactStatus.textContent = value;
+      compactStatus.style.color = isError ? "#8a4b00" : "#777";
+      resultText.textContent = value;
+      resultText.style.color = isError ? "#8a4b00" : "#666";
+      resultText.style.borderColor = isError ? "#e0ad55" : "#ececec";
+      resultText.style.background = isError ? "#fff8ea" : "#fff";
+    };
+    const runAction = async (action, labelText, fn) => {
+      setBusy(true);
+      setStatus(`${labelText}: running...`, false);
+      try {
+        const response = await fn();
+        setStatus(formatRecycleRemoteDebugStatus(labelText, response), !response?.ok);
+      } catch (error) {
+        setStatus(`${labelText}: ${String(error?.message || error || "failed")}`, true);
+      } finally {
+        setBusy(false);
+      }
+    };
+    const addButton = (action, labelText, fn) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.wifiOssRecycleRemoteAction = action;
+      btn.textContent = labelText;
+      btn.style.padding = "3px 7px";
+      btn.style.border = "1px solid #c9c9c9";
+      btn.style.borderRadius = "999px";
+      btn.style.background = "#fff";
+      btn.style.color = "#444";
+      btn.style.fontSize = "11px";
+      btn.style.lineHeight = "1.35";
+      btn.style.cursor = "pointer";
+      btn.addEventListener("click", () => runAction(action, labelText, fn));
+      buttons.push(btn);
+      controls.appendChild(btn);
+      return btn;
+    };
+
+    addButton("refresh", "Refresh remote", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.refresh));
+    addButton("applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
+    addButton("clear", "Clear", async () => {
+      const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);
+      const local = clearRecycleRemoteVisualOverlay("local_fallback");
+      return { ...response, result: response?.result || "cleared", appliedCount: local.appliedCount, renderedPanels: local.renderedPanels };
+    });
+    addButton("status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.status));
+
+    details.appendChild(controls);
+    details.appendChild(resultText);
+    wrap.appendChild(details);
+    return wrap;
+  }
+
   let recycleEntryStorageSyncInstalled = false;
   function installRecycleEntryStorageSync() {
     if (recycleEntryStorageSyncInstalled) return;
@@ -5122,6 +5285,8 @@
 
     panel.__wifiOssRenderRecycleCategories = renderCategories;
     panel.appendChild(grid);
+    const remoteDebugTray = ensureRecycleRemoteConfigDebugTray(panel);
+    if (remoteDebugTray) panel.appendChild(remoteDebugTray);
     const debugToggle = ensureMaterialAutoContinueDebugToggle(panel);
     if (debugToggle) {
       debugToggle.style.margin = "8px 0 0";
