@@ -412,7 +412,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Stage 2 (`8ff03dd`) added manual/debug remote fetch, runtime-safe validation, ETag/status handling, and `chrome.storage.local` last-known-good cache in `background.js`.
    - Stage 3 (`abae35a`) added a CSP-safe `content.js` `window.postMessage` debug bridge so OSS page DevTools can call refresh/status/clear without opening the MV3 service worker console.
    - Stage 4 (`bba8694`) added manual/in-memory visual overlay apply. It does not run on startup, does not schedule periodic refresh, and does not add visible production UI.
-   - The current debug control (`a5cf9f9`) is a collapsed `Remote config debug` tray inside the extension-owned recycle panel, under the category/device grid. It exposes `Refresh remote`, `Apply visual`, `Clear`, and `Status` for normal manual testing without pasting the page-console helper.
+   - The current debug control (`a5cf9f9`, `3b2ecdf`) is a collapsed `Remote config debug` tray inside the extension-owned recycle panel, under the category/device grid. It exposes `Auto-refresh`, `Refresh remote`, `Apply visual`, `Clear`, and `Status` for normal manual testing without pasting the page-console helper.
    - Invalid, missing, or offline remote config falls back to the embedded/local catalog. Remote config must not hard-replace the local fallback, and remote omissions must not delete local devices.
    - Runtime ownership is split deliberately:
      - `background.js` owns remote fetch, timeout, ETag/status handling, runtime-safe validation, and `chrome.storage.local` last-known-good cache.
@@ -424,10 +424,12 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      - `wifi_oss_recycle_remote_config_status_v1` - `lastAttemptAt`, `lastSuccessAt`, `lastHttpStatus`, `lastError`, and result text.
      - `wifi_oss_recycle_remote_config_enabled_v1` - explicit rollout/debug switch, default off until the overlay is proven.
    - Refresh policy:
-     - Current refresh/apply is manual/debug only through the recycle panel debug tray or existing console bridge.
-     - The tray does not auto-refresh on panel open and does not auto-apply on page load. After page refresh it returns to `not checked`.
-     - Later, first recycle panel use may trigger a stale-cache refresh.
-     - Production TTL should start around 6-12 hours.
+     - `Auto-refresh` is default OFF and is a debug preference stored in `wifi_oss_recycle_remote_config_enabled_v1`.
+     - The current TTL gate is hardcoded to 6 hours. With `Auto-refresh` ON, `Status` may call TTL-gated maybe-refresh; with it OFF, refresh remains fully manual.
+     - `Refresh remote` is always a manual force refresh. `Apply visual` is always manual and is never triggered by auto-refresh.
+     - `Clear` removes remote cache/LKG/meta/status and the in-memory visual overlay, but preserves the Auto-refresh ON/OFF setting.
+     - There is still no startup fetch, page-load fetch, auto-refresh on panel open, periodic/scheduled/fixed-time refresh, `chrome.alarms`, or auto-apply on page load.
+     - Later, first recycle panel use may trigger a stale-cache refresh only after production timing/status UX is reviewed.
      - Presentation/debug shorter intervals are allowed only behind a debug flag.
    - Runtime validation must reject remote JSON larger than 1 MB, wrong schema/top-level shape, unknown device fields, duplicate/missing `deviceId`, invalid `categoryId`, non-boolean `enabled`, unnormalized material IDs, or `validationProfileId` values not present in local predefined profile IDs.
    - Runtime validation must keep `imagePath` and `helpImagePath` as extension-relative `images/...` paths only. Reject absolute paths, drive-letter paths, backslashes, `..`, `file://`, `http://`, and `https://`.
