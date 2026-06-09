@@ -438,6 +438,8 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Current Stage 4 apply phase is visual/help metadata only for existing local `deviceId`s: `displayName`, `imagePath`, `helpImagePath`, and `warningText`.
    - The diff preview classifies `displayName`, `imagePath`, `helpImagePath`, and `warningText` as visual fields. It classifies `materialId`, `legacyMaterialIds`, `validationProfileId`, `enabled`, and `categoryId` as risky fields. Unknown remote devices are reported only as unknown, not added to runtime; missing local devices are reported as omissions, not deletions.
    - Stage 4 explicitly does not apply `materialId`, `legacyMaterialIds`, `validationProfileId`, `enabled`, `categoryId`, `generatedMaterialFilters`, additions, deletions, or category moves.
+   - Unknown remote devices need a separate roadmap before they can become runtime cards. The packaged/local catalog remains the base and fallback; do not mutate `RECYCLE_DEVICE_CATALOG`, and do not rebuild `SWAP_MATERIAL_RECYCLE_FILTERS` from remote in the first stages. Future remote additions should use a separate effective/resolved catalog layer above the local base.
+   - The next safe step for unknown devices is preview-only eligibility, not apply. Eligibility must check at least safe unique `deviceId`, existing normal `categoryId`, blocked special categories first (`cam_modules` and `modems`), locally implemented `validationProfileId`, safe `materialId` shape with later known-material behavior checks, safe `imagePath`/`helpImagePath` with fallback if packaged assets are missing, and `enabled: false` must not create a runtime card.
    - Broader fields should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
    - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
    - Manual smoke passed with a temporary public config change to `zte_g5b1.displayName` (`ZTE G5B REMOTE VISUAL TEST`): debug `refresh()` fetched it, `applyVisualOverlay()` displayed it in the OSS recycle UI, and page refresh returned to the local display name because the overlay is intentionally in-memory. The public config test commit was reverted afterward.
@@ -447,7 +449,11 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      2. fetch + validate + cache, no apply - implemented;
      3. debug/manual refresh status bridge - implemented;
      4. manual visual metadata overlay only - implemented;
-     5. broader catalog fields later.
+     5. preview-only eligibility for unknown remote devices;
+     6. manual in-memory apply for eligible additions only after a separate reviewed plan;
+     7. material-safe additions after strict known-material checks;
+     8. production-gated rollout later;
+     9. broader risky fields later as separate plans.
 
 4. **Proper hosted admin panel later**
    - A hosted admin panel can add persistence, image upload, validation, revisioning, rollback, and simple roles.
