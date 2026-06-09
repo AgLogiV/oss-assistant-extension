@@ -441,6 +441,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Broader fields should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
    - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
    - Manual smoke passed with a temporary public config change to `zte_g5b1.displayName` (`ZTE G5B REMOTE VISUAL TEST`): debug `refresh()` fetched it, `applyVisualOverlay()` displayed it in the OSS recycle UI, and page refresh returned to the local display name because the overlay is intentionally in-memory. The public config test commit was reverted afterward.
+   - Controlled `Preview diff` smoke also passed and was reverted (`9822ef7` then `ea4afa8`): temporary remote changes produced `visual 1`, `risky 1`, `unknown 1`, `missing 0`; `Apply visual` updated only the existing visual label, did not add the unknown remote device, did not apply the risky `validationProfileId` change, and `Clear` returned local fallback.
    - Staged rollout:
      1. docs/spec;
      2. fetch + validate + cache, no apply - implemented;
