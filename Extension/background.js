@@ -1,6 +1,7 @@
 const RECYCLE_REMOTE_CONFIG_URL = "https://oss-assistant.github.io/oss-assistant-config/config/recycle-device-catalog.json";
 const RECYCLE_REMOTE_CONFIG_TIMEOUT_MS = 15000;
 const RECYCLE_REMOTE_CONFIG_MAX_BYTES = 1024 * 1024;
+const RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS = 6 * 60 * 60 * 1000;
 
 const RECYCLE_REMOTE_CONFIG_KEYS = {
   lkg: "wifi_oss_recycle_remote_config_lkg_v1",
@@ -383,15 +384,71 @@ function recycleRemoteBuildStatus(result, startedAtMs, patch) {
   };
 }
 
+function recycleRemoteParseTimestampMs(value) {
+  const time = Date.parse(String(value || ""));
+  return Number.isFinite(time) ? time : 0;
+}
+
+function recycleRemoteBuildStatusResponse(stored, result) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const status = stored?.[keys.status] || null;
+  const meta = stored?.[keys.meta] || null;
+  const hasLastKnownGood = Boolean(stored?.[keys.lkg]);
+  const autoRefreshEnabled = stored?.[keys.enabled] === true;
+  const lastFreshAt = recycleRemoteTrim(meta?.fetchedAt || status?.lastSuccessAt);
+  const lastFreshAtMs = recycleRemoteParseTimestampMs(lastFreshAt);
+  const ageMs = lastFreshAtMs ? Math.max(0, Date.now() - lastFreshAtMs) : null;
+  const isStale = !hasLastKnownGood || !lastFreshAtMs || ageMs >= RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS;
+
+  return {
+    ok: true,
+    result: result || "status",
+    status,
+    meta,
+    enabled: autoRefreshEnabled,
+    autoRefreshEnabled,
+    ttlMs: RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS,
+    lastFreshAt,
+    ageMs,
+    isStale,
+    hasLastKnownGood
+  };
+}
+
 async function recycleRemoteGetStatus() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
+  return recycleRemoteBuildStatusResponse(stored, "status");
+}
+
+async function recycleRemoteSetAutoRefreshEnabled(enabled) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  await recycleRemoteChromeSet({ [keys.enabled]: enabled === true });
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
+  return recycleRemoteBuildStatusResponse(stored, enabled === true ? "auto_refresh_enabled" : "auto_refresh_disabled");
+}
+
+async function recycleRemoteMaybeRefresh() {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
+  const current = recycleRemoteBuildStatusResponse(stored, "status");
+  if (!current.autoRefreshEnabled) {
+    return { ...current, result: "disabled", autoRefreshAttempted: false, errors: [] };
+  }
+  if (!current.isStale) {
+    return { ...current, result: "fresh", autoRefreshAttempted: false, errors: [] };
+  }
+
+  const refreshed = await recycleRemoteRefresh();
+  const after = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
+  const next = recycleRemoteBuildStatusResponse(after, refreshed.result || "refreshed");
   return {
-    ok: true,
-    status: stored[keys.status] || null,
-    meta: stored[keys.meta] || null,
-    enabled: stored[keys.enabled] === true,
-    hasLastKnownGood: Boolean(stored[keys.lkg])
+    ...refreshed,
+    ...next,
+    ok: refreshed.ok,
+    result: refreshed.result || next.result,
+    autoRefreshAttempted: true,
+    errors: Array.isArray(refreshed.errors) ? refreshed.errors : []
   };
 }
 
@@ -437,12 +494,20 @@ async function recycleRemoteGetVisualOverlay() {
 
 async function recycleRemoteClearCache() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  await recycleRemoteChromeRemove([keys.lkg, keys.meta, keys.status, keys.enabled]);
+  const stored = await recycleRemoteChromeGet([keys.enabled]);
+  const autoRefreshEnabled = stored[keys.enabled] === true;
+  await recycleRemoteChromeRemove([keys.lkg, keys.meta, keys.status]);
   return {
     ok: true,
     result: "cleared",
     status: recycleRemoteBuildStatus("cleared", Date.now(), { lastAttemptAt: recycleRemoteNowIso() }),
     meta: null,
+    enabled: autoRefreshEnabled,
+    autoRefreshEnabled,
+    ttlMs: RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS,
+    lastFreshAt: "",
+    ageMs: null,
+    isStale: true,
     hasLastKnownGood: false,
     errors: []
   };
@@ -590,6 +655,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.getRemoteStatus") {
         return respondOnce(await recycleRemoteGetStatus());
+      }
+
+      if (msg.type === "recycleConfig.setAutoRefreshEnabled") {
+        return respondOnce(await recycleRemoteSetAutoRefreshEnabled(msg.enabled === true));
+      }
+
+      if (msg.type === "recycleConfig.maybeRefreshRemote") {
+        return respondOnce(await recycleRemoteMaybeRefresh());
       }
 
       if (msg.type === "recycleConfig.getVisualOverlay") {

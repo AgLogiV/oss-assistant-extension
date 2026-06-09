@@ -6,18 +6,20 @@
   const RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES = {
     refresh: "recycleConfig.refreshRemote",
     status: "recycleConfig.getRemoteStatus",
-    clear: "recycleConfig.clearRemoteCache"
+    clear: "recycleConfig.clearRemoteCache",
+    maybeRefresh: "recycleConfig.maybeRefreshRemote",
+    setAutoRefresh: "recycleConfig.setAutoRefreshEnabled"
   };
   const RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION = "applyVisualOverlay";
 
-  function sendRecycleRemoteConfigDebugMessage(type) {
+  function sendRecycleRemoteConfigDebugMessage(type, payload) {
     return new Promise((resolve, reject) => {
       try {
         if (!chrome?.runtime?.sendMessage) {
           reject(new Error("chrome.runtime.sendMessage unavailable"));
           return;
         }
-        chrome.runtime.sendMessage({ type }, (response) => {
+        chrome.runtime.sendMessage({ ...(payload || {}), type }, (response) => {
           const lastError = chrome.runtime.lastError?.message;
           if (lastError) {
             reject(new Error(lastError));
@@ -4430,6 +4432,8 @@
     const lastSuccessAt = String(status.lastSuccessAt || meta.fetchedAt || "").trim();
     const lastError = String(status.lastError || response?.error || "").trim();
     const parts = [action, result].filter(Boolean);
+    if (typeof response?.autoRefreshEnabled === "boolean") parts.push(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`);
+    if (typeof response?.isStale === "boolean") parts.push(response.isStale ? "stale" : "fresh");
     if (revision) parts.push(`rev ${revision}`);
     if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
     if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
@@ -4468,6 +4472,8 @@
     details.style.boxSizing = "border-box";
     details.style.padding = "5px 7px";
     details.style.opacity = "0.82";
+
+    let autoRefreshEnabled = false;
 
     const summary = document.createElement("summary");
     summary.style.cursor = "pointer";
@@ -4514,6 +4520,15 @@
     resultText.style.overflowWrap = "anywhere";
 
     const buttons = [];
+    let autoRefreshBtn = null;
+    const updateAutoRefreshButton = (enabled) => {
+      autoRefreshEnabled = enabled === true;
+      if (!autoRefreshBtn) return;
+      autoRefreshBtn.textContent = `Auto-refresh: ${autoRefreshEnabled ? "ON" : "OFF"}`;
+      autoRefreshBtn.style.background = autoRefreshEnabled ? "#fff8ea" : "#fff";
+      autoRefreshBtn.style.borderColor = autoRefreshEnabled ? "#d28a1d" : "#c9c9c9";
+      autoRefreshBtn.style.color = autoRefreshEnabled ? "#8a4b00" : "#444";
+    };
     const setBusy = (busy) => {
       buttons.forEach(btn => { btn.disabled = busy; });
       details.dataset.wifiOssRecycleRemoteBusy = busy ? "1" : "0";
@@ -4532,6 +4547,7 @@
       setStatus(`${labelText}: running...`, false);
       try {
         const response = await fn();
+        if (typeof response?.autoRefreshEnabled === "boolean") updateAutoRefreshButton(response.autoRefreshEnabled);
         setStatus(formatRecycleRemoteDebugStatus(labelText, response), !response?.ok);
       } catch (error) {
         setStatus(`${labelText}: ${String(error?.message || error || "failed")}`, true);
@@ -4558,14 +4574,35 @@
       return btn;
     };
 
-    addButton("refresh", "Refresh remote", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.refresh));
+    const readRemoteStatus = () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.status);
+    const initializeAutoRefreshState = async () => {
+      try {
+        const response = await readRemoteStatus();
+        if (typeof response?.autoRefreshEnabled === "boolean") updateAutoRefreshButton(response.autoRefreshEnabled);
+        compactStatus.textContent = `auto ${response?.autoRefreshEnabled ? "ON" : "OFF"} | not checked`;
+      } catch (e) {
+        compactStatus.textContent = "auto status unavailable";
+      }
+    };
+    const refreshRemoteAndStatus = async () => {
+      const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.refresh);
+      const statusResponse = await readRemoteStatus();
+      return { ...statusResponse, ...response, autoRefreshEnabled: statusResponse.autoRefreshEnabled, isStale: statusResponse.isStale, ttlMs: statusResponse.ttlMs, hasLastKnownGood: statusResponse.hasLastKnownGood };
+    };
+
+    autoRefreshBtn = addButton("toggleAutoRefresh", "Auto-refresh: OFF", async () => {
+      return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.setAutoRefresh, { enabled: !autoRefreshEnabled });
+    });
+    addButton("refresh", "Refresh remote", () => refreshRemoteAndStatus());
     addButton("applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
     addButton("clear", "Clear", async () => {
       const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);
       const local = clearRecycleRemoteVisualOverlay("local_fallback");
       return { ...response, result: response?.result || "cleared", appliedCount: local.appliedCount, renderedPanels: local.renderedPanels };
     });
-    addButton("status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.status));
+    addButton("status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh));
+    updateAutoRefreshButton(false);
+    initializeAutoRefreshState();
 
     details.appendChild(controls);
     details.appendChild(resultText);
