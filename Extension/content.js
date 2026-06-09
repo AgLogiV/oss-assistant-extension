@@ -8,9 +8,11 @@
     status: "recycleConfig.getRemoteStatus",
     clear: "recycleConfig.clearRemoteCache",
     maybeRefresh: "recycleConfig.maybeRefreshRemote",
-    setAutoRefresh: "recycleConfig.setAutoRefreshEnabled"
+    setAutoRefresh: "recycleConfig.setAutoRefreshEnabled",
+    previewDiff: "recycleConfig.getCatalogDiffPreview"
   };
   const RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION = "applyVisualOverlay";
+  const RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION = "previewDiff";
 
   function sendRecycleRemoteConfigDebugMessage(type, payload) {
     return new Promise((resolve, reject) => {
@@ -53,6 +55,11 @@
       const response = await applyRecycleRemoteVisualOverlay();
       console.info("[recycleRemoteConfig] applyVisualOverlay", response);
       return response;
+    },
+    async previewDiff() {
+      const response = await previewRecycleRemoteCatalogDiff();
+      console.info("[recycleRemoteConfig] previewDiff", response);
+      return response;
     }
   };
 
@@ -63,13 +70,19 @@
     const action = String(data.action || "");
     const type = RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES[action];
     const isApplyVisualOverlay = action === RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION;
-    if (!type && !isApplyVisualOverlay) return;
+    const isPreviewDiff = action === RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION;
+    if (!type && !isApplyVisualOverlay && !isPreviewDiff) return;
 
     const requestId = String(data.requestId || "");
     try {
-      const response = isApplyVisualOverlay
-        ? await applyRecycleRemoteVisualOverlay()
-        : await sendRecycleRemoteConfigDebugMessage(type);
+      let response;
+      if (isApplyVisualOverlay) {
+        response = await applyRecycleRemoteVisualOverlay();
+      } else if (isPreviewDiff) {
+        response = await previewRecycleRemoteCatalogDiff();
+      } else {
+        response = await sendRecycleRemoteConfigDebugMessage(type);
+      }
       window.postMessage({
         source: RECYCLE_REMOTE_CONFIG_DEBUG_BRIDGE_SOURCE,
         direction: "response",
@@ -2307,6 +2320,28 @@
     return { ...device, ...recycleRemoteVisualOverlayByDeviceId.get(id) };
   }
 
+  function getRecycleLocalCatalogDiffPreviewDevices() {
+    return RECYCLE_DEVICE_CATALOG.map(device => ({
+      deviceId: String(device?.deviceId || "").trim(),
+      categoryId: String(device?.categoryId || "").trim(),
+      displayName: String(device?.displayName || "").trim(),
+      materialId: normalizeSwapMaterialId(device?.materialId),
+      legacyMaterialIds: normalizeRecycleDeviceLegacyMaterialIds(device?.legacyMaterialIds),
+      imagePath: String(device?.imagePath || "").trim(),
+      helpImagePath: String(device?.helpImagePath || "").trim(),
+      warningText: String(device?.warningText || "").trim(),
+      validationProfileId: String(device?.validationProfileId || "").trim(),
+      enabled: device?.enabled !== false
+    }));
+  }
+
+  function previewRecycleRemoteCatalogDiff() {
+    return sendRecycleRemoteConfigDebugMessage(
+      RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.previewDiff,
+      { localDevices: getRecycleLocalCatalogDiffPreviewDevices() }
+    );
+  }
+
   function getRecycleDeviceById(deviceId) {
     const id = String(deviceId || "").trim();
     if (!id) return null;
@@ -4424,6 +4459,47 @@
     };
   }
 
+  function formatRecycleRemoteDiffSample(sample) {
+    const deviceId = String(sample?.deviceId || "").trim();
+    const displayName = String(sample?.displayName || "").trim();
+    const fields = Array.isArray(sample?.fields)
+      ? sample.fields.map(field => String(field || "").trim()).filter(Boolean)
+      : [];
+    const label = [deviceId, displayName && displayName !== deviceId ? displayName : ""].filter(Boolean).join(": ");
+    if (!label) return "";
+    return fields.length ? `${label} (${fields.join(",")})` : label;
+  }
+
+  function appendRecycleRemoteDiffPreviewStatus(parts, response) {
+    const summary = response?.summary;
+    if (!summary || typeof summary !== "object") return;
+    const visualChanges = Number(summary.visualChanges || 0);
+    const riskyChanges = Number(summary.riskyChanges || 0);
+    const unknownRemoteDevices = Number(summary.unknownRemoteDevices || 0);
+    const missingLocalDevices = Number(summary.missingLocalDevices || 0);
+    parts.push(`visual ${visualChanges}`);
+    parts.push(`risky ${riskyChanges}`);
+    parts.push(`unknown ${unknownRemoteDevices}`);
+    parts.push(`missing ${missingLocalDevices}`);
+
+    const samples = response?.samples || {};
+    const sampleParts = [
+      ["visual", samples.visualChanges],
+      ["risky", samples.riskyChanges],
+      ["unknown", samples.unknownRemoteDevices],
+      ["missing", samples.missingLocalDevices]
+    ]
+      .map(([label, items]) => {
+        const formatted = (Array.isArray(items) ? items : [])
+          .map(formatRecycleRemoteDiffSample)
+          .filter(Boolean)
+          .slice(0, 3);
+        return formatted.length ? `${label}: ${formatted.join("; ")}` : "";
+      })
+      .filter(Boolean);
+    if (sampleParts.length) parts.push(sampleParts.join(" | "));
+  }
+
   function formatRecycleRemoteDebugStatus(action, response) {
     const result = String(response?.result || (response?.ok ? "ok" : "error")).trim();
     const meta = response?.meta || {};
@@ -4437,6 +4513,7 @@
     if (revision) parts.push(`rev ${revision}`);
     if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
     if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
+    appendRecycleRemoteDiffPreviewStatus(parts, response);
     if (response?.hasLastKnownGood === true) parts.push("LKG yes");
     if (response?.hasLastKnownGood === false) parts.push("LKG no");
     if (lastSuccessAt) parts.push(`success ${lastSuccessAt}`);
@@ -4594,6 +4671,7 @@
       return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.setAutoRefresh, { enabled: !autoRefreshEnabled });
     });
     addButton("refresh", "Refresh remote", () => refreshRemoteAndStatus());
+    addButton("previewDiff", "Preview diff", () => previewRecycleRemoteCatalogDiff());
     addButton("applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
     addButton("clear", "Clear", async () => {
       const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);

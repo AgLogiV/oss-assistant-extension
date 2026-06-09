@@ -32,6 +32,23 @@ const RECYCLE_REMOTE_ALLOWED_DEVICE_FIELDS = [
   "enabled"
 ];
 
+const RECYCLE_REMOTE_VISUAL_DIFF_FIELDS = [
+  "displayName",
+  "imagePath",
+  "helpImagePath",
+  "warningText"
+];
+
+const RECYCLE_REMOTE_RISKY_DIFF_FIELDS = [
+  "materialId",
+  "legacyMaterialIds",
+  "validationProfileId",
+  "enabled",
+  "categoryId"
+];
+
+const RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT = 5;
+
 function recycleRemoteNowIso() {
   return new Date().toISOString();
 }
@@ -465,6 +482,134 @@ function recycleRemoteProjectVisualOverlay(catalog) {
     .filter(device => device.deviceId);
 }
 
+function recycleRemoteNormalizePreviewDevice(device) {
+  if (!recycleRemoteIsPlainObject(device)) return null;
+  const deviceId = recycleRemoteTrim(device.deviceId);
+  if (!deviceId) return null;
+  return {
+    deviceId,
+    categoryId: recycleRemoteTrim(device.categoryId),
+    displayName: recycleRemoteTrim(device.displayName),
+    materialId: recycleRemoteTrim(device.materialId),
+    legacyMaterialIds: recycleRemoteNormalizeLegacyMaterialIds(device.legacyMaterialIds, deviceId, []),
+    imagePath: recycleRemoteTrim(device.imagePath),
+    helpImagePath: recycleRemoteTrim(device.helpImagePath),
+    warningText: recycleRemoteTrim(device.warningText),
+    validationProfileId: recycleRemoteTrim(device.validationProfileId),
+    enabled: device.enabled !== false
+  };
+}
+
+function recycleRemotePreviewValuesEqual(left, right) {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    const leftList = Array.isArray(left) ? left.map(recycleRemoteTrim).filter(Boolean) : [];
+    const rightList = Array.isArray(right) ? right.map(recycleRemoteTrim).filter(Boolean) : [];
+    if (leftList.length !== rightList.length) return false;
+    return leftList.every((value, index) => value === rightList[index]);
+  }
+  return recycleRemoteTrim(left) === recycleRemoteTrim(right);
+}
+
+function recycleRemoteBuildPreviewSample(device, fields) {
+  return {
+    deviceId: recycleRemoteTrim(device?.deviceId),
+    displayName: recycleRemoteTrim(device?.displayName),
+    fields: Array.isArray(fields) ? fields.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
+  };
+}
+
+function recycleRemotePushPreviewSample(samples, key, sample) {
+  if (!samples[key]) samples[key] = [];
+  if (samples[key].length >= RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) return;
+  samples[key].push(sample);
+}
+
+function recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta, status) {
+  const summary = {
+    visualChanges: 0,
+    riskyChanges: 0,
+    unknownRemoteDevices: 0,
+    missingLocalDevices: 0
+  };
+  const samples = {
+    visualChanges: [],
+    riskyChanges: [],
+    unknownRemoteDevices: [],
+    missingLocalDevices: []
+  };
+
+  if (!remoteCatalog) {
+    return {
+      ok: true,
+      result: "no_data",
+      meta: meta || null,
+      status: status || null,
+      summary,
+      samples
+    };
+  }
+
+  const localMap = new Map();
+  (Array.isArray(localDevices) ? localDevices : []).forEach(device => {
+    const normalized = recycleRemoteNormalizePreviewDevice(device);
+    if (normalized && !localMap.has(normalized.deviceId)) {
+      localMap.set(normalized.deviceId, normalized);
+    }
+  });
+
+  const remoteMap = new Map();
+  (Array.isArray(remoteCatalog.devices) ? remoteCatalog.devices : []).forEach(device => {
+    const remote = recycleRemoteNormalizePreviewDevice(device);
+    if (!remote || remoteMap.has(remote.deviceId)) return;
+    remoteMap.set(remote.deviceId, remote);
+
+    const local = localMap.get(remote.deviceId);
+    if (!local) {
+      summary.unknownRemoteDevices += 1;
+      recycleRemotePushPreviewSample(samples, "unknownRemoteDevices", recycleRemoteBuildPreviewSample(remote, []));
+      return;
+    }
+
+    const visualFields = RECYCLE_REMOTE_VISUAL_DIFF_FIELDS.filter(field => !recycleRemotePreviewValuesEqual(local[field], remote[field]));
+    if (visualFields.length) {
+      summary.visualChanges += 1;
+      recycleRemotePushPreviewSample(samples, "visualChanges", recycleRemoteBuildPreviewSample(remote, visualFields));
+    }
+
+    const riskyFields = RECYCLE_REMOTE_RISKY_DIFF_FIELDS.filter(field => !recycleRemotePreviewValuesEqual(local[field], remote[field]));
+    if (riskyFields.length) {
+      summary.riskyChanges += 1;
+      recycleRemotePushPreviewSample(samples, "riskyChanges", recycleRemoteBuildPreviewSample(remote, riskyFields));
+    }
+  });
+
+  localMap.forEach(local => {
+    if (remoteMap.has(local.deviceId)) return;
+    summary.missingLocalDevices += 1;
+    recycleRemotePushPreviewSample(samples, "missingLocalDevices", recycleRemoteBuildPreviewSample(local, []));
+  });
+
+  return {
+    ok: true,
+    result: "preview",
+    meta: meta || null,
+    status: status || null,
+    summary,
+    samples
+  };
+}
+
+async function recycleRemoteGetCatalogDiffPreview(localDevices) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
+  return recycleRemoteBuildCatalogDiffPreview(
+    Array.isArray(localDevices) ? localDevices : [],
+    stored[keys.lkg] || null,
+    stored[keys.meta] || null,
+    stored[keys.status] || null
+  );
+}
+
 async function recycleRemoteGetVisualOverlay() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
@@ -667,6 +812,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.getVisualOverlay") {
         return respondOnce(await recycleRemoteGetVisualOverlay());
+      }
+
+      if (msg.type === "recycleConfig.getCatalogDiffPreview") {
+        return respondOnce(await recycleRemoteGetCatalogDiffPreview(msg.localDevices));
       }
 
       if (msg.type === "recycleConfig.clearRemoteCache") {
