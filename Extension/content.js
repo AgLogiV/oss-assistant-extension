@@ -4690,6 +4690,55 @@
     };
   }
 
+  function buildRecycleRemoteMaterialEligibilitySample(device, reasons, warnings) {
+    return {
+      deviceId: String(device?.deviceId || "").trim(),
+      displayName: String(device?.displayName || "").trim(),
+      materialId: getRecycleEffectiveMaterialId(device, "diagnostic"),
+      reasons: Array.isArray(reasons) ? reasons.slice(0, 3) : [],
+      warnings: Array.isArray(warnings) ? warnings.slice(0, 3) : []
+    };
+  }
+
+  function getRecycleRemoteAddedMaterialEligibilitySummary() {
+    const summary = { total: 0, eligible: 0, blocked: 0 };
+    const samples = { eligible: [], blocked: [] };
+    const normalCategoryIds = getRecycleRemoteNormalCategoryIdSet();
+    const materialModelIds = getRecycleRemoteKnownMaterialIdSet();
+
+    Array.from(recycleRemoteAddedDevicesByDeviceId.values()).forEach(device => {
+      if (!isRecycleRemoteAddedDevice(device)) return;
+      summary.total += 1;
+      const reasons = [];
+      const warnings = [];
+      const categoryId = String(device?.categoryId || "").trim();
+      const validationProfileId = String(device?.validationProfileId || "").trim();
+      const rawMaterialId = String(device?.remoteIgnoredMaterialId || "").trim();
+      const materialId = getRecycleEffectiveMaterialId(device, "diagnostic");
+
+      if (!categoryId || !isRecycleRemoteSafeId(categoryId)) reasons.push("invalid category");
+      else if (RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS.includes(categoryId)) reasons.push(`special category ${categoryId}`);
+      else if (!normalCategoryIds.has(categoryId)) reasons.push(`unknown category ${categoryId}`);
+
+      if (!validationProfileId || !isRecycleValidationProfileImplemented(validationProfileId)) reasons.push("profile not local");
+      if (device?.enabled === false) reasons.push("disabled");
+      if (!rawMaterialId) reasons.push("missing material");
+      else if (!/^\d+$/.test(rawMaterialId) || !materialId) reasons.push("invalid material");
+      else if (!materialModelIds.has(materialId)) reasons.push(`material not known ${materialId}`);
+      if (Array.isArray(device?.legacyMaterialIds) && device.legacyMaterialIds.length) warnings.push("legacy ignored");
+
+      if (reasons.length) {
+        summary.blocked += 1;
+        if (samples.blocked.length < 3) samples.blocked.push(buildRecycleRemoteMaterialEligibilitySample(device, reasons, warnings));
+      } else {
+        summary.eligible += 1;
+        if (samples.eligible.length < 3) samples.eligible.push(buildRecycleRemoteMaterialEligibilitySample(device, reasons, warnings));
+      }
+    });
+
+    return { summary, samples };
+  }
+
   function formatRecycleRemoteDiffSample(sample) {
     const deviceId = String(sample?.deviceId || "").trim();
     const displayName = String(sample?.displayName || "").trim();
@@ -4747,6 +4796,44 @@
     if (sampleParts.length) parts.push(sampleParts.join(" | "));
   }
 
+  function formatRecycleRemoteMaterialEligibilitySample(sample) {
+    const deviceId = String(sample?.deviceId || "").trim();
+    const displayName = String(sample?.displayName || "").trim();
+    const materialId = String(sample?.materialId || "").trim();
+    const reasons = Array.isArray(sample?.reasons)
+      ? sample.reasons.map(reason => String(reason || "").trim()).filter(Boolean)
+      : [];
+    const warnings = Array.isArray(sample?.warnings)
+      ? sample.warnings.map(warning => String(warning || "").trim()).filter(Boolean)
+      : [];
+    const label = [deviceId, displayName && displayName !== deviceId ? displayName : ""].filter(Boolean).join(": ");
+    if (!label) return "";
+    const details = []
+      .concat(materialId ? [`material ${materialId}`] : [])
+      .concat(reasons)
+      .concat(warnings.map(warning => `warn:${warning}`));
+    return details.length ? `${label} (${details.join(",")})` : label;
+  }
+
+  function appendRecycleRemoteMaterialEligibilityStatus(parts) {
+    const { summary, samples } = getRecycleRemoteAddedMaterialEligibilitySummary();
+    if (!summary.total) return;
+    parts.push(`remote material: eligible ${summary.eligible}, blocked ${summary.blocked}`);
+    const sampleParts = [
+      ["material eligible", samples.eligible],
+      ["material blocked", samples.blocked]
+    ]
+      .map(([label, items]) => {
+        const formatted = (Array.isArray(items) ? items : [])
+          .map(formatRecycleRemoteMaterialEligibilitySample)
+          .filter(Boolean)
+          .slice(0, 3);
+        return formatted.length ? `${label}: ${formatted.join("; ")}` : "";
+      })
+      .filter(Boolean);
+    if (sampleParts.length) parts.push(sampleParts.join(" | "));
+  }
+
   function formatRecycleRemoteDebugStatus(action, response) {
     const result = String(response?.result || (response?.ok ? "ok" : "error")).trim();
     const meta = response?.meta || {};
@@ -4771,6 +4858,7 @@
     if (Array.isArray(response?.ignoredUnknownDeviceIds) && response.ignoredUnknownDeviceIds.length) {
       parts.push(`ignored unknown ${response.ignoredUnknownDeviceIds.length}`);
     }
+    appendRecycleRemoteMaterialEligibilityStatus(parts);
     return parts.join(" | ");
   }
 
