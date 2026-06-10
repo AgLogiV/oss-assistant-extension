@@ -9,10 +9,12 @@
     clear: "recycleConfig.clearRemoteCache",
     maybeRefresh: "recycleConfig.maybeRefreshRemote",
     setAutoRefresh: "recycleConfig.setAutoRefreshEnabled",
-    previewDiff: "recycleConfig.getCatalogDiffPreview"
+    previewDiff: "recycleConfig.getCatalogDiffPreview",
+    eligibleAdditions: "recycleConfig.getEligibleDeviceAdditions"
   };
   const RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION = "applyVisualOverlay";
   const RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION = "previewDiff";
+  const RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION = "applyEligibleDevices";
 
   function sendRecycleRemoteConfigDebugMessage(type, payload) {
     return new Promise((resolve, reject) => {
@@ -60,6 +62,11 @@
       const response = await previewRecycleRemoteCatalogDiff();
       console.info("[recycleRemoteConfig] previewDiff", response);
       return response;
+    },
+    async applyEligibleDevices() {
+      const response = await applyRecycleRemoteEligibleDevices();
+      console.info("[recycleRemoteConfig] applyEligibleDevices", response);
+      return response;
     }
   };
 
@@ -71,13 +78,16 @@
     const type = RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES[action];
     const isApplyVisualOverlay = action === RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION;
     const isPreviewDiff = action === RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION;
-    if (!type && !isApplyVisualOverlay && !isPreviewDiff) return;
+    const isApplyEligibleDevices = action === RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION;
+    if (!type && !isApplyVisualOverlay && !isPreviewDiff && !isApplyEligibleDevices) return;
 
     const requestId = String(data.requestId || "");
     try {
       let response;
       if (isApplyVisualOverlay) {
         response = await applyRecycleRemoteVisualOverlay();
+      } else if (isApplyEligibleDevices) {
+        response = await applyRecycleRemoteEligibleDevices();
       } else if (isPreviewDiff) {
         response = await previewRecycleRemoteCatalogDiff();
       } else {
@@ -2314,6 +2324,7 @@
   const RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS = ["displayName", "imagePath", "helpImagePath", "warningText"];
   const RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS = ["cam_modules", "modems"];
   let recycleRemoteVisualOverlayByDeviceId = new Map();
+  let recycleRemoteAddedDevicesByDeviceId = new Map();
 
   function getRecycleDeviceVisualView(device) {
     const id = String(device?.deviceId || "").trim();
@@ -2371,20 +2382,128 @@
     );
   }
 
-  function getRecycleDeviceById(deviceId) {
+  function isRecycleRemoteSafeId(value) {
+    return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(String(value || ""));
+  }
+
+  function isRecycleRemoteAddedAssetPathSafe(value) {
+    const pathValue = String(value || "").trim();
+    if (!pathValue) return true;
+    if (!pathValue.startsWith("images/")) return false;
+    if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) return false;
+    if (pathValue.includes("\\") || pathValue.includes("..")) return false;
+    return /\.(?:webp|png|jpe?g)$/i.test(pathValue);
+  }
+
+  function getRecycleRemoteNormalCategoryIdSet() {
+    return new Set(
+      RECYCLE_DEVICE_CATALOG
+        .map(device => String(device?.categoryId || "").trim())
+        .filter(categoryId => categoryId && !RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS.includes(categoryId))
+    );
+  }
+
+  function getRecycleRemoteKnownMaterialIdSet() {
+    return new Set(
+      []
+        .concat(Array.isArray(swapMaterialModels) ? swapMaterialModels : [])
+        .concat(Array.isArray(SWAP_MATERIAL_MODELS_DEFAULT) ? SWAP_MATERIAL_MODELS_DEFAULT : [])
+        .map(model => normalizeSwapMaterialId(model?.id))
+        .filter(Boolean)
+    );
+  }
+
+  function normalizeRecycleRemoteAddedDeviceEntry(entry, pendingMap) {
+    const errors = [];
+    const deviceId = String(entry?.deviceId || "").trim();
+    const categoryId = String(entry?.categoryId || "").trim();
+    const displayName = String(entry?.displayName || "").trim();
+    const validationProfileId = String(entry?.validationProfileId || "").trim();
+    const materialIdRaw = String(entry?.materialId || "").trim();
+    const materialId = normalizeSwapMaterialId(materialIdRaw);
+    const imagePath = String(entry?.imagePath || "").trim();
+    const helpImagePath = String(entry?.helpImagePath || "").trim();
+    const warningText = String(entry?.warningText || "").trim();
+    const normalCategoryIds = getRecycleRemoteNormalCategoryIdSet();
+    const materialModelIds = getRecycleRemoteKnownMaterialIdSet();
+
+    if (!deviceId || !isRecycleRemoteSafeId(deviceId)) errors.push("unsafe deviceId");
+    else if (RECYCLE_DEVICE_ID_SET.has(deviceId)) errors.push("deviceId already local");
+    else if (pendingMap?.has?.(deviceId)) errors.push("duplicate remote deviceId");
+
+    if (!categoryId || !isRecycleRemoteSafeId(categoryId)) errors.push("invalid categoryId");
+    else if (RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS.includes(categoryId)) errors.push(`special category ${categoryId}`);
+    else if (!normalCategoryIds.has(categoryId)) errors.push(`unknown category ${categoryId}`);
+
+    if (!displayName) errors.push("missing displayName");
+    else if (displayName.length > 120) errors.push("displayName too long");
+
+    if (!validationProfileId || !isRecycleValidationProfileImplemented(validationProfileId)) {
+      errors.push(`profile not local ${validationProfileId || "(empty)"}`);
+    }
+
+    if (!materialIdRaw) errors.push("missing materialId");
+    else if (!/^\d+$/.test(materialIdRaw) || !materialId) errors.push("invalid materialId");
+    else if (!materialModelIds.has(materialId)) errors.push(`material not known ${materialId}`);
+
+    if (entry?.enabled === false) errors.push("disabled");
+    if (!isRecycleRemoteAddedAssetPathSafe(imagePath)) errors.push("imagePath unsafe");
+    if (!isRecycleRemoteAddedAssetPathSafe(helpImagePath)) errors.push("helpImagePath unsafe");
+
+    if (errors.length) {
+      return {
+        ok: false,
+        deviceId,
+        displayName,
+        reasons: errors.slice(0, 5)
+      };
+    }
+
+    return {
+      ok: true,
+      device: {
+        deviceId,
+        categoryId,
+        displayName,
+        materialId: "",
+        legacyMaterialIds: [],
+        imagePath,
+        helpImagePath,
+        warningText,
+        validationProfileId,
+        enabled: true,
+        remoteAdded: true,
+        remoteIgnoredMaterialId: materialId
+      }
+    };
+  }
+
+  function getRecycleLocalDeviceById(deviceId) {
     const id = String(deviceId || "").trim();
     if (!id) return null;
     return RECYCLE_DEVICE_CATALOG.find(d => d.deviceId === id && isRecycleDeviceEnabled(d)) || null;
   }
 
+  function getRecycleDeviceById(deviceId) {
+    const id = String(deviceId || "").trim();
+    if (!id) return null;
+    return getRecycleLocalDeviceById(id) || recycleRemoteAddedDevicesByDeviceId.get(id) || null;
+  }
+
   function getRecycleDevicesByCategory(categoryId) {
     const id = String(categoryId || "").trim();
     if (!id) return [];
-    return RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id && isRecycleDeviceEnabled(d));
+    const localDevices = RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id && isRecycleDeviceEnabled(d));
+    const remoteDevices = Array.from(recycleRemoteAddedDevicesByDeviceId.values())
+      .filter(device => device.categoryId === id && isRecycleDeviceEnabled(device));
+    return localDevices.concat(remoteDevices);
   }
 
   function getRecycleDeviceMaterialIdsByCategory(categoryId) {
-    return getRecycleDevicesByCategory(categoryId)
+    const id = String(categoryId || "").trim();
+    if (!id) return [];
+    return RECYCLE_DEVICE_CATALOG
+      .filter(d => d.categoryId === id && isRecycleDeviceEnabled(d))
       .map(d => normalizeSwapMaterialId(d.materialId))
       .filter(Boolean);
   }
@@ -3348,6 +3467,7 @@
         const id = String(deviceId || "").trim();
         if (!id || seenDevices.has(id)) return;
         const device = getRecycleDeviceById(id);
+        if (device?.remoteAdded) return;
         if (!device || device.categoryId !== category) return;
         seenDevices.add(id);
         deviceIds.push(id);
@@ -3392,6 +3512,7 @@
       const id = String(rawId || "").trim();
       if (!id || seenDevices.has(id)) return null;
       const device = getRecycleDeviceById(id);
+      if (device?.remoteAdded) return null;
       if (!device || device.categoryId !== category) return null;
       seenDevices.add(id);
       deviceIds.push(id);
@@ -4476,13 +4597,69 @@
     };
   }
 
+  function buildRecycleRemoteAddedDeviceOverlay(entries) {
+    const overlayMap = new Map();
+    const blocked = [];
+    (Array.isArray(entries) ? entries : []).forEach(entry => {
+      const normalized = normalizeRecycleRemoteAddedDeviceEntry(entry, overlayMap);
+      if (normalized.ok) {
+        overlayMap.set(normalized.device.deviceId, normalized.device);
+      } else {
+        blocked.push({
+          deviceId: normalized.deviceId,
+          displayName: normalized.displayName,
+          reasons: normalized.reasons
+        });
+      }
+    });
+    return { overlayMap, blocked };
+  }
+
+  async function applyRecycleRemoteEligibleDevices() {
+    const response = await sendRecycleRemoteConfigDebugMessage(
+      RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.eligibleAdditions,
+      {
+        localDevices: getRecycleLocalCatalogDiffPreviewDevices(),
+        eligibilityContext: getRecycleRemoteDiffEligibilityContext()
+      }
+    );
+    const sourceRevision = String(response?.meta?.revision || "").trim();
+    const additions = Array.isArray(response?.additions) ? response.additions : [];
+
+    if (!response?.ok || !additions.length) {
+      recycleRemoteAddedDevicesByDeviceId = new Map();
+      return {
+        ok: Boolean(response?.ok),
+        result: response?.result || "no_eligible",
+        sourceRevision,
+        addedCount: 0,
+        blockedCount: Number(response?.summary?.blocked || 0),
+        renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+      };
+    }
+
+    const { overlayMap, blocked } = buildRecycleRemoteAddedDeviceOverlay(additions);
+    recycleRemoteAddedDevicesByDeviceId = overlayMap;
+    return {
+      ok: true,
+      result: overlayMap.size ? "applied" : "no_eligible",
+      sourceRevision,
+      addedCount: overlayMap.size,
+      blockedCount: blocked.length + Number(response?.summary?.blocked || 0),
+      blockedSamples: blocked.slice(0, 5),
+      renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+    };
+  }
+
   function clearRecycleRemoteVisualOverlay(reason) {
     recycleRemoteVisualOverlayByDeviceId = new Map();
+    recycleRemoteAddedDevicesByDeviceId = new Map();
     return {
       ok: true,
       result: reason || "local_fallback",
       sourceRevision: "",
       appliedCount: 0,
+      addedCount: 0,
       ignoredUnknownDeviceIds: [],
       renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
     };
@@ -4557,6 +4734,8 @@
     if (typeof response?.isStale === "boolean") parts.push(response.isStale ? "stale" : "fresh");
     if (revision) parts.push(`rev ${revision}`);
     if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
+    if (typeof response?.addedCount === "number") parts.push(`added ${response.addedCount}`);
+    if (typeof response?.blockedCount === "number") parts.push(`blocked ${response.blockedCount}`);
     if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
     appendRecycleRemoteDiffPreviewStatus(parts, response);
     if (response?.hasLastKnownGood === true) parts.push("LKG yes");
@@ -4718,10 +4897,11 @@
     addButton("refresh", "Refresh remote", () => refreshRemoteAndStatus());
     addButton("previewDiff", "Preview diff", () => previewRecycleRemoteCatalogDiff());
     addButton("applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
+    addButton("applyEligibleDevices", "Apply eligible", () => applyRecycleRemoteEligibleDevices());
     addButton("clear", "Clear", async () => {
       const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);
       const local = clearRecycleRemoteVisualOverlay("local_fallback");
-      return { ...response, result: response?.result || "cleared", appliedCount: local.appliedCount, renderedPanels: local.renderedPanels };
+      return { ...response, result: response?.result || "cleared", appliedCount: local.appliedCount, addedCount: local.addedCount, renderedPanels: local.renderedPanels };
     });
     addButton("status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh));
     updateAutoRefreshButton(false);

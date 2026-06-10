@@ -685,10 +685,98 @@ function recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta,
   };
 }
 
+function recycleRemoteProjectEligibleDeviceAddition(remote) {
+  return {
+    deviceId: recycleRemoteTrim(remote?.deviceId),
+    categoryId: recycleRemoteTrim(remote?.categoryId),
+    displayName: recycleRemoteTrim(remote?.displayName),
+    materialId: recycleRemoteTrim(remote?.materialId),
+    imagePath: recycleRemoteTrim(remote?.imagePath),
+    helpImagePath: recycleRemoteTrim(remote?.helpImagePath),
+    warningText: recycleRemoteTrim(remote?.warningText),
+    validationProfileId: recycleRemoteTrim(remote?.validationProfileId),
+    enabled: remote?.enabled !== false
+  };
+}
+
+function recycleRemoteBuildEligibleDeviceAdditions(localDevices, remoteCatalog, meta, status, eligibilityContext) {
+  const summary = {
+    unknownRemoteDevices: 0,
+    eligible: 0,
+    blocked: 0
+  };
+  const samples = {
+    eligible: [],
+    blocked: []
+  };
+  const additions = [];
+
+  if (!remoteCatalog) {
+    return {
+      ok: true,
+      result: "no_data",
+      meta: meta || null,
+      status: status || null,
+      summary,
+      samples,
+      additions
+    };
+  }
+
+  const localMap = new Map();
+  (Array.isArray(localDevices) ? localDevices : []).forEach(device => {
+    const normalized = recycleRemoteNormalizePreviewDevice(device);
+    if (normalized && !localMap.has(normalized.deviceId)) {
+      localMap.set(normalized.deviceId, normalized);
+    }
+  });
+
+  const remoteSeen = new Set();
+  (Array.isArray(remoteCatalog.devices) ? remoteCatalog.devices : []).forEach(device => {
+    const remote = recycleRemoteNormalizePreviewDevice(device);
+    if (!remote || remoteSeen.has(remote.deviceId)) return;
+    remoteSeen.add(remote.deviceId);
+    if (localMap.has(remote.deviceId)) return;
+
+    summary.unknownRemoteDevices += 1;
+    const eligibility = recycleRemoteClassifyUnknownDeviceEligibility(remote, localMap, eligibilityContext);
+    if (eligibility.eligible) {
+      summary.eligible += 1;
+      additions.push(recycleRemoteProjectEligibleDeviceAddition(remote));
+      recycleRemotePushPreviewSample(samples, "eligible", recycleRemoteBuildUnknownEligibilitySample(remote, [], eligibility.warnings));
+    } else {
+      summary.blocked += 1;
+      recycleRemotePushPreviewSample(samples, "blocked", recycleRemoteBuildUnknownEligibilitySample(remote, eligibility.reasons, eligibility.warnings));
+    }
+  });
+
+  return {
+    ok: true,
+    result: additions.length ? "ok" : "no_eligible",
+    meta: meta || null,
+    status: status || null,
+    summary,
+    samples,
+    additions
+  };
+}
+
 async function recycleRemoteGetCatalogDiffPreview(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
   return recycleRemoteBuildCatalogDiffPreview(
+    Array.isArray(localDevices) ? localDevices : [],
+    stored[keys.lkg] || null,
+    stored[keys.meta] || null,
+    stored[keys.status] || null,
+    eligibilityContext || null
+  );
+}
+
+async function recycleRemoteGetEligibleDeviceAdditions(localDevices, eligibilityContext) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
+  return recycleRemoteBuildEligibleDeviceAdditions(
     Array.isArray(localDevices) ? localDevices : [],
     stored[keys.lkg] || null,
     stored[keys.meta] || null,
@@ -903,6 +991,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.getCatalogDiffPreview") {
         return respondOnce(await recycleRemoteGetCatalogDiffPreview(msg.localDevices, msg.eligibilityContext));
+      }
+
+      if (msg.type === "recycleConfig.getEligibleDeviceAdditions") {
+        return respondOnce(await recycleRemoteGetEligibleDeviceAdditions(msg.localDevices, msg.eligibilityContext));
       }
 
       if (msg.type === "recycleConfig.clearRemoteCache") {
