@@ -426,7 +426,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Refresh policy:
      - `Auto-refresh` is default OFF and is a debug preference stored in `wifi_oss_recycle_remote_config_enabled_v1`.
      - The current TTL gate is hardcoded to 6 hours. With `Auto-refresh` ON, `Status` may call TTL-gated maybe-refresh; with it OFF, refresh remains fully manual.
-     - `Refresh remote` is always a manual force refresh. `Preview diff` compares the cached remote LKG catalog with the packaged local catalog before apply, showing only compact counts/samples for visual changes, risky changes, unknown remote devices, missing local devices, and revision/status when available. It does not return or display the full catalog/raw devices.
+     - `Refresh remote` is always a manual force refresh. `Preview diff` compares the cached remote LKG catalog with the packaged local catalog before apply, showing only compact counts/samples for visual changes, risky changes, unknown remote devices, missing local devices, unknown-device eligibility, and revision/status when available. It does not return or display the full catalog/raw devices.
      - `Apply visual` is always manual and is never triggered by auto-refresh or preview.
      - `Clear` removes remote cache/LKG/meta/status and the in-memory visual overlay, but preserves the Auto-refresh ON/OFF setting.
      - There is still no startup fetch, page-load fetch, auto-refresh on panel open, periodic/scheduled/fixed-time refresh, `chrome.alarms`, or auto-apply on page load.
@@ -439,17 +439,19 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - The diff preview classifies `displayName`, `imagePath`, `helpImagePath`, and `warningText` as visual fields. It classifies `materialId`, `legacyMaterialIds`, `validationProfileId`, `enabled`, and `categoryId` as risky fields. Unknown remote devices are reported only as unknown, not added to runtime; missing local devices are reported as omissions, not deletions.
    - Stage 4 explicitly does not apply `materialId`, `legacyMaterialIds`, `validationProfileId`, `enabled`, `categoryId`, `generatedMaterialFilters`, additions, deletions, or category moves.
    - Unknown remote devices need a separate roadmap before they can become runtime cards. The packaged/local catalog remains the base and fallback; do not mutate `RECYCLE_DEVICE_CATALOG`, and do not rebuild `SWAP_MATERIAL_RECYCLE_FILTERS` from remote in the first stages. Future remote additions should use a separate effective/resolved catalog layer above the local base.
-   - The next safe step for unknown devices is preview-only eligibility, not apply. Eligibility must check at least safe unique `deviceId`, existing normal `categoryId`, blocked special categories first (`cam_modules` and `modems`), locally implemented `validationProfileId`, safe `materialId` shape with later known-material behavior checks, safe `imagePath`/`helpImagePath` with fallback if packaged assets are missing, and `enabled: false` must not create a runtime card.
+   - `Preview diff` now includes preview-only unknown-device eligibility (`82c8c5a`): eligible/blocked counts plus capped compact samples with reasons/warnings. Eligible means "candidate for a future reviewed stage", not applied. Unknown devices are still not added as runtime cards, and `Apply visual` remains visual-only for existing local `deviceId` values.
+   - Eligibility checks include at least safe unique `deviceId`, existing normal `categoryId`, blocked special categories first (`cam_modules` and `modems`), locally implemented `validationProfileId`, safe `materialId` shape with later known-material behavior checks, safe `imagePath`/`helpImagePath` with fallback if packaged assets are missing, and `enabled: false` must not create a runtime card.
    - Broader fields should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
    - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
    - Manual smoke passed with a temporary public config change to `zte_g5b1.displayName` (`ZTE G5B REMOTE VISUAL TEST`): debug `refresh()` fetched it, `applyVisualOverlay()` displayed it in the OSS recycle UI, and page refresh returned to the local display name because the overlay is intentionally in-memory. The public config test commit was reverted afterward.
    - Controlled `Preview diff` smoke also passed and was reverted (`9822ef7` then `ea4afa8`): temporary remote changes produced `visual 1`, `risky 1`, `unknown 1`, `missing 0`; `Apply visual` updated only the existing visual label, did not add the unknown remote device, did not apply the risky `validationProfileId` change, and `Clear` returned local fallback.
+   - Controlled unknown-device eligibility smoke passed and was reverted (`db12304` then `8f2de75`): temporary remote devices produced `unknown 3`, `eligible 1`, `blocked 2`, `missing 0`; samples identified the eligible test device, blocked `cam_modules`, and blocked `enabled: false`. `Apply visual` ignored the unknown devices and did not add runtime cards.
    - Staged rollout:
      1. docs/spec;
      2. fetch + validate + cache, no apply - implemented;
      3. debug/manual refresh status bridge - implemented;
      4. manual visual metadata overlay only - implemented;
-     5. preview-only eligibility for unknown remote devices;
+     5. preview-only eligibility for unknown remote devices - implemented;
      6. manual in-memory apply for eligible additions only after a separate reviewed plan;
      7. material-safe additions after strict known-material checks;
      8. production-gated rollout later;
