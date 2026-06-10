@@ -514,7 +514,9 @@ function recycleRemoteBuildPreviewSample(device, fields) {
   return {
     deviceId: recycleRemoteTrim(device?.deviceId),
     displayName: recycleRemoteTrim(device?.displayName),
-    fields: Array.isArray(fields) ? fields.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
+    fields: Array.isArray(fields) ? fields.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : [],
+    reasons: Array.isArray(device?.reasons) ? device.reasons.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : [],
+    warnings: Array.isArray(device?.warnings) ? device.warnings.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
   };
 }
 
@@ -524,18 +526,94 @@ function recycleRemotePushPreviewSample(samples, key, sample) {
   samples[key].push(sample);
 }
 
-function recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta, status) {
+function recycleRemoteBuildPreviewSet(values) {
+  return new Set((Array.isArray(values) ? values : [])
+    .map(value => recycleRemoteTrim(value))
+    .filter(Boolean));
+}
+
+function recycleRemoteGetPreviewAssetPathIssue(value, fieldName) {
+  const pathValue = recycleRemoteTrim(value);
+  if (!pathValue) return "";
+  if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) {
+    return `${fieldName} absolute/remote`;
+  }
+  if (pathValue.includes("\\") || pathValue.includes("..")) return `${fieldName} unsafe path`;
+  if (!pathValue.startsWith("images/")) return `${fieldName} not images/...`;
+  if (!/\.(?:webp|png|jpe?g)$/i.test(pathValue)) return `${fieldName} not image`;
+  return "";
+}
+
+function recycleRemoteBuildUnknownEligibilitySample(remote, reasons, warnings) {
+  return recycleRemoteBuildPreviewSample({
+    ...remote,
+    reasons,
+    warnings
+  }, []);
+}
+
+function recycleRemoteClassifyUnknownDeviceEligibility(remote, localMap, eligibilityContext) {
+  const normalCategoryIds = recycleRemoteBuildPreviewSet(eligibilityContext?.normalCategoryIds);
+  const specialCategoryIds = recycleRemoteBuildPreviewSet(eligibilityContext?.specialCategoryIds);
+  const implementedProfileIds = recycleRemoteBuildPreviewSet(eligibilityContext?.implementedValidationProfileIds);
+  const materialModelIds = recycleRemoteBuildPreviewSet(eligibilityContext?.materialModelIds);
+  const hasMaterialModelContext = Array.isArray(eligibilityContext?.materialModelIds);
+  const reasons = [];
+  const warnings = [];
+  const deviceId = recycleRemoteTrim(remote?.deviceId);
+  const categoryId = recycleRemoteTrim(remote?.categoryId);
+  const validationProfileId = recycleRemoteTrim(remote?.validationProfileId);
+  const materialId = recycleRemoteTrim(remote?.materialId);
+
+  if (!deviceId || !recycleRemoteIsSafeId(deviceId)) reasons.push("unsafe deviceId");
+  else if (localMap.has(deviceId)) reasons.push("deviceId already local");
+
+  if (!categoryId || !recycleRemoteIsSafeId(categoryId)) reasons.push("invalid categoryId");
+  else if (specialCategoryIds.has(categoryId)) reasons.push(`special category ${categoryId}`);
+  else if (!normalCategoryIds.has(categoryId)) reasons.push(`unknown category ${categoryId}`);
+
+  if (!validationProfileId) reasons.push("missing validationProfileId");
+  else if (!implementedProfileIds.has(validationProfileId)) reasons.push(`profile not local ${validationProfileId}`);
+
+  if (!materialId) reasons.push("missing materialId");
+  else if (!/^\d+$/.test(materialId)) reasons.push("invalid materialId");
+  else if (hasMaterialModelContext && !materialModelIds.has(materialId)) reasons.push(`material not known ${materialId}`);
+  else if (!hasMaterialModelContext) warnings.push("material availability unverified");
+
+  if (remote?.enabled === false) reasons.push("disabled");
+
+  const imageIssue = recycleRemoteGetPreviewAssetPathIssue(remote?.imagePath, "imagePath");
+  const helpIssue = recycleRemoteGetPreviewAssetPathIssue(remote?.helpImagePath, "helpImagePath");
+  if (imageIssue) reasons.push(imageIssue);
+  if (helpIssue) reasons.push(helpIssue);
+  if (!recycleRemoteTrim(remote?.imagePath)) warnings.push("image fallback");
+  if (!recycleRemoteTrim(remote?.helpImagePath)) warnings.push("help fallback");
+
+  return {
+    eligible: reasons.length === 0,
+    reasons,
+    warnings
+  };
+}
+
+function recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta, status, eligibilityContext) {
   const summary = {
     visualChanges: 0,
     riskyChanges: 0,
     unknownRemoteDevices: 0,
-    missingLocalDevices: 0
+    missingLocalDevices: 0,
+    unknownEligibility: {
+      eligible: 0,
+      blocked: 0
+    }
   };
   const samples = {
     visualChanges: [],
     riskyChanges: [],
     unknownRemoteDevices: [],
-    missingLocalDevices: []
+    missingLocalDevices: [],
+    unknownEligibleDevices: [],
+    unknownBlockedDevices: []
   };
 
   if (!remoteCatalog) {
@@ -567,6 +645,14 @@ function recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta,
     if (!local) {
       summary.unknownRemoteDevices += 1;
       recycleRemotePushPreviewSample(samples, "unknownRemoteDevices", recycleRemoteBuildPreviewSample(remote, []));
+      const eligibility = recycleRemoteClassifyUnknownDeviceEligibility(remote, localMap, eligibilityContext);
+      if (eligibility.eligible) {
+        summary.unknownEligibility.eligible += 1;
+        recycleRemotePushPreviewSample(samples, "unknownEligibleDevices", recycleRemoteBuildUnknownEligibilitySample(remote, [], eligibility.warnings));
+      } else {
+        summary.unknownEligibility.blocked += 1;
+        recycleRemotePushPreviewSample(samples, "unknownBlockedDevices", recycleRemoteBuildUnknownEligibilitySample(remote, eligibility.reasons, eligibility.warnings));
+      }
       return;
     }
 
@@ -599,14 +685,15 @@ function recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta,
   };
 }
 
-async function recycleRemoteGetCatalogDiffPreview(localDevices) {
+async function recycleRemoteGetCatalogDiffPreview(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
   return recycleRemoteBuildCatalogDiffPreview(
     Array.isArray(localDevices) ? localDevices : [],
     stored[keys.lkg] || null,
     stored[keys.meta] || null,
-    stored[keys.status] || null
+    stored[keys.status] || null,
+    eligibilityContext || null
   );
 }
 
@@ -815,7 +902,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       if (msg.type === "recycleConfig.getCatalogDiffPreview") {
-        return respondOnce(await recycleRemoteGetCatalogDiffPreview(msg.localDevices));
+        return respondOnce(await recycleRemoteGetCatalogDiffPreview(msg.localDevices, msg.eligibilityContext));
       }
 
       if (msg.type === "recycleConfig.clearRemoteCache") {

@@ -2312,6 +2312,7 @@
   const RECYCLE_DEVICE_CATALOG = RECYCLE_DEVICE_CATALOG_RAW.map(normalizeRecycleDeviceCatalogEntry);
   const RECYCLE_DEVICE_ID_SET = new Set(RECYCLE_DEVICE_CATALOG.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
   const RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS = ["displayName", "imagePath", "helpImagePath", "warningText"];
+  const RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS = ["cam_modules", "modems"];
   let recycleRemoteVisualOverlayByDeviceId = new Map();
 
   function getRecycleDeviceVisualView(device) {
@@ -2335,10 +2336,38 @@
     }));
   }
 
+  function getRecycleRemoteDiffEligibilityContext() {
+    const normalCategoryIds = Array.from(new Set(
+      RECYCLE_DEVICE_CATALOG
+        .map(device => String(device?.categoryId || "").trim())
+        .filter(categoryId => categoryId && !RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS.includes(categoryId))
+    ));
+    const implementedValidationProfileIds = Object.keys(RECYCLE_SERIAL_VALIDATION_PROFILES || {})
+      .map(profileId => String(profileId || "").trim())
+      .filter(Boolean);
+    const materialModelIds = Array.from(new Set(
+      []
+        .concat(Array.isArray(swapMaterialModels) ? swapMaterialModels : [])
+        .concat(Array.isArray(SWAP_MATERIAL_MODELS_DEFAULT) ? SWAP_MATERIAL_MODELS_DEFAULT : [])
+        .map(model => normalizeSwapMaterialId(model?.id))
+        .filter(Boolean)
+    ));
+
+    return {
+      normalCategoryIds,
+      specialCategoryIds: RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS.slice(),
+      implementedValidationProfileIds,
+      materialModelIds
+    };
+  }
+
   function previewRecycleRemoteCatalogDiff() {
     return sendRecycleRemoteConfigDebugMessage(
       RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.previewDiff,
-      { localDevices: getRecycleLocalCatalogDiffPreviewDevices() }
+      {
+        localDevices: getRecycleLocalCatalogDiffPreviewDevices(),
+        eligibilityContext: getRecycleRemoteDiffEligibilityContext()
+      }
     );
   }
 
@@ -4465,9 +4494,16 @@
     const fields = Array.isArray(sample?.fields)
       ? sample.fields.map(field => String(field || "").trim()).filter(Boolean)
       : [];
+    const reasons = Array.isArray(sample?.reasons)
+      ? sample.reasons.map(reason => String(reason || "").trim()).filter(Boolean)
+      : [];
+    const warnings = Array.isArray(sample?.warnings)
+      ? sample.warnings.map(warning => String(warning || "").trim()).filter(Boolean)
+      : [];
     const label = [deviceId, displayName && displayName !== deviceId ? displayName : ""].filter(Boolean).join(": ");
     if (!label) return "";
-    return fields.length ? `${label} (${fields.join(",")})` : label;
+    const details = fields.concat(reasons, warnings.map(warning => `warn:${warning}`));
+    return details.length ? `${label} (${details.join(",")})` : label;
   }
 
   function appendRecycleRemoteDiffPreviewStatus(parts, response) {
@@ -4477,9 +4513,16 @@
     const riskyChanges = Number(summary.riskyChanges || 0);
     const unknownRemoteDevices = Number(summary.unknownRemoteDevices || 0);
     const missingLocalDevices = Number(summary.missingLocalDevices || 0);
+    const unknownEligibility = summary.unknownEligibility || {};
+    const eligibleUnknownDevices = Number(unknownEligibility.eligible || 0);
+    const blockedUnknownDevices = Number(unknownEligibility.blocked || 0);
     parts.push(`visual ${visualChanges}`);
     parts.push(`risky ${riskyChanges}`);
     parts.push(`unknown ${unknownRemoteDevices}`);
+    if (unknownRemoteDevices) {
+      parts.push(`eligible ${eligibleUnknownDevices}`);
+      parts.push(`blocked ${blockedUnknownDevices}`);
+    }
     parts.push(`missing ${missingLocalDevices}`);
 
     const samples = response?.samples || {};
@@ -4487,6 +4530,8 @@
       ["visual", samples.visualChanges],
       ["risky", samples.riskyChanges],
       ["unknown", samples.unknownRemoteDevices],
+      ["eligible", samples.unknownEligibleDevices],
+      ["blocked", samples.unknownBlockedDevices],
       ["missing", samples.missingLocalDevices]
     ]
       .map(([label, items]) => {
