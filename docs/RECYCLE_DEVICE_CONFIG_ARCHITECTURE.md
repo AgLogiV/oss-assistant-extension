@@ -444,7 +444,8 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - `Apply eligible` can manually add only eligible unknown devices to an in-memory overlay so they appear as temporary recycle UI cards. These cards may use locally implemented `validationProfileId` help/validation, but do not enable SAP/material behavior, do not show a SAP/material number, do not affect material filters/snapshots/controlled fill, and disappear on `Clear` or page refresh.
    - Next architecture direction: use Option B, an explicit effective catalog layer with small commit boundaries. The local packaged catalog remains the immutable base/fallback, while remote-added devices stay in an in-memory overlay. The first patch should formalize helpers such as `getRecycleEffectiveDeviceById`, `getRecycleEffectiveDevicesByCategory`, `getRecycleLocalDevicesByCategory`, `isRecycleRemoteAddedDevice`, and `getRecycleEffectiveMaterialId`; the default material mode must not return remote material for SAP.
    - The first effective-layer patch must be behavior-preserving for SAP/material. Keep `SWAP_MATERIAL_RECYCLE_FILTERS`, `getSwapMaterialRecycleFilter`, `getRecycleDeviceImagePathByMaterialId`, material snapshot creation/validation, and controlled fill local-only until a separate material stage is reviewed.
-   - Material/SAP support should follow as separate stages: preview remote-added material eligibility, then debug-only material enablement, then docs/checklist after smoke. Keep production auto-apply out of scope.
+   - Remote material eligibility preview is implemented as debug/status-only (`ffb6a25 Add remote material eligibility preview`). It reports eligible/blocked material candidates for currently remote-added devices using diagnostic remote material only; it does not enable SAP/material behavior, does not give remote-added cards a runtime SAP/material number, and keeps local-only material paths unchanged.
+   - Material/SAP support should follow as separate stages: debug-only material enablement after strict known-material checks, then docs/checklist after smoke. Keep production auto-apply out of scope.
    - Eligibility checks include at least safe unique `deviceId`, existing normal `categoryId`, blocked special categories first (`cam_modules` and `modems`), locally implemented `validationProfileId`, safe `materialId` shape with later known-material behavior checks, safe `imagePath`/`helpImagePath` with fallback if packaged assets are missing, and `enabled: false` must not create a runtime card.
    - Broader fields should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
    - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
@@ -452,6 +453,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Controlled `Preview diff` smoke also passed and was reverted (`9822ef7` then `ea4afa8`): temporary remote changes produced `visual 1`, `risky 1`, `unknown 1`, `missing 0`; `Apply visual` updated only the existing visual label, did not add the unknown remote device, did not apply the risky `validationProfileId` change, and `Clear` returned local fallback.
    - Controlled unknown-device eligibility smoke passed and was reverted (`db12304` then `8f2de75`): temporary remote devices produced `unknown 3`, `eligible 1`, `blocked 2`, `missing 0`; samples identified the eligible test device, blocked `cam_modules`, and blocked `enabled: false`. `Apply visual` ignored the unknown devices and did not add runtime cards.
    - Controlled `Apply eligible` smoke passed and was reverted (`dcb2584` then `a3ceee0`): `Preview diff` showed `unknown 3`, `eligible 1`, `blocked 2`, `missing 0`; `Apply eligible` showed `added 1`, `blocked 2`, `rendered 1`; only `Preview Test Eligible Device` appeared under `routers`; blocked CAM/disabled devices did not appear; the remote-added card had no SAP/material number; help opened; `Clear` removed the temporary card and returned local fallback.
+   - Controlled remote material eligibility preview smoke passed and was reverted (`d6a8ed5` then `4ff2376`): `Preview diff` showed `unknown 3`, `eligible 1`, `blocked 2`; `Apply eligible` showed `added 1`, `blocked 2`, `rendered 1`; `Status` showed `remote material: eligible 1, blocked 0`; the remote-added card still had no SAP/material number; public config returned to standard state afterward.
    - Staged rollout:
      1. docs/spec;
      2. fetch + validate + cache, no apply - implemented;
@@ -460,7 +462,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      5. preview-only eligibility for unknown remote devices - implemented;
      6. manual in-memory UI-card-only apply for eligible additions - implemented;
      7. explicit effective catalog helper layer without new SAP/material behavior;
-     8. preview remote-added material eligibility;
+     8. preview remote-added material eligibility - implemented;
      9. debug-only material/SAP enablement after strict known-material checks;
      10. production-gated rollout later;
      11. broader risky fields later as separate plans.
