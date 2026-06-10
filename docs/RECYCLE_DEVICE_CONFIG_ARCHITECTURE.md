@@ -442,6 +442,9 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Unknown remote devices now have a manual UI-card-only stage (`0399fbd Add manual remote eligible device apply`). The packaged/local catalog remains the base and fallback; the implementation must not mutate `RECYCLE_DEVICE_CATALOG`, and must not rebuild `SWAP_MATERIAL_RECYCLE_FILTERS` from remote.
    - `Preview diff` now includes preview-only unknown-device eligibility (`82c8c5a Add remote device eligibility preview`): eligible/blocked counts plus capped compact samples with reasons/warnings. Eligible means "candidate for a future reviewed stage", not applied. Unknown devices are still not added as runtime cards, and `Apply visual` remains visual-only for existing local `deviceId` values.
    - `Apply eligible` can manually add only eligible unknown devices to an in-memory overlay so they appear as temporary recycle UI cards. These cards may use locally implemented `validationProfileId` help/validation, but do not enable SAP/material behavior, do not show a SAP/material number, do not affect material filters/snapshots/controlled fill, and disappear on `Clear` or page refresh.
+   - Next architecture direction: use Option B, an explicit effective catalog layer with small commit boundaries. The local packaged catalog remains the immutable base/fallback, while remote-added devices stay in an in-memory overlay. The first patch should formalize helpers such as `getRecycleEffectiveDeviceById`, `getRecycleEffectiveDevicesByCategory`, `getRecycleLocalDevicesByCategory`, `isRecycleRemoteAddedDevice`, and `getRecycleEffectiveMaterialId`; the default material mode must not return remote material for SAP.
+   - The first effective-layer patch must be behavior-preserving for SAP/material. Keep `SWAP_MATERIAL_RECYCLE_FILTERS`, `getSwapMaterialRecycleFilter`, `getRecycleDeviceImagePathByMaterialId`, material snapshot creation/validation, and controlled fill local-only until a separate material stage is reviewed.
+   - Material/SAP support should follow as separate stages: preview remote-added material eligibility, then debug-only material enablement, then docs/checklist after smoke. Keep production auto-apply out of scope.
    - Eligibility checks include at least safe unique `deviceId`, existing normal `categoryId`, blocked special categories first (`cam_modules` and `modems`), locally implemented `validationProfileId`, safe `materialId` shape with later known-material behavior checks, safe `imagePath`/`helpImagePath` with fallback if packaged assets are missing, and `enabled: false` must not create a runtime card.
    - Broader fields should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
    - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
@@ -456,9 +459,11 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      4. manual visual metadata overlay only - implemented;
      5. preview-only eligibility for unknown remote devices - implemented;
      6. manual in-memory UI-card-only apply for eligible additions - implemented;
-     7. material/SAP-enabled additions after a separate reviewed plan and strict known-material checks;
-     8. production-gated rollout later;
-     9. broader risky fields later as separate plans.
+     7. explicit effective catalog helper layer without new SAP/material behavior;
+     8. preview remote-added material eligibility;
+     9. debug-only material/SAP enablement after strict known-material checks;
+     10. production-gated rollout later;
+     11. broader risky fields later as separate plans.
 
 4. **Proper hosted admin panel later**
    - A hosted admin panel can add persistence, image upload, validation, revisioning, rollback, and simple roles.
