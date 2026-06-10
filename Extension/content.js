@@ -2395,6 +2395,20 @@
     return /\.(?:webp|png|jpe?g)$/i.test(pathValue);
   }
 
+  function isRecycleRemoteAddedDevice(device) {
+    return Boolean(device && device.remoteAdded === true);
+  }
+
+  function getRecycleEffectiveMaterialId(device, mode) {
+    const materialMode = String(mode || "sap").trim();
+    if (isRecycleRemoteAddedDevice(device)) {
+      return materialMode === "diagnostic"
+        ? normalizeSwapMaterialId(device?.remoteIgnoredMaterialId)
+        : "";
+    }
+    return normalizeSwapMaterialId(device?.materialId);
+  }
+
   function getRecycleRemoteNormalCategoryIdSet() {
     return new Set(
       RECYCLE_DEVICE_CATALOG
@@ -2484,27 +2498,38 @@
     return RECYCLE_DEVICE_CATALOG.find(d => d.deviceId === id && isRecycleDeviceEnabled(d)) || null;
   }
 
-  function getRecycleDeviceById(deviceId) {
+  function getRecycleEffectiveDeviceById(deviceId) {
     const id = String(deviceId || "").trim();
     if (!id) return null;
     return getRecycleLocalDeviceById(id) || recycleRemoteAddedDevicesByDeviceId.get(id) || null;
   }
 
-  function getRecycleDevicesByCategory(categoryId) {
+  function getRecycleLocalDevicesByCategory(categoryId) {
     const id = String(categoryId || "").trim();
     if (!id) return [];
-    const localDevices = RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id && isRecycleDeviceEnabled(d));
+    return RECYCLE_DEVICE_CATALOG.filter(d => d.categoryId === id && isRecycleDeviceEnabled(d));
+  }
+
+  function getRecycleEffectiveDevicesByCategory(categoryId) {
+    const id = String(categoryId || "").trim();
+    if (!id) return [];
+    const localDevices = getRecycleLocalDevicesByCategory(id);
     const remoteDevices = Array.from(recycleRemoteAddedDevicesByDeviceId.values())
       .filter(device => device.categoryId === id && isRecycleDeviceEnabled(device));
     return localDevices.concat(remoteDevices);
   }
 
+  function getRecycleDeviceById(deviceId) {
+    return getRecycleEffectiveDeviceById(deviceId);
+  }
+
+  function getRecycleDevicesByCategory(categoryId) {
+    return getRecycleEffectiveDevicesByCategory(categoryId);
+  }
+
   function getRecycleDeviceMaterialIdsByCategory(categoryId) {
-    const id = String(categoryId || "").trim();
-    if (!id) return [];
-    return RECYCLE_DEVICE_CATALOG
-      .filter(d => d.categoryId === id && isRecycleDeviceEnabled(d))
-      .map(d => normalizeSwapMaterialId(d.materialId))
+    return getRecycleLocalDevicesByCategory(categoryId)
+      .map(d => getRecycleEffectiveMaterialId(d, "sap"))
       .filter(Boolean);
   }
 
@@ -2567,7 +2592,7 @@
     readSelectedRecycleDeviceIdsStorage().forEach(deviceId => {
       const device = getRecycleDeviceById(deviceId);
       if (!device || device.categoryId !== category) return;
-      const materialId = normalizeSwapMaterialId(device.materialId);
+      const materialId = getRecycleEffectiveMaterialId(device, "sap");
       if (!materialId || order.has(materialId)) return;
       order.set(materialId, order.size);
     });
@@ -3467,11 +3492,11 @@
         const id = String(deviceId || "").trim();
         if (!id || seenDevices.has(id)) return;
         const device = getRecycleDeviceById(id);
-        if (device?.remoteAdded) return;
+        if (isRecycleRemoteAddedDevice(device)) return;
         if (!device || device.categoryId !== category) return;
         seenDevices.add(id);
         deviceIds.push(id);
-        const materialId = normalizeSwapMaterialId(device.materialId);
+        const materialId = getRecycleEffectiveMaterialId(device, "sap");
         if (materialId && !seenMaterials.has(materialId)) {
           seenMaterials.add(materialId);
           materialIds.push(materialId);
@@ -3512,11 +3537,11 @@
       const id = String(rawId || "").trim();
       if (!id || seenDevices.has(id)) return null;
       const device = getRecycleDeviceById(id);
-      if (device?.remoteAdded) return null;
+      if (isRecycleRemoteAddedDevice(device)) return null;
       if (!device || device.categoryId !== category) return null;
       seenDevices.add(id);
       deviceIds.push(id);
-      const materialId = normalizeSwapMaterialId(device.materialId);
+      const materialId = getRecycleEffectiveMaterialId(device, "sap");
       if (materialId && !seenMaterials.has(materialId)) {
         seenMaterials.add(materialId);
         materialIds.push(materialId);
@@ -5407,7 +5432,7 @@
     const createDeviceCard = (device) => {
       const visualDevice = getRecycleDeviceVisualView(device);
       const red = "#DA291C";
-      const materialId = normalizeSwapMaterialId(device?.materialId);
+      const materialId = getRecycleEffectiveMaterialId(device, "sap");
       const displayName = String(visualDevice?.displayName || materialId || "").trim();
       const deviceId = String(device?.deviceId || "").trim();
       const card = document.createElement("button");
