@@ -7,6 +7,7 @@ const { spawnSync } = require("child_process");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const EXTENSION_ROOT = path.join(REPO_ROOT, "Extension");
+const MANIFEST_PATH = path.join(EXTENSION_ROOT, "manifest.json");
 const EXPORT_SCRIPT = path.join(__dirname, "export-recycle-config-fixture.js");
 const VALIDATOR_SCRIPT = path.join(__dirname, "validate-recycle-config-fixture.js");
 
@@ -17,6 +18,10 @@ const EXPECTED_TOP_LEVEL_KEYS = [
   "categoryHelp",
   "validationProfiles",
   "generatedMaterialFilters"
+];
+
+const OPTIONAL_TOP_LEVEL_KEYS = [
+  "runtimeContract"
 ];
 
 const ALLOWED_DEVICE_FIELDS = [
@@ -31,6 +36,51 @@ const ALLOWED_DEVICE_FIELDS = [
   "validationProfileId",
   "enabled"
 ];
+
+const SUPPORTED_RUNTIME_CONTRACT_VERSIONS = new Set([1]);
+const SUPPORTED_RUNTIME_CAPABILITIES = new Set([
+  "visualOverlay",
+  "remoteAdditionsDebug",
+  "remoteMaterialPreview",
+  "remoteMaterialDebug",
+  "resolvedApplyPlan"
+]);
+const PERMANENTLY_FORBIDDEN_RUNTIME_CAPABILITIES = new Set([
+  "arbitraryJs",
+  "domSelectors",
+  "regexValidation",
+  "ossNavigation",
+  "clipboard",
+  "labelsBarcodes",
+  "dashboardApi",
+  "camFlow",
+  "rewriteMap",
+  "generatedMaterialFiltersRuntime"
+]);
+const RUNTIME_FIELD_POLICY_VALUES = new Set(["safe", "debug-only", "risky", "blocked"]);
+const RUNTIME_FIELD_POLICY_KEYS = new Set([
+  "schemaVersion",
+  "revision",
+  "deviceId",
+  "categoryId",
+  "displayName",
+  "imagePath",
+  "helpImagePath",
+  "warningText",
+  "materialId",
+  "legacyMaterialIds",
+  "validationProfileId",
+  "enabled",
+  "categoryHelp",
+  "validationProfiles",
+  "generatedMaterialFilters"
+]);
+const RUNTIME_FIELD_POLICY_SAFE_FORBIDDEN = new Set([
+  "legacyMaterialIds",
+  "categoryHelp",
+  "validationProfiles",
+  "generatedMaterialFilters"
+]);
 
 const SPECIAL_CATEGORIES = new Set(["cam_modules", "modems"]);
 const MANUAL_REVIEW_LIMIT = 20;
@@ -156,6 +206,43 @@ function arraysEqual(left, right) {
   return left.every((value, index) => value === right[index]);
 }
 
+function expectedTopLevelKeysFor(candidate) {
+  const keys = EXPECTED_TOP_LEVEL_KEYS.slice();
+  OPTIONAL_TOP_LEVEL_KEYS.forEach(key => {
+    if (candidate && Object.prototype.hasOwnProperty.call(candidate, key)) keys.push(key);
+  });
+  return keys;
+}
+
+function semverCore(value) {
+  return String(value || "").trim().split(/[+-]/)[0];
+}
+
+function isSemverLike(value) {
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(String(value || "").trim());
+}
+
+function compareSemverLike(left, right) {
+  const leftParts = semverCore(left).split(".").map(part => Number(part || 0));
+  const rightParts = semverCore(right).split(".").map(part => Number(part || 0));
+  for (let index = 0; index < 3; index += 1) {
+    const leftValue = Number.isFinite(leftParts[index]) ? leftParts[index] : 0;
+    const rightValue = Number.isFinite(rightParts[index]) ? rightParts[index] : 0;
+    if (leftValue > rightValue) return 1;
+    if (leftValue < rightValue) return -1;
+  }
+  return 0;
+}
+
+function readExtensionVersion() {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+    return String(manifest.version || "").trim();
+  } catch (error) {
+    return "";
+  }
+}
+
 function assetExists(assetPath) {
   const raw = normalizeString(assetPath);
   if (!raw) return true;
@@ -199,18 +286,118 @@ function collectTopLevelIssues(candidate) {
   }
 
   const keys = Object.keys(candidate);
-  const expectedSet = new Set(EXPECTED_TOP_LEVEL_KEYS);
+  const allowedSet = new Set([...EXPECTED_TOP_LEVEL_KEYS, ...OPTIONAL_TOP_LEVEL_KEYS]);
   const actualSet = new Set(keys);
   const missing = EXPECTED_TOP_LEVEL_KEYS.filter(key => !actualSet.has(key));
-  const unexpected = keys.filter(key => !expectedSet.has(key));
+  const unexpected = keys.filter(key => !allowedSet.has(key));
+  const expectedKeys = expectedTopLevelKeysFor(candidate);
 
   if (missing.length) issues.push(`missing top-level fields: ${missing.join(", ")}`);
   if (unexpected.length) issues.push(`unexpected top-level fields: ${unexpected.join(", ")}`);
-  if (!arraysEqual(keys, EXPECTED_TOP_LEVEL_KEYS)) {
-    issues.push(`top-level key order differs from expected: ${EXPECTED_TOP_LEVEL_KEYS.join(", ")}`);
+  if (!arraysEqual(keys, expectedKeys)) {
+    issues.push(`top-level key order differs from expected: ${expectedKeys.join(", ")}`);
   }
 
   return issues;
+}
+
+function collectRuntimeContractStringArrayIssues(contract, fieldName, errors, warnings) {
+  const value = contract[fieldName];
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    errors.push(`runtimeContract.${fieldName} must be an array`);
+    return [];
+  }
+
+  const normalized = [];
+  value.forEach((raw, index) => {
+    if (typeof raw !== "string") {
+      errors.push(`runtimeContract.${fieldName}[${index}] must be a string`);
+      return;
+    }
+    const item = raw.trim();
+    if (!item) {
+      errors.push(`runtimeContract.${fieldName}[${index}] is empty`);
+      return;
+    }
+    if (normalized.includes(item)) {
+      warnings.push(`runtimeContract.${fieldName} duplicates ${item}`);
+      return;
+    }
+    normalized.push(item);
+  });
+  return normalized;
+}
+
+function collectRuntimeContractIssues(candidate) {
+  const errors = [];
+  const warnings = [];
+  const runtimeContract = candidate && candidate.runtimeContract;
+
+  if (runtimeContract === undefined) return { errors, warnings };
+  if (!isPlainObject(runtimeContract)) {
+    errors.push("runtimeContract must be an object when present");
+    return { errors, warnings };
+  }
+
+  const contractVersion = runtimeContract.contractVersion;
+  if (contractVersion !== undefined) {
+    if (!Number.isInteger(contractVersion) || contractVersion <= 0) {
+      errors.push("runtimeContract.contractVersion must be a positive integer when present");
+    } else if (!SUPPORTED_RUNTIME_CONTRACT_VERSIONS.has(contractVersion)) {
+      errors.push(`runtimeContract.contractVersion ${contractVersion} is not supported`);
+    }
+  } else {
+    warnings.push("runtimeContract.contractVersion is missing; current runtime may report the contract as incompatible");
+  }
+
+  const minExtensionVersion = normalizeString(runtimeContract.minExtensionVersion);
+  if (runtimeContract.minExtensionVersion !== undefined) {
+    if (!isSemverLike(minExtensionVersion)) {
+      errors.push(`runtimeContract.minExtensionVersion must be semver-like: ${runtimeContract.minExtensionVersion}`);
+    } else {
+      const extensionVersion = readExtensionVersion();
+      if (extensionVersion && isSemverLike(extensionVersion) && compareSemverLike(extensionVersion, minExtensionVersion) < 0) {
+        warnings.push(`runtimeContract requires extension ${minExtensionVersion}, current manifest is ${extensionVersion}`);
+      }
+    }
+  }
+
+  const supportedCapabilities = collectRuntimeContractStringArrayIssues(runtimeContract, "supportedCapabilities", errors, warnings);
+  supportedCapabilities.forEach(capability => {
+    if (PERMANENTLY_FORBIDDEN_RUNTIME_CAPABILITIES.has(capability)) {
+      errors.push(`runtimeContract.supportedCapabilities must not include forbidden runtime control: ${capability}`);
+    } else if (!SUPPORTED_RUNTIME_CAPABILITIES.has(capability)) {
+      warnings.push(`runtimeContract.supportedCapabilities has unknown future capability: ${capability}`);
+    }
+  });
+
+  const blockedCapabilities = collectRuntimeContractStringArrayIssues(runtimeContract, "blockedCapabilities", errors, warnings);
+  blockedCapabilities.forEach(capability => {
+    if (!SUPPORTED_RUNTIME_CAPABILITIES.has(capability) && !PERMANENTLY_FORBIDDEN_RUNTIME_CAPABILITIES.has(capability)) {
+      warnings.push(`runtimeContract.blockedCapabilities has unknown capability: ${capability}`);
+    }
+  });
+
+  if (runtimeContract.fieldPolicy !== undefined) {
+    if (!isPlainObject(runtimeContract.fieldPolicy)) {
+      errors.push("runtimeContract.fieldPolicy must be an object when present");
+    } else {
+      Object.entries(runtimeContract.fieldPolicy).forEach(([fieldName, policy]) => {
+        if (!RUNTIME_FIELD_POLICY_KEYS.has(fieldName)) {
+          warnings.push(`runtimeContract.fieldPolicy has unknown field: ${fieldName}`);
+        }
+        if (!RUNTIME_FIELD_POLICY_VALUES.has(policy)) {
+          errors.push(`runtimeContract.fieldPolicy.${fieldName} must be one of ${Array.from(RUNTIME_FIELD_POLICY_VALUES).join(", ")}`);
+        }
+        if (policy === "safe" && RUNTIME_FIELD_POLICY_SAFE_FORBIDDEN.has(fieldName)) {
+          errors.push(`runtimeContract.fieldPolicy.${fieldName} must not be marked safe`);
+        }
+      });
+    }
+  }
+
+  return { errors, warnings };
 }
 
 function collectUnknownDeviceFields(candidate) {
@@ -370,6 +557,7 @@ function main() {
   const validation = validateCandidate(inputPath);
 
   const topLevelIssues = collectTopLevelIssues(candidate);
+  const runtimeContractIssues = collectRuntimeContractIssues(candidate);
   const unknownDeviceFields = collectUnknownDeviceFields(candidate);
   const assetAndProfileIssues = collectAssetAndProfileIssues(candidate, runtime);
   const deviceChanges = collectDeviceChanges(candidate, runtime);
@@ -380,11 +568,13 @@ function main() {
 
   const manualReviewOnly = [
     categoryHelpChange,
-    validationProfilesChange
+    validationProfilesChange,
+    ...runtimeContractIssues.warnings.map(issue => `runtimeContract review: ${issue}`)
   ].filter(Boolean);
 
   const blockingIssues = [
     ...topLevelIssues,
+    ...runtimeContractIssues.errors.map(issue => `runtimeContract invalid: ${issue}`),
     ...unknownDeviceFields.map(issue => `unknown device fields: ${issue}`),
     ...assetAndProfileIssues,
     ...materialFilterReview.issues.filter(issue => issue.includes("differs from candidate devices") || issue.includes("rebuild is empty")),
@@ -419,6 +609,10 @@ function main() {
   printList("Category moves", deviceChanges.categoryMoves, item => `${item.special ? "SPECIAL " : ""}${item.id}: ${item.before} -> ${item.after}`);
   printList("Unknown extra device fields", unknownDeviceFields, item => item);
   printList("Top-level field issues", topLevelIssues, item => item);
+  printList("Runtime contract issues", [
+    ...runtimeContractIssues.errors.map(issue => `ERROR: ${issue}`),
+    ...runtimeContractIssues.warnings.map(issue => `REVIEW: ${issue}`)
+  ], item => item);
   printList("Asset/profile issues", assetAndProfileIssues, item => item);
   printList("Generated material filter review", materialFilterReview.issues, item => item);
   printList("Manual-review-only sections", manualReviewOnly, item => item);
