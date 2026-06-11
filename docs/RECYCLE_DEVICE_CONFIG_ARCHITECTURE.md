@@ -412,7 +412,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Stage 2 (`8ff03dd`) added manual/debug remote fetch, runtime-safe validation, ETag/status handling, and `chrome.storage.local` last-known-good cache in `background.js`.
    - Stage 3 (`abae35a`) added a CSP-safe `content.js` `window.postMessage` debug bridge so OSS page DevTools can call refresh/status/clear without opening the MV3 service worker console.
    - Stage 4 (`bba8694`) added manual/in-memory visual overlay apply. It does not run on startup, does not schedule periodic refresh, and does not add visible production UI.
-   - The current debug control (`a5cf9f9`, `3b2ecdf`, `98868f7`, `0399fbd`) is a collapsed `Remote config debug` tray inside the extension-owned recycle panel, under the category/device grid. It exposes `Auto-refresh`, `Status`, `Refresh remote`, `Preview diff`, `Apply visual`, `Apply eligible`, and `Clear` for normal manual testing without pasting the page-console helper.
+   - The current debug control (`a5cf9f9`, `3b2ecdf`, `98868f7`, `0399fbd`, `c7e0005`) is a collapsed `Remote config debug` tray inside the extension-owned recycle panel, under the category/device grid. It exposes `Auto-refresh`, `Status`, `Refresh remote`, `Preview diff`, `Apply visual`, `Apply eligible`, `Enable material`, and `Clear` for normal manual testing without pasting the page-console helper.
    - Invalid, missing, or offline remote config falls back to the embedded/local catalog. Remote config must not hard-replace the local fallback, and remote omissions must not delete local devices.
    - Runtime ownership is split deliberately:
      - `background.js` owns remote fetch, timeout, ETag/status handling, runtime-safe validation, and `chrome.storage.local` last-known-good cache.
@@ -429,7 +429,8 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      - `Refresh remote` is always a manual force refresh. `Preview diff` compares the cached remote LKG catalog with the packaged local catalog before apply, showing only compact counts/samples for visual changes, risky changes, unknown remote devices, missing local devices, unknown-device eligibility, and revision/status when available. It does not return or display the full catalog/raw devices.
      - `Apply visual` is always manual and is never triggered by auto-refresh or preview.
      - `Apply eligible` is also manual/debug-only. It can place eligible unknown remote devices into an in-memory added-device overlay as temporary UI cards only.
-     - `Clear` removes remote cache/LKG/meta/status, the in-memory visual overlay, and any in-memory remote-added cards, but preserves the Auto-refresh ON/OFF setting.
+     - `Enable material` is manual/debug-only and applies only to already `Apply eligible` remote-added devices that pass strict known-material gates. It persists a minimal same-tab debug projection in `sessionStorage` key `wifi_oss_recycle_remote_debug_session_state_v1` so OSS navigation/full reload to `swap-material` can rehydrate before the material observer; it does not store the full remote catalog and does not trust remote `generatedMaterialFilters`.
+     - `Clear` removes remote cache/LKG/meta/status, the in-memory visual overlay, any in-memory remote-added cards, material enablement overlay, and the persisted debug session state, but preserves the Auto-refresh ON/OFF setting.
      - There is still no startup fetch, page-load fetch, auto-refresh on panel open, periodic/scheduled/fixed-time refresh, `chrome.alarms`, or auto-apply on page load.
      - Later, first recycle panel use may trigger a stale-cache refresh only after production timing/status UX is reviewed.
      - Presentation/debug shorter intervals are allowed only behind a debug flag.
@@ -445,7 +446,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Next architecture direction: use Option B, an explicit effective catalog layer with small commit boundaries. The local packaged catalog remains the immutable base/fallback, while remote-added devices stay in an in-memory overlay. The first patch should formalize helpers such as `getRecycleEffectiveDeviceById`, `getRecycleEffectiveDevicesByCategory`, `getRecycleLocalDevicesByCategory`, `isRecycleRemoteAddedDevice`, and `getRecycleEffectiveMaterialId`; the default material mode must not return remote material for SAP.
    - The first effective-layer patch must be behavior-preserving for SAP/material. Keep `SWAP_MATERIAL_RECYCLE_FILTERS`, `getSwapMaterialRecycleFilter`, `getRecycleDeviceImagePathByMaterialId`, material snapshot creation/validation, and controlled fill local-only until a separate material stage is reviewed.
    - Remote material eligibility preview is implemented as debug/status-only (`ffb6a25 Add remote material eligibility preview`). It reports eligible/blocked material candidates for currently remote-added devices using diagnostic remote material only; it does not enable SAP/material behavior, does not give remote-added cards a runtime SAP/material number, and keeps local-only material paths unchanged.
-   - Material/SAP support should follow as separate stages: debug-only material enablement after strict known-material checks, then docs/checklist after smoke. Keep production auto-apply out of scope.
+   - Debug-only material/SAP enablement is implemented (`c7e0005 Add debug remote material enablement`). It remains manual-only, blocks `cam_modules`, `modems`, `enabled: false`, unknown/non-digits material, and non-local validation profiles, and keeps production auto-apply out of scope.
    - Eligibility checks include at least safe unique `deviceId`, existing normal `categoryId`, blocked special categories first (`cam_modules` and `modems`), locally implemented `validationProfileId`, safe `materialId` shape with later known-material behavior checks, safe `imagePath`/`helpImagePath` with fallback if packaged assets are missing, and `enabled: false` must not create a runtime card.
    - Broader fields should wait for later test coverage because they affect SAP/material filtering, selected-device validation, and operator flow.
    - Remote config must never control arbitrary JS, arbitrary regex, DOM selectors, OSS navigation, clipboard parsers, labels/barcodes, CAM flow, auto-continue, `rewriteMap`, keyboard normalization, or dashboard polling.
@@ -454,6 +455,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
    - Controlled unknown-device eligibility smoke passed and was reverted (`db12304` then `8f2de75`): temporary remote devices produced `unknown 3`, `eligible 1`, `blocked 2`, `missing 0`; samples identified the eligible test device, blocked `cam_modules`, and blocked `enabled: false`. `Apply visual` ignored the unknown devices and did not add runtime cards.
    - Controlled `Apply eligible` smoke passed and was reverted (`dcb2584` then `a3ceee0`): `Preview diff` showed `unknown 3`, `eligible 1`, `blocked 2`, `missing 0`; `Apply eligible` showed `added 1`, `blocked 2`, `rendered 1`; only `Preview Test Eligible Device` appeared under `routers`; blocked CAM/disabled devices did not appear; the remote-added card had no SAP/material number; help opened; `Clear` removed the temporary card and returned local fallback.
    - Controlled remote material eligibility preview smoke passed and was reverted (`d6a8ed5` then `4ff2376`): `Preview diff` showed `unknown 3`, `eligible 1`, `blocked 2`; `Apply eligible` showed `added 1`, `blocked 2`, `rendered 1`; `Status` showed `remote material: eligible 1, blocked 0`; the remote-added card still had no SAP/material number; public config returned to standard state afterward.
+   - Controlled debug material enablement smoke passed and was reverted (`463be5b` then `54ec86e`): `Preview diff` showed `unknown 3`, `eligible 1`, `blocked 2`; `Apply eligible` added `Preview Test Material Device`; before `Enable material` it had no SAP/material number; `Enable material` showed `material enabled 1`, `blocked 0`; the recycle card showed `123451`; after OSS navigation/full reload, the `swap-material` page showed Material Id `123451` and quick card `ZTE MF296R / 123451`.
    - Staged rollout:
      1. docs/spec;
      2. fetch + validate + cache, no apply - implemented;
@@ -463,7 +465,7 @@ Recommended direction is a hybrid path, not an immediate dependency on the curre
      6. manual in-memory UI-card-only apply for eligible additions - implemented;
      7. explicit effective catalog helper layer without new SAP/material behavior;
      8. preview remote-added material eligibility - implemented;
-     9. debug-only material/SAP enablement after strict known-material checks;
+     9. debug-only material/SAP enablement after strict known-material checks - implemented;
      10. production-gated rollout later;
      11. broader risky fields later as separate plans.
 
