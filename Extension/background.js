@@ -3,6 +3,31 @@ const RECYCLE_REMOTE_CONFIG_TIMEOUT_MS = 15000;
 const RECYCLE_REMOTE_CONFIG_MAX_BYTES = 1024 * 1024;
 const RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS = 6 * 60 * 60 * 1000;
 
+const RECYCLE_REMOTE_RUNTIME_CONTRACT = {
+  extensionVersion: "1.0.1",
+  supportedSchemaVersions: [1],
+  supportedContractVersions: [1],
+  supportedCapabilities: [
+    "visualOverlay",
+    "resolvedPlanPreview",
+    "remoteAdditionsDebug",
+    "remoteMaterialPreview",
+    "remoteMaterialDebug"
+  ],
+  blockedCapabilities: [
+    "arbitraryJs",
+    "domSelectors",
+    "regexValidation",
+    "ossNavigation",
+    "clipboard",
+    "labelsBarcodes",
+    "dashboardApi",
+    "camFlow",
+    "rewriteMap",
+    "generatedMaterialFiltersRuntime"
+  ]
+};
+
 const RECYCLE_REMOTE_CONFIG_KEYS = {
   lkg: "wifi_oss_recycle_remote_config_lkg_v1",
   meta: "wifi_oss_recycle_remote_config_meta_v1",
@@ -17,6 +42,10 @@ const RECYCLE_REMOTE_EXPECTED_TOP_LEVEL_KEYS = [
   "categoryHelp",
   "validationProfiles",
   "generatedMaterialFilters"
+];
+
+const RECYCLE_REMOTE_OPTIONAL_TOP_LEVEL_KEYS = [
+  "runtimeContract"
 ];
 
 const RECYCLE_REMOTE_ALLOWED_DEVICE_FIELDS = [
@@ -48,6 +77,7 @@ const RECYCLE_REMOTE_RISKY_DIFF_FIELDS = [
 ];
 
 const RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT = 5;
+const RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT = 5;
 
 function recycleRemoteNowIso() {
   return new Date().toISOString();
@@ -59,6 +89,145 @@ function recycleRemoteIsPlainObject(value) {
 
 function recycleRemoteTrim(value) {
   return String(value || "").trim();
+}
+
+function recycleRemoteGetExtensionVersion() {
+  return recycleRemoteTrim(chrome?.runtime?.getManifest?.().version) || RECYCLE_REMOTE_RUNTIME_CONTRACT.extensionVersion;
+}
+
+function recycleRemoteCompareVersions(left, right) {
+  const leftParts = recycleRemoteTrim(left).split(".").map(part => Number(part || 0));
+  const rightParts = recycleRemoteTrim(right).split(".").map(part => Number(part || 0));
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftValue = Number.isFinite(leftParts[index]) ? leftParts[index] : 0;
+    const rightValue = Number.isFinite(rightParts[index]) ? rightParts[index] : 0;
+    if (leftValue > rightValue) return 1;
+    if (leftValue < rightValue) return -1;
+  }
+  return 0;
+}
+
+function recycleRemoteNormalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  const normalized = [];
+  value.forEach(raw => {
+    const item = recycleRemoteTrim(raw);
+    if (item && !normalized.includes(item) && normalized.length < RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT * 4) {
+      normalized.push(item);
+    }
+  });
+  return normalized;
+}
+
+function recycleRemoteNormalizeRuntimeContract(value) {
+  if (value == null) return null;
+  if (!recycleRemoteIsPlainObject(value)) {
+    return { invalidType: Object.prototype.toString.call(value) };
+  }
+
+  const fieldPolicy = {};
+  if (recycleRemoteIsPlainObject(value.fieldPolicy)) {
+    Object.keys(value.fieldPolicy).slice(0, 50).forEach(fieldName => {
+      const field = recycleRemoteTrim(fieldName);
+      const policy = recycleRemoteTrim(value.fieldPolicy[fieldName]);
+      if (field && policy) fieldPolicy[field] = policy;
+    });
+  }
+
+  return {
+    contractVersion: value.contractVersion,
+    minExtensionVersion: recycleRemoteTrim(value.minExtensionVersion),
+    supportedCapabilities: recycleRemoteNormalizeStringArray(value.supportedCapabilities),
+    blockedCapabilities: recycleRemoteNormalizeStringArray(value.blockedCapabilities),
+    fieldPolicy
+  };
+}
+
+function recycleRemoteEvaluateCatalogContract(catalog, meta) {
+  const schemaVersion = meta?.schemaVersion ?? catalog?.schemaVersion ?? null;
+  const runtimeContract = catalog?.runtimeContract || null;
+  const warnings = [];
+  const errors = [];
+  const extensionVersion = recycleRemoteGetExtensionVersion();
+
+  if (!catalog) {
+    return {
+      ok: true,
+      mode: "no_data",
+      schemaVersion,
+      contractVersion: null,
+      extensionVersion,
+      warnings,
+      errors
+    };
+  }
+
+  if (!RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedSchemaVersions.includes(schemaVersion)) {
+    errors.push(`unsupported schemaVersion ${schemaVersion}`);
+  }
+
+  if (!runtimeContract) {
+    warnings.push("runtimeContract missing; using legacy v1 compatibility");
+    return {
+      ok: errors.length === 0,
+      mode: "legacy_v1",
+      schemaVersion,
+      contractVersion: null,
+      extensionVersion,
+      supportedCapabilities: RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedCapabilities.slice(),
+      blockedCapabilities: RECYCLE_REMOTE_RUNTIME_CONTRACT.blockedCapabilities.slice(),
+      warnings,
+      errors
+    };
+  }
+
+  if (runtimeContract.invalidType) {
+    errors.push(`runtimeContract must be an object, got ${runtimeContract.invalidType}`);
+  }
+
+  const contractVersion = Number(runtimeContract.contractVersion || 0);
+  if (!Number.isInteger(contractVersion) || contractVersion <= 0) {
+    errors.push("runtimeContract.contractVersion is required");
+  } else if (!RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedContractVersions.includes(contractVersion)) {
+    errors.push(`unsupported runtimeContract.contractVersion ${contractVersion}`);
+  }
+
+  const minExtensionVersion = recycleRemoteTrim(runtimeContract.minExtensionVersion);
+  if (minExtensionVersion && recycleRemoteCompareVersions(extensionVersion, minExtensionVersion) < 0) {
+    errors.push(`requires extension ${minExtensionVersion}`);
+  }
+
+  const supportedCapabilities = recycleRemoteNormalizeStringArray(runtimeContract.supportedCapabilities);
+  const blockedCapabilities = recycleRemoteNormalizeStringArray(runtimeContract.blockedCapabilities);
+  const unknownCapabilities = supportedCapabilities
+    .filter(capability => !RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedCapabilities.includes(capability))
+    .slice(0, RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT);
+  if (unknownCapabilities.length) {
+    warnings.push(`unsupported capabilities ignored: ${unknownCapabilities.join(",")}`);
+  }
+
+  const blockedRuntimeControl = supportedCapabilities
+    .filter(capability => RECYCLE_REMOTE_RUNTIME_CONTRACT.blockedCapabilities.includes(capability))
+    .slice(0, RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT);
+  if (blockedRuntimeControl.length) {
+    errors.push(`blocked capabilities requested: ${blockedRuntimeControl.join(",")}`);
+  }
+
+  return {
+    ok: errors.length === 0,
+    mode: "explicit_contract",
+    schemaVersion,
+    contractVersion: Number.isInteger(contractVersion) && contractVersion > 0 ? contractVersion : null,
+    minExtensionVersion,
+    extensionVersion,
+    supportedCapabilities: supportedCapabilities
+      .filter(capability => RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedCapabilities.includes(capability))
+      .slice(0, RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT),
+    blockedCapabilities: blockedCapabilities.slice(0, RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT),
+    warnings,
+    errors
+  };
 }
 
 function recycleRemoteByteLength(text) {
@@ -353,7 +522,7 @@ function recycleRemoteValidateCatalog(catalog) {
   }
 
   Object.keys(catalog).forEach((key) => {
-    if (!RECYCLE_REMOTE_EXPECTED_TOP_LEVEL_KEYS.includes(key)) {
+    if (!RECYCLE_REMOTE_EXPECTED_TOP_LEVEL_KEYS.includes(key) && !RECYCLE_REMOTE_OPTIONAL_TOP_LEVEL_KEYS.includes(key)) {
       recycleRemoteAddIssue(issues, "catalog.unknownTopLevelKey", `Unknown top-level key: ${key}`);
     }
   });
@@ -384,7 +553,8 @@ function recycleRemoteValidateCatalog(catalog) {
       devices,
       categoryHelp,
       validationProfiles: profiles,
-      generatedMaterialFilters
+      generatedMaterialFilters,
+      runtimeContract: recycleRemoteNormalizeRuntimeContract(catalog.runtimeContract)
     }
   };
 }
@@ -410,6 +580,7 @@ function recycleRemoteBuildStatusResponse(stored, result) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const status = stored?.[keys.status] || null;
   const meta = stored?.[keys.meta] || null;
+  const lkg = stored?.[keys.lkg] || null;
   const hasLastKnownGood = Boolean(stored?.[keys.lkg]);
   const autoRefreshEnabled = stored?.[keys.enabled] === true;
   const lastFreshAt = recycleRemoteTrim(meta?.fetchedAt || status?.lastSuccessAt);
@@ -428,7 +599,8 @@ function recycleRemoteBuildStatusResponse(stored, result) {
     lastFreshAt,
     ageMs,
     isStale,
-    hasLastKnownGood
+    hasLastKnownGood,
+    contractCompatibility: recycleRemoteEvaluateCatalogContract(lkg, meta)
   };
 }
 
@@ -777,6 +949,7 @@ function recycleRemoteBuildResolvedCatalogPlan(localDevices, remoteCatalog, meta
   const additions = recycleRemoteBuildEligibleDeviceAdditions(localDevices, remoteCatalog, meta, status, eligibilityContext);
   const sourceRevision = recycleRemoteTrim(meta?.revision || remoteCatalog?.revision);
   const schemaVersion = meta?.schemaVersion ?? remoteCatalog?.schemaVersion ?? null;
+  const contractCompatibility = recycleRemoteEvaluateCatalogContract(remoteCatalog, meta);
   const materialEligibleAdditions = (Array.isArray(additions.additions) ? additions.additions : [])
     .filter(addition => /^\d+$/.test(recycleRemoteTrim(addition?.materialId)));
   const riskyChanges = Number(preview?.summary?.riskyChanges || 0);
@@ -797,6 +970,7 @@ function recycleRemoteBuildResolvedCatalogPlan(localDevices, remoteCatalog, meta
     appliedMode: "preview_only",
     sourceRevision,
     schemaVersion,
+    contractCompatibility,
     meta: meta || null,
     status: status || null,
     counts: {
@@ -867,6 +1041,7 @@ function recycleRemoteBuildResolvedCatalogApplyPlan(localDevices, remoteCatalog,
     appliedMode: "manual_debug_apply_plan",
     sourceRevision: previewPlan.sourceRevision,
     schemaVersion: previewPlan.schemaVersion,
+    contractCompatibility: previewPlan.contractCompatibility,
     meta: meta || null,
     status: status || null,
     counts: previewPlan.counts,
@@ -972,6 +1147,7 @@ async function recycleRemoteClearCache() {
     result: "cleared",
     status: recycleRemoteBuildStatus("cleared", Date.now(), { lastAttemptAt: recycleRemoteNowIso() }),
     meta: null,
+    contractCompatibility: recycleRemoteEvaluateCatalogContract(null, null),
     enabled: autoRefreshEnabled,
     autoRefreshEnabled,
     ttlMs: RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS,
@@ -989,9 +1165,11 @@ async function recycleRemoteRefresh() {
   const lastAttemptAt = recycleRemoteNowIso();
   let lastHttpStatus = 0;
   let previousMeta = null;
+  let previousLkg = null;
 
   try {
-    const stored = await recycleRemoteChromeGet([keys.meta, keys.status]);
+    const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
+    previousLkg = stored[keys.lkg] || null;
     previousMeta = stored[keys.meta] || null;
     const headers = { Accept: "application/json" };
     if (previousMeta?.etag) headers["If-None-Match"] = previousMeta.etag;
@@ -1010,7 +1188,14 @@ async function recycleRemoteRefresh() {
         lastHttpStatus
       });
       await recycleRemoteChromeSet({ [keys.status]: status });
-      return { ok: true, result: "not_modified", meta: previousMeta, status, errors: [] };
+      return {
+        ok: true,
+        result: "not_modified",
+        meta: previousMeta,
+        status,
+        contractCompatibility: recycleRemoteEvaluateCatalogContract(previousLkg, previousMeta),
+        errors: []
+      };
     }
 
     if (!response.ok) {
@@ -1066,7 +1251,14 @@ async function recycleRemoteRefresh() {
       [keys.meta]: meta,
       [keys.status]: status
     });
-    return { ok: true, result: "updated", meta, status, errors: [] };
+    return {
+      ok: true,
+      result: "updated",
+      meta,
+      status,
+      contractCompatibility: recycleRemoteEvaluateCatalogContract(validation.sanitized, meta),
+      errors: []
+    };
   } catch (error) {
     const status = recycleRemoteBuildStatus("fetch_failed", startedAt, {
       lastAttemptAt,

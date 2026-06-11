@@ -5084,6 +5084,27 @@
     if (sampleParts.length) parts.push(sampleParts.join(" | "));
   }
 
+  function appendRecycleRemoteContractStatus(parts, response) {
+    const compatibility = response?.contractCompatibility;
+    if (!compatibility || typeof compatibility !== "object") return;
+    if (compatibility.mode === "no_data") return;
+
+    if (compatibility.ok === false) {
+      parts.push("contract incompatible");
+    } else if (compatibility.mode === "legacy_v1") {
+      parts.push("contract legacy ok");
+    } else if (compatibility.contractVersion) {
+      parts.push(`contract v${compatibility.contractVersion} ok`);
+    } else {
+      parts.push("contract ok");
+    }
+
+    const warnings = Array.isArray(compatibility.warnings) ? compatibility.warnings.length : 0;
+    const errors = Array.isArray(compatibility.errors) ? compatibility.errors.length : 0;
+    if (errors) parts.push(`contract errors ${errors}`);
+    if (warnings && compatibility.mode !== "legacy_v1") parts.push(`contract warnings ${warnings}`);
+  }
+
   function formatRecycleRemoteMaterialEligibilitySample(sample) {
     const deviceId = String(sample?.deviceId || "").trim();
     const displayName = String(sample?.displayName || "").trim();
@@ -5133,6 +5154,7 @@
     if (typeof response?.autoRefreshEnabled === "boolean") parts.push(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`);
     if (typeof response?.isStale === "boolean") parts.push(response.isStale ? "stale" : "fresh");
     if (revision) parts.push(`rev ${revision}`);
+    appendRecycleRemoteContractStatus(parts, response);
     if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
     if (typeof response?.addedCount === "number") parts.push(`added ${response.addedCount}`);
     if (typeof response?.blockedCount === "number") parts.push(`blocked ${response.blockedCount}`);
