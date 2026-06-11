@@ -833,6 +833,54 @@ function recycleRemoteBuildResolvedCatalogPlan(localDevices, remoteCatalog, meta
   };
 }
 
+function recycleRemoteProjectApplySafeEligibleAddition(entry) {
+  return {
+    deviceId: recycleRemoteTrim(entry?.deviceId),
+    categoryId: recycleRemoteTrim(entry?.categoryId),
+    displayName: recycleRemoteTrim(entry?.displayName),
+    materialId: recycleRemoteTrim(entry?.materialId),
+    imagePath: recycleRemoteTrim(entry?.imagePath),
+    helpImagePath: recycleRemoteTrim(entry?.helpImagePath),
+    warningText: recycleRemoteTrim(entry?.warningText),
+    validationProfileId: recycleRemoteTrim(entry?.validationProfileId),
+    enabled: entry?.enabled !== false
+  };
+}
+
+function recycleRemoteBuildResolvedCatalogApplyPlan(localDevices, remoteCatalog, meta, status, eligibilityContext) {
+  const previewPlan = recycleRemoteBuildResolvedCatalogPlan(localDevices, remoteCatalog, meta, status, eligibilityContext);
+  const additions = recycleRemoteBuildEligibleDeviceAdditions(localDevices, remoteCatalog, meta, status, eligibilityContext);
+  const entries = (Array.isArray(additions.additions) ? additions.additions : [])
+    .map(recycleRemoteProjectApplySafeEligibleAddition)
+    .filter(entry => entry.deviceId);
+  const summary = {
+    unknownRemoteDevices: Number(additions?.summary?.unknownRemoteDevices || 0),
+    eligible: entries.length,
+    blocked: Number(additions?.summary?.blocked || 0)
+  };
+
+  return {
+    ok: true,
+    result: remoteCatalog ? (entries.length ? "apply_plan" : "no_eligible") : "no_data",
+    appliedMode: "manual_debug_apply_plan",
+    sourceRevision: previewPlan.sourceRevision,
+    schemaVersion: previewPlan.schemaVersion,
+    meta: meta || null,
+    status: status || null,
+    counts: previewPlan.counts,
+    summary,
+    eligibleAdditions: {
+      count: entries.length,
+      entries
+    },
+    blocked: {
+      count: summary.blocked,
+      samples: Array.isArray(additions?.samples?.blocked) ? additions.samples.blocked.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
+    },
+    generatedMaterialFiltersTrusted: false
+  };
+}
+
 async function recycleRemoteGetCatalogDiffPreview(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
@@ -849,6 +897,18 @@ async function recycleRemoteGetResolvedCatalogPlan(localDevices, eligibilityCont
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
   return recycleRemoteBuildResolvedCatalogPlan(
+    Array.isArray(localDevices) ? localDevices : [],
+    stored[keys.lkg] || null,
+    stored[keys.meta] || null,
+    stored[keys.status] || null,
+    eligibilityContext || null
+  );
+}
+
+async function recycleRemoteGetResolvedCatalogApplyPlan(localDevices, eligibilityContext) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
+  return recycleRemoteBuildResolvedCatalogApplyPlan(
     Array.isArray(localDevices) ? localDevices : [],
     stored[keys.lkg] || null,
     stored[keys.meta] || null,
@@ -1079,6 +1139,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.getResolvedCatalogPlan") {
         return respondOnce(await recycleRemoteGetResolvedCatalogPlan(msg.localDevices, msg.eligibilityContext));
+      }
+
+      if (msg.type === "recycleConfig.getResolvedCatalogApplyPlan") {
+        return respondOnce(await recycleRemoteGetResolvedCatalogApplyPlan(msg.localDevices, msg.eligibilityContext));
       }
 
       if (msg.type === "recycleConfig.getEligibleDeviceAdditions") {

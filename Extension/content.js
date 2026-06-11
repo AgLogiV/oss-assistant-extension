@@ -11,6 +11,7 @@
     setAutoRefresh: "recycleConfig.setAutoRefreshEnabled",
     previewDiff: "recycleConfig.getCatalogDiffPreview",
     resolvedPlan: "recycleConfig.getResolvedCatalogPlan",
+    resolvedApplyPlan: "recycleConfig.getResolvedCatalogApplyPlan",
     eligibleAdditions: "recycleConfig.getEligibleDeviceAdditions"
   };
   const RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION = "applyVisualOverlay";
@@ -4837,14 +4838,14 @@
 
   async function applyRecycleRemoteEligibleDevices() {
     const response = await sendRecycleRemoteConfigDebugMessage(
-      RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.eligibleAdditions,
+      RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.resolvedApplyPlan,
       {
         localDevices: getRecycleLocalCatalogDiffPreviewDevices(),
         eligibilityContext: getRecycleRemoteDiffEligibilityContext()
       }
     );
-    const sourceRevision = String(response?.meta?.revision || "").trim();
-    const additions = Array.isArray(response?.additions) ? response.additions : [];
+    const sourceRevision = String(response?.sourceRevision || response?.meta?.revision || "").trim();
+    const additions = Array.isArray(response?.eligibleAdditions?.entries) ? response.eligibleAdditions.entries : [];
 
     if (!response?.ok || !additions.length) {
       clearRecycleRemoteMaterialEnablement();
