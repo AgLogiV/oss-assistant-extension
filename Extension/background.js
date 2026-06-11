@@ -761,10 +761,94 @@ function recycleRemoteBuildEligibleDeviceAdditions(localDevices, remoteCatalog, 
   };
 }
 
+function recycleRemoteMergePreviewSamples(sampleGroups) {
+  const merged = [];
+  (Array.isArray(sampleGroups) ? sampleGroups : []).forEach(group => {
+    (Array.isArray(group) ? group : []).forEach(sample => {
+      if (merged.length >= RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) return;
+      merged.push(recycleRemoteBuildPreviewSample(sample, sample?.fields || []));
+    });
+  });
+  return merged;
+}
+
+function recycleRemoteBuildResolvedCatalogPlan(localDevices, remoteCatalog, meta, status, eligibilityContext) {
+  const preview = recycleRemoteBuildCatalogDiffPreview(localDevices, remoteCatalog, meta, status, eligibilityContext);
+  const additions = recycleRemoteBuildEligibleDeviceAdditions(localDevices, remoteCatalog, meta, status, eligibilityContext);
+  const sourceRevision = recycleRemoteTrim(meta?.revision || remoteCatalog?.revision);
+  const schemaVersion = meta?.schemaVersion ?? remoteCatalog?.schemaVersion ?? null;
+  const materialEligibleAdditions = (Array.isArray(additions.additions) ? additions.additions : [])
+    .filter(addition => /^\d+$/.test(recycleRemoteTrim(addition?.materialId)));
+  const riskyChanges = Number(preview?.summary?.riskyChanges || 0);
+  const blockedUnknown = Number(preview?.summary?.unknownEligibility?.blocked || 0);
+  const missingLocalDevices = Number(preview?.summary?.missingLocalDevices || 0);
+  const blockedSamples = recycleRemoteMergePreviewSamples([
+    preview?.samples?.riskyChanges,
+    preview?.samples?.unknownBlockedDevices
+  ]);
+  const warningSamples = recycleRemoteMergePreviewSamples([
+    preview?.samples?.missingLocalDevices,
+    preview?.samples?.unknownEligibleDevices
+  ]);
+
+  return {
+    ok: true,
+    result: remoteCatalog ? "resolved_plan" : "no_data",
+    appliedMode: "preview_only",
+    sourceRevision,
+    schemaVersion,
+    meta: meta || null,
+    status: status || null,
+    counts: {
+      visualUpdates: Number(preview?.summary?.visualChanges || 0),
+      riskyChanges,
+      unknownRemoteDevices: Number(preview?.summary?.unknownRemoteDevices || 0),
+      missingLocalDevices,
+      eligibleAdditions: Number(additions?.summary?.eligible || 0),
+      materialEligibleAdditions: materialEligibleAdditions.length,
+      blocked: riskyChanges + blockedUnknown,
+      warnings: missingLocalDevices
+    },
+    visualUpdates: {
+      count: Number(preview?.summary?.visualChanges || 0),
+      samples: Array.isArray(preview?.samples?.visualChanges) ? preview.samples.visualChanges.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
+    },
+    eligibleAdditions: {
+      count: Number(additions?.summary?.eligible || 0),
+      samples: Array.isArray(additions?.samples?.eligible) ? additions.samples.eligible.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
+    },
+    materialEligibleAdditions: {
+      count: materialEligibleAdditions.length,
+      samples: Array.isArray(additions?.samples?.eligible) ? additions.samples.eligible.slice(0, RECYCLE_REMOTE_DIFF_SAMPLE_LIMIT) : []
+    },
+    blocked: {
+      count: riskyChanges + blockedUnknown,
+      samples: blockedSamples
+    },
+    warnings: {
+      count: missingLocalDevices,
+      samples: warningSamples
+    },
+    generatedMaterialFiltersTrusted: false
+  };
+}
+
 async function recycleRemoteGetCatalogDiffPreview(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
   return recycleRemoteBuildCatalogDiffPreview(
+    Array.isArray(localDevices) ? localDevices : [],
+    stored[keys.lkg] || null,
+    stored[keys.meta] || null,
+    stored[keys.status] || null,
+    eligibilityContext || null
+  );
+}
+
+async function recycleRemoteGetResolvedCatalogPlan(localDevices, eligibilityContext) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
+  return recycleRemoteBuildResolvedCatalogPlan(
     Array.isArray(localDevices) ? localDevices : [],
     stored[keys.lkg] || null,
     stored[keys.meta] || null,
@@ -991,6 +1075,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.getCatalogDiffPreview") {
         return respondOnce(await recycleRemoteGetCatalogDiffPreview(msg.localDevices, msg.eligibilityContext));
+      }
+
+      if (msg.type === "recycleConfig.getResolvedCatalogPlan") {
+        return respondOnce(await recycleRemoteGetResolvedCatalogPlan(msg.localDevices, msg.eligibilityContext));
       }
 
       if (msg.type === "recycleConfig.getEligibleDeviceAdditions") {

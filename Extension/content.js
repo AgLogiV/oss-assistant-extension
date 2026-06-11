@@ -10,10 +10,12 @@
     maybeRefresh: "recycleConfig.maybeRefreshRemote",
     setAutoRefresh: "recycleConfig.setAutoRefreshEnabled",
     previewDiff: "recycleConfig.getCatalogDiffPreview",
+    resolvedPlan: "recycleConfig.getResolvedCatalogPlan",
     eligibleAdditions: "recycleConfig.getEligibleDeviceAdditions"
   };
   const RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION = "applyVisualOverlay";
   const RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION = "previewDiff";
+  const RECYCLE_REMOTE_CONFIG_RESOLVED_PLAN_ACTION = "resolvedPlan";
   const RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION = "applyEligibleDevices";
 
   function sendRecycleRemoteConfigDebugMessage(type, payload) {
@@ -63,6 +65,11 @@
       console.info("[recycleRemoteConfig] previewDiff", response);
       return response;
     },
+    async resolvedPlan() {
+      const response = await previewRecycleRemoteResolvedCatalogPlan();
+      console.info("[recycleRemoteConfig] resolvedPlan", response);
+      return response;
+    },
     async applyEligibleDevices() {
       const response = await applyRecycleRemoteEligibleDevices();
       console.info("[recycleRemoteConfig] applyEligibleDevices", response);
@@ -78,8 +85,9 @@
     const type = RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES[action];
     const isApplyVisualOverlay = action === RECYCLE_REMOTE_CONFIG_APPLY_VISUAL_ACTION;
     const isPreviewDiff = action === RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION;
+    const isResolvedPlan = action === RECYCLE_REMOTE_CONFIG_RESOLVED_PLAN_ACTION;
     const isApplyEligibleDevices = action === RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION;
-    if (!type && !isApplyVisualOverlay && !isPreviewDiff && !isApplyEligibleDevices) return;
+    if (!type && !isApplyVisualOverlay && !isPreviewDiff && !isResolvedPlan && !isApplyEligibleDevices) return;
 
     const requestId = String(data.requestId || "");
     try {
@@ -90,6 +98,8 @@
         response = await applyRecycleRemoteEligibleDevices();
       } else if (isPreviewDiff) {
         response = await previewRecycleRemoteCatalogDiff();
+      } else if (isResolvedPlan) {
+        response = await previewRecycleRemoteResolvedCatalogPlan();
       } else {
         response = await sendRecycleRemoteConfigDebugMessage(type);
       }
@@ -2377,6 +2387,16 @@
   function previewRecycleRemoteCatalogDiff() {
     return sendRecycleRemoteConfigDebugMessage(
       RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.previewDiff,
+      {
+        localDevices: getRecycleLocalCatalogDiffPreviewDevices(),
+        eligibilityContext: getRecycleRemoteDiffEligibilityContext()
+      }
+    );
+  }
+
+  function previewRecycleRemoteResolvedCatalogPlan() {
+    return sendRecycleRemoteConfigDebugMessage(
+      RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.resolvedPlan,
       {
         localDevices: getRecycleLocalCatalogDiffPreviewDevices(),
         eligibilityContext: getRecycleRemoteDiffEligibilityContext()
@@ -4991,6 +5011,33 @@
     if (sampleParts.length) parts.push(sampleParts.join(" | "));
   }
 
+  function appendRecycleRemoteResolvedPlanStatus(parts, response) {
+    const counts = response?.counts;
+    if (!counts || typeof counts !== "object" || response?.appliedMode !== "preview_only") return;
+    const visual = Number(counts.visualUpdates || 0);
+    const add = Number(counts.eligibleAdditions || 0);
+    const material = Number(counts.materialEligibleAdditions || 0);
+    const blocked = Number(counts.blocked || 0);
+    const warnings = Number(counts.warnings || 0);
+    parts.push(`plan: visual ${visual} | add ${add} | material ${material} | blocked ${blocked}${warnings ? ` | warnings ${warnings}` : ""}`);
+
+    const sampleParts = [
+      ["plan visual", response?.visualUpdates?.samples],
+      ["plan add", response?.eligibleAdditions?.samples],
+      ["plan blocked", response?.blocked?.samples],
+      ["plan warnings", response?.warnings?.samples]
+    ]
+      .map(([label, items]) => {
+        const formatted = (Array.isArray(items) ? items : [])
+          .map(formatRecycleRemoteDiffSample)
+          .filter(Boolean)
+          .slice(0, 3);
+        return formatted.length ? `${label}: ${formatted.join("; ")}` : "";
+      })
+      .filter(Boolean);
+    if (sampleParts.length) parts.push(sampleParts.join(" | "));
+  }
+
   function formatRecycleRemoteMaterialEligibilitySample(sample) {
     const deviceId = String(sample?.deviceId || "").trim();
     const displayName = String(sample?.displayName || "").trim();
@@ -5046,6 +5093,7 @@
     if (typeof response?.materialEnabledCount === "number") parts.push(`material enabled ${response.materialEnabledCount}`);
     if (typeof response?.materialBlockedCount === "number") parts.push(`material blocked ${response.materialBlockedCount}`);
     if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
+    appendRecycleRemoteResolvedPlanStatus(parts, response);
     appendRecycleRemoteDiffPreviewStatus(parts, response);
     if (response?.hasLastKnownGood === true) parts.push("LKG yes");
     if (response?.hasLastKnownGood === false) parts.push("LKG no");
@@ -5213,6 +5261,7 @@
     });
     addButton("refresh", "Refresh remote", () => refreshRemoteAndStatus());
     addButton("previewDiff", "Preview diff", () => previewRecycleRemoteCatalogDiff());
+    addButton("previewPlan", "Preview plan", () => previewRecycleRemoteResolvedCatalogPlan());
     addButton("applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
     addButton("applyEligibleDevices", "Apply eligible", () => applyRecycleRemoteEligibleDevices());
     addButton("enableMaterial", "Enable material", () => applyRecycleRemoteMaterialEnablement());
