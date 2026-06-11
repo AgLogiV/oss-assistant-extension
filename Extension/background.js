@@ -853,6 +853,8 @@ function recycleRemoteBuildResolvedCatalogApplyPlan(localDevices, remoteCatalog,
   const entries = (Array.isArray(additions.additions) ? additions.additions : [])
     .map(recycleRemoteProjectApplySafeEligibleAddition)
     .filter(entry => entry.deviceId);
+  const materialEntries = entries
+    .filter(entry => /^\d+$/.test(recycleRemoteTrim(entry?.materialId)));
   const summary = {
     unknownRemoteDevices: Number(additions?.summary?.unknownRemoteDevices || 0),
     eligible: entries.length,
@@ -872,6 +874,10 @@ function recycleRemoteBuildResolvedCatalogApplyPlan(localDevices, remoteCatalog,
     eligibleAdditions: {
       count: entries.length,
       entries
+    },
+    materialEligibleAdditions: {
+      count: materialEntries.length,
+      entries: materialEntries
     },
     blocked: {
       count: summary.blocked,

@@ -2405,6 +2405,16 @@
     );
   }
 
+  function getRecycleRemoteResolvedCatalogApplyPlan() {
+    return sendRecycleRemoteConfigDebugMessage(
+      RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.resolvedApplyPlan,
+      {
+        localDevices: getRecycleLocalCatalogDiffPreviewDevices(),
+        eligibilityContext: getRecycleRemoteDiffEligibilityContext()
+      }
+    );
+  }
+
   function isRecycleRemoteSafeId(value) {
     return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(String(value || ""));
   }
@@ -4902,6 +4912,16 @@
     };
   }
 
+  function buildRecycleRemoteMaterialPlanSample(entry, reasons, warnings) {
+    return {
+      deviceId: String(entry?.deviceId || "").trim(),
+      displayName: String(entry?.displayName || "").trim(),
+      materialId: normalizeSwapMaterialId(entry?.materialId),
+      reasons: Array.isArray(reasons) ? reasons.slice(0, 3) : [],
+      warnings: Array.isArray(warnings) ? warnings.slice(0, 3) : []
+    };
+  }
+
   function getRecycleRemoteAddedMaterialEligibilitySummary() {
     const summary = { total: 0, eligible: 0, blocked: 0 };
     const samples = { eligible: [], blocked: [] };
@@ -4927,27 +4947,52 @@
     recycleRemoteMaterialEnabledByDeviceId = new Map();
   }
 
-  function applyRecycleRemoteMaterialEnablement() {
+  async function applyRecycleRemoteMaterialEnablement() {
+    const response = await getRecycleRemoteResolvedCatalogApplyPlan();
+    const candidates = Array.isArray(response?.materialEligibleAdditions?.entries) ? response.materialEligibleAdditions.entries : [];
+    const candidateIds = new Set();
     const enabledMap = new Map();
     const blocked = [];
     let blockedCount = 0;
+    const pushBlocked = (sample) => {
+      blockedCount += 1;
+      if (blocked.length < 5) blocked.push(sample);
+    };
 
-    Array.from(recycleRemoteAddedDevicesByDeviceId.values()).forEach(device => {
+    candidates.forEach(entry => {
+      const deviceId = String(entry?.deviceId || "").trim();
+      if (!deviceId || candidateIds.has(deviceId)) return;
+      candidateIds.add(deviceId);
+      const device = recycleRemoteAddedDevicesByDeviceId.get(deviceId);
+      if (!device) {
+        pushBlocked(buildRecycleRemoteMaterialPlanSample(entry, ["not applied"], []));
+        return;
+      }
+
       const eligibility = classifyRecycleRemoteAddedMaterialEligibility(device);
-      const deviceId = String(device?.deviceId || "").trim();
-      if (eligibility.eligible && deviceId) {
+      const planMaterialId = normalizeSwapMaterialId(entry?.materialId);
+      if (eligibility.eligible && planMaterialId && eligibility.materialId === planMaterialId) {
         enabledMap.set(deviceId, eligibility.materialId);
       } else {
-        blockedCount += 1;
-        if (blocked.length < 5) blocked.push(buildRecycleRemoteMaterialEligibilitySample(device, eligibility.reasons, eligibility.warnings));
+        const reasons = eligibility.reasons.slice();
+        if (eligibility.eligible) reasons.push("material plan mismatch");
+        pushBlocked(buildRecycleRemoteMaterialEligibilitySample(device, reasons, eligibility.warnings));
       }
+    });
+
+    Array.from(recycleRemoteAddedDevicesByDeviceId.values()).forEach(device => {
+      if (!isRecycleRemoteAddedDevice(device)) return;
+      const deviceId = String(device?.deviceId || "").trim();
+      if (!deviceId || candidateIds.has(deviceId)) return;
+      pushBlocked(buildRecycleRemoteMaterialEligibilitySample(device, ["not in resolved material plan"], []));
     });
 
     recycleRemoteMaterialEnabledByDeviceId = enabledMap;
     saveRecycleRemoteDebugSessionState();
     return {
-      ok: true,
+      ok: Boolean(response?.ok),
       result: enabledMap.size ? "material_enabled" : "no_material_enabled",
+      sourceRevision: String(response?.sourceRevision || response?.meta?.revision || "").trim(),
       materialEnabledCount: enabledMap.size,
       materialBlockedCount: blockedCount,
       materialBlockedSamples: blocked,
