@@ -5231,8 +5231,8 @@
     wrap.style.alignItems = "flex-start";
 
     const details = document.createElement("details");
-    details.style.maxWidth = "520px";
-    details.style.width = "min(520px, 100%)";
+    details.style.maxWidth = "680px";
+    details.style.width = "min(680px, 100%)";
     details.style.border = "1px solid #dedede";
     details.style.borderRadius = "6px";
     details.style.background = "#fafafa";
@@ -5253,9 +5253,25 @@
     summary.style.justifyContent = "space-between";
     summary.style.gap = "10px";
 
+    const labelWrap = document.createElement("span");
+    labelWrap.style.display = "inline-flex";
+    labelWrap.style.alignItems = "center";
+    labelWrap.style.gap = "6px";
+    labelWrap.style.minWidth = "0";
+
     const label = document.createElement("span");
-    label.textContent = "Remote config debug";
+    label.textContent = "Remote config";
     label.style.fontWeight = "700";
+
+    const hint = document.createElement("span");
+    hint.textContent = "debug/manual";
+    hint.style.padding = "1px 5px";
+    hint.style.border = "1px solid #e2e2e2";
+    hint.style.borderRadius = "999px";
+    hint.style.background = "#fff";
+    hint.style.color = "#777";
+    hint.style.fontSize = "10px";
+    hint.style.fontWeight = "600";
 
     const compactStatus = document.createElement("span");
     compactStatus.dataset.wifiOssRecycleRemoteCompactStatus = "1";
@@ -5267,16 +5283,25 @@
     compactStatus.style.textOverflow = "ellipsis";
     compactStatus.style.whiteSpace = "nowrap";
 
-    summary.appendChild(label);
+    labelWrap.appendChild(label);
+    labelWrap.appendChild(hint);
+    summary.appendChild(labelWrap);
     summary.appendChild(compactStatus);
     details.appendChild(summary);
 
     const controls = document.createElement("div");
     controls.style.marginTop = "7px";
-    controls.style.display = "flex";
-    controls.style.flexWrap = "wrap";
-    controls.style.gap = "6px";
-    controls.style.justifyContent = "flex-end";
+    controls.style.display = "grid";
+    controls.style.gridTemplateColumns = "repeat(auto-fit, minmax(150px, 1fr))";
+    controls.style.gap = "7px";
+
+    const summaryGrid = document.createElement("div");
+    summaryGrid.dataset.wifiOssRecycleRemoteSummary = "1";
+    summaryGrid.style.marginTop = "7px";
+    summaryGrid.style.display = "flex";
+    summaryGrid.style.flexWrap = "wrap";
+    summaryGrid.style.gap = "5px";
+    summaryGrid.style.alignItems = "center";
 
     const resultText = document.createElement("div");
     resultText.dataset.wifiOssRecycleRemoteResult = "1";
@@ -5291,6 +5316,103 @@
 
     const buttons = [];
     let autoRefreshBtn = null;
+    const createGroup = (title) => {
+      const group = document.createElement("div");
+      group.style.display = "flex";
+      group.style.flexDirection = "column";
+      group.style.gap = "4px";
+      group.style.minWidth = "0";
+      group.style.padding = "5px";
+      group.style.border = "1px solid #ececec";
+      group.style.borderRadius = "5px";
+      group.style.background = "#fff";
+
+      const groupTitle = document.createElement("div");
+      groupTitle.textContent = title;
+      groupTitle.style.fontSize = "10px";
+      groupTitle.style.fontWeight = "700";
+      groupTitle.style.color = "#777";
+      groupTitle.style.textTransform = "uppercase";
+      groupTitle.style.letterSpacing = "0";
+
+      const groupButtons = document.createElement("div");
+      groupButtons.style.display = "flex";
+      groupButtons.style.flexWrap = "wrap";
+      groupButtons.style.gap = "4px";
+
+      group.appendChild(groupTitle);
+      group.appendChild(groupButtons);
+      controls.appendChild(group);
+      return groupButtons;
+    };
+    const addSummaryChip = (text, tone) => {
+      const chip = document.createElement("span");
+      chip.textContent = String(text || "").trim();
+      chip.style.display = "inline-flex";
+      chip.style.alignItems = "center";
+      chip.style.maxWidth = "100%";
+      chip.style.padding = "2px 6px";
+      chip.style.border = "1px solid #e1e1e1";
+      chip.style.borderRadius = "999px";
+      chip.style.background = "#fff";
+      chip.style.color = "#666";
+      chip.style.fontSize = "10px";
+      chip.style.fontWeight = "600";
+      chip.style.lineHeight = "1.35";
+      chip.style.overflow = "hidden";
+      chip.style.textOverflow = "ellipsis";
+      chip.style.whiteSpace = "nowrap";
+      if (tone === "ok") {
+        chip.style.borderColor = "#b9d8bf";
+        chip.style.background = "#f3fbf4";
+        chip.style.color = "#2f6b38";
+      } else if (tone === "warn") {
+        chip.style.borderColor = "#e0ad55";
+        chip.style.background = "#fff8ea";
+        chip.style.color = "#8a4b00";
+      } else if (tone === "info") {
+        chip.style.borderColor = "#c9d8ef";
+        chip.style.background = "#f4f8ff";
+        chip.style.color = "#335f99";
+      }
+      summaryGrid.appendChild(chip);
+    };
+    const renderSummary = (response, isError, labelText) => {
+      summaryGrid.textContent = "";
+      if (!response || typeof response !== "object") {
+        addSummaryChip("manual only", "info");
+        return;
+      }
+
+      const compatibility = response.contractCompatibility;
+      if (compatibility && typeof compatibility === "object" && compatibility.mode !== "no_data") {
+        if (compatibility.ok === false) addSummaryChip("contract incompatible", "warn");
+        else if (compatibility.mode === "legacy_v1") addSummaryChip("contract legacy ok", "ok");
+        else if (compatibility.contractVersion) addSummaryChip(`contract v${compatibility.contractVersion} ok`, "ok");
+        else addSummaryChip("contract ok", "ok");
+      }
+
+      const counts = response.counts && typeof response.counts === "object" ? response.counts : null;
+      if (counts) {
+        addSummaryChip(`visual ${Number(counts.visualUpdates || 0)}`, "info");
+        addSummaryChip(`add ${Number(counts.eligibleAdditions || 0)}`, "info");
+        addSummaryChip(`material ${Number(counts.materialEligibleAdditions || 0)}`, "info");
+        addSummaryChip(`blocked ${Number(counts.blocked || 0)}`, Number(counts.blocked || 0) ? "warn" : "ok");
+        if (Number(counts.warnings || 0)) addSummaryChip(`warnings ${Number(counts.warnings || 0)}`, "warn");
+      }
+
+      if (typeof response.addedCount === "number") addSummaryChip(`added ${response.addedCount}`, response.addedCount ? "ok" : "info");
+      if (typeof response.appliedCount === "number") addSummaryChip(`visual applied ${response.appliedCount}`, response.appliedCount ? "ok" : "info");
+      if (typeof response.materialEnabledCount === "number") addSummaryChip(`material enabled ${response.materialEnabledCount}`, response.materialEnabledCount ? "ok" : "info");
+      if (typeof response.blockedCount === "number") addSummaryChip(`blocked ${response.blockedCount}`, response.blockedCount ? "warn" : "ok");
+      if (typeof response.materialBlockedCount === "number") addSummaryChip(`material blocked ${response.materialBlockedCount}`, response.materialBlockedCount ? "warn" : "ok");
+      if (typeof response.autoRefreshEnabled === "boolean") addSummaryChip(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`, response.autoRefreshEnabled ? "warn" : "info");
+      if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? "stale" : "fresh", response.isStale ? "warn" : "ok");
+      if (response.hasLastKnownGood === true) addSummaryChip("LKG yes", "ok");
+      if (response.hasLastKnownGood === false) addSummaryChip("LKG no", "warn");
+      if (response.blockReason) addSummaryChip(`blocked: ${String(response.blockReason).trim()}`, "warn");
+      if (!summaryGrid.children.length) addSummaryChip(`${labelText || "last"} ${response.ok === false || isError ? "needs attention" : "ok"}`, response.ok === false || isError ? "warn" : "ok");
+    };
     const updateAutoRefreshButton = (enabled) => {
       autoRefreshEnabled = enabled === true;
       if (!autoRefreshBtn) return;
@@ -5303,7 +5425,7 @@
       buttons.forEach(btn => { btn.disabled = busy; });
       details.dataset.wifiOssRecycleRemoteBusy = busy ? "1" : "0";
     };
-    const setStatus = (text, isError) => {
+    const setStatus = (text, isError, response, labelText) => {
       const value = String(text || "").trim() || "no status";
       compactStatus.textContent = value;
       compactStatus.style.color = isError ? "#8a4b00" : "#777";
@@ -5311,21 +5433,22 @@
       resultText.style.color = isError ? "#8a4b00" : "#666";
       resultText.style.borderColor = isError ? "#e0ad55" : "#ececec";
       resultText.style.background = isError ? "#fff8ea" : "#fff";
+      renderSummary(response, isError, labelText);
     };
     const runAction = async (action, labelText, fn) => {
       setBusy(true);
-      setStatus(`${labelText}: running...`, false);
+      setStatus(`${labelText}: running...`, false, null, labelText);
       try {
         const response = await fn();
         if (typeof response?.autoRefreshEnabled === "boolean") updateAutoRefreshButton(response.autoRefreshEnabled);
-        setStatus(formatRecycleRemoteDebugStatus(labelText, response), !response?.ok);
+        setStatus(formatRecycleRemoteDebugStatus(labelText, response), !response?.ok, response, labelText);
       } catch (error) {
-        setStatus(`${labelText}: ${String(error?.message || error || "failed")}`, true);
+        setStatus(`${labelText}: ${String(error?.message || error || "failed")}`, true, null, labelText);
       } finally {
         setBusy(false);
       }
     };
-    const addButton = (action, labelText, fn) => {
+    const addButton = (parent, action, labelText, fn) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.dataset.wifiOssRecycleRemoteAction = action;
@@ -5340,7 +5463,7 @@
       btn.style.cursor = "pointer";
       btn.addEventListener("click", () => runAction(action, labelText, fn));
       buttons.push(btn);
-      controls.appendChild(btn);
+      parent.appendChild(btn);
       return btn;
     };
 
@@ -5350,8 +5473,10 @@
         const response = await readRemoteStatus();
         if (typeof response?.autoRefreshEnabled === "boolean") updateAutoRefreshButton(response.autoRefreshEnabled);
         compactStatus.textContent = `auto ${response?.autoRefreshEnabled ? "ON" : "OFF"} | not checked`;
+        renderSummary({ autoRefreshEnabled: response?.autoRefreshEnabled }, false, "Status");
       } catch (e) {
         compactStatus.textContent = "auto status unavailable";
+        renderSummary(null, true, "Status");
       }
     };
     const refreshRemoteAndStatus = async () => {
@@ -5360,25 +5485,32 @@
       return { ...statusResponse, ...response, autoRefreshEnabled: statusResponse.autoRefreshEnabled, isStale: statusResponse.isStale, ttlMs: statusResponse.ttlMs, hasLastKnownGood: statusResponse.hasLastKnownGood };
     };
 
-    autoRefreshBtn = addButton("toggleAutoRefresh", "Auto-refresh: OFF", async () => {
-      return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.setAutoRefresh, { enabled: !autoRefreshEnabled });
-    });
-    addButton("refresh", "Refresh remote", () => refreshRemoteAndStatus());
-    addButton("previewDiff", "Preview diff", () => previewRecycleRemoteCatalogDiff());
-    addButton("previewPlan", "Preview plan", () => previewRecycleRemoteResolvedCatalogPlan());
-    addButton("applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
-    addButton("applyEligibleDevices", "Apply eligible", () => applyRecycleRemoteEligibleDevices());
-    addButton("enableMaterial", "Enable material", () => applyRecycleRemoteMaterialEnablement());
-    addButton("clear", "Clear", async () => {
+    const checkButtons = createGroup("Check");
+    const reviewButtons = createGroup("Review");
+    const applyButtons = createGroup("Apply");
+    const resetButtons = createGroup("Reset/debug");
+
+    addButton(checkButtons, "status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh));
+    addButton(checkButtons, "refresh", "Refresh remote", () => refreshRemoteAndStatus());
+    addButton(reviewButtons, "previewPlan", "Preview plan", () => previewRecycleRemoteResolvedCatalogPlan());
+    addButton(reviewButtons, "previewDiff", "Preview diff", () => previewRecycleRemoteCatalogDiff());
+    addButton(applyButtons, "applyEligibleDevices", "Apply eligible", () => applyRecycleRemoteEligibleDevices());
+    addButton(applyButtons, "enableMaterial", "Enable material", () => applyRecycleRemoteMaterialEnablement());
+    addButton(applyButtons, "applyVisualOverlay", "Apply visual", () => applyRecycleRemoteVisualOverlay());
+    addButton(resetButtons, "clear", "Clear", async () => {
       const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clear);
       const local = clearRecycleRemoteVisualOverlay("local_fallback");
       return { ...response, result: response?.result || "cleared", appliedCount: local.appliedCount, addedCount: local.addedCount, renderedPanels: local.renderedPanels };
     });
-    addButton("status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh));
+    autoRefreshBtn = addButton(resetButtons, "toggleAutoRefresh", "Auto-refresh: OFF", async () => {
+      return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.setAutoRefresh, { enabled: !autoRefreshEnabled });
+    });
     updateAutoRefreshButton(false);
+    renderSummary(null, false, "Status");
     initializeAutoRefreshState();
 
     details.appendChild(controls);
+    details.appendChild(summaryGrid);
     details.appendChild(resultText);
     wrap.appendChild(details);
     return wrap;
