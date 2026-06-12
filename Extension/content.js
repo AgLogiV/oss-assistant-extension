@@ -4855,6 +4855,20 @@
       }
     );
     const sourceRevision = String(response?.sourceRevision || response?.meta?.revision || "").trim();
+    const contractBlockReason = getRecycleRemoteApplyPlanContractBlockReason(response);
+    if (contractBlockReason) {
+      return {
+        ok: false,
+        result: "blocked_contract_incompatible",
+        sourceRevision,
+        contractCompatibility: response?.contractCompatibility || null,
+        blockReason: contractBlockReason,
+        addedCount: 0,
+        blockedCount: 1,
+        renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+      };
+    }
+
     const additions = Array.isArray(response?.eligibleAdditions?.entries) ? response.eligibleAdditions.entries : [];
 
     if (!response?.ok || !additions.length) {
@@ -4949,6 +4963,21 @@
 
   async function applyRecycleRemoteMaterialEnablement() {
     const response = await getRecycleRemoteResolvedCatalogApplyPlan();
+    const contractBlockReason = getRecycleRemoteApplyPlanContractBlockReason(response);
+    if (contractBlockReason) {
+      return {
+        ok: false,
+        result: "blocked_contract_incompatible",
+        sourceRevision: String(response?.sourceRevision || response?.meta?.revision || "").trim(),
+        contractCompatibility: response?.contractCompatibility || null,
+        blockReason: contractBlockReason,
+        materialEnabledCount: 0,
+        materialBlockedCount: 1,
+        materialBlockedSamples: [],
+        renderedPanels: refreshRecycleRemoteVisualOverlayPanels()
+      };
+    }
+
     const candidates = Array.isArray(response?.materialEligibleAdditions?.entries) ? response.materialEligibleAdditions.entries : [];
     const candidateIds = new Set();
     const enabledMap = new Map();
@@ -5105,6 +5134,12 @@
     if (warnings && compatibility.mode !== "legacy_v1") parts.push(`contract warnings ${warnings}`);
   }
 
+  function getRecycleRemoteApplyPlanContractBlockReason(response) {
+    const compatibility = response?.contractCompatibility;
+    if (!compatibility || typeof compatibility !== "object") return "";
+    return compatibility.ok === false ? "contract incompatible" : "";
+  }
+
   function formatRecycleRemoteMaterialEligibilitySample(sample) {
     const deviceId = String(sample?.deviceId || "").trim();
     const displayName = String(sample?.displayName || "").trim();
@@ -5161,6 +5196,7 @@
     if (typeof response?.materialEnabledCount === "number") parts.push(`material enabled ${response.materialEnabledCount}`);
     if (typeof response?.materialBlockedCount === "number") parts.push(`material blocked ${response.materialBlockedCount}`);
     if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
+    if (response?.blockReason) parts.push(`blocked: ${String(response.blockReason).trim()}`);
     appendRecycleRemoteResolvedPlanStatus(parts, response);
     appendRecycleRemoteDiffPreviewStatus(parts, response);
     if (response?.hasLastKnownGood === true) parts.push("LKG yes");
