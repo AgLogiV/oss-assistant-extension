@@ -9,6 +9,8 @@
     clear: "recycleConfig.clearRemoteCache",
     maybeRefresh: "recycleConfig.maybeRefreshRemote",
     setAutoRefresh: "recycleConfig.setAutoRefreshEnabled",
+    setSourceOverride: "recycleConfig.setRemoteSourceOverride",
+    clearSourceOverride: "recycleConfig.clearRemoteSourceOverride",
     previewDiff: "recycleConfig.getCatalogDiffPreview",
     resolvedPlan: "recycleConfig.getResolvedCatalogPlan",
     resolvedApplyPlan: "recycleConfig.getResolvedCatalogApplyPlan",
@@ -5186,6 +5188,8 @@
     const lastSuccessAt = String(status.lastSuccessAt || meta.fetchedAt || "").trim();
     const lastError = String(status.lastError || response?.error || "").trim();
     const parts = [action, result].filter(Boolean);
+    const sourceLabel = String(response?.activeSourceLabel || response?.activeSourceId || "").trim();
+    if (sourceLabel) parts.push(`source ${sourceLabel}`);
     if (typeof response?.autoRefreshEnabled === "boolean") parts.push(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`);
     if (typeof response?.isStale === "boolean") parts.push(response.isStale ? "stale" : "fresh");
     if (revision) parts.push(`rev ${revision}`);
@@ -5244,6 +5248,7 @@
     details.style.opacity = "0.82";
 
     let autoRefreshEnabled = false;
+    let sourceInput = null;
 
     const summary = document.createElement("summary");
     summary.style.cursor = "pointer";
@@ -5384,6 +5389,9 @@
         return;
       }
 
+      const sourceLabel = String(response.activeSourceLabel || response.activeSourceId || "").trim();
+      if (sourceLabel) addSummaryChip(`source ${sourceLabel}`, response.sourceOverrideActive ? "warn" : "info");
+
       const compatibility = response.contractCompatibility;
       if (compatibility && typeof compatibility === "object" && compatibility.mode !== "no_data") {
         if (compatibility.ok === false) addSummaryChip("contract incompatible", "warn");
@@ -5425,8 +5433,18 @@
       buttons.forEach(btn => { btn.disabled = busy; });
       details.dataset.wifiOssRecycleRemoteBusy = busy ? "1" : "0";
     };
+    const updateSourceInputFromResponse = (response) => {
+      if (!sourceInput || !response || typeof response !== "object") return;
+      const activeUrl = String(response.activeSourceUrl || "").trim();
+      if (response.sourceOverrideActive && activeUrl) {
+        sourceInput.value = activeUrl;
+      } else if (!response.sourceOverrideActive) {
+        sourceInput.value = "";
+      }
+    };
     const setStatus = (text, isError, response, labelText) => {
       const value = String(text || "").trim() || "no status";
+      updateSourceInputFromResponse(response);
       compactStatus.textContent = value;
       compactStatus.style.color = isError ? "#8a4b00" : "#777";
       resultText.textContent = value;
@@ -5472,8 +5490,10 @@
       try {
         const response = await readRemoteStatus();
         if (typeof response?.autoRefreshEnabled === "boolean") updateAutoRefreshButton(response.autoRefreshEnabled);
-        compactStatus.textContent = `auto ${response?.autoRefreshEnabled ? "ON" : "OFF"} | not checked`;
-        renderSummary({ autoRefreshEnabled: response?.autoRefreshEnabled }, false, "Status");
+        updateSourceInputFromResponse(response);
+        const sourceLabel = String(response?.activeSourceLabel || response?.activeSourceId || "production").trim();
+        compactStatus.textContent = `source ${sourceLabel} | auto ${response?.autoRefreshEnabled ? "ON" : "OFF"} | not checked`;
+        renderSummary(response, false, "Status");
       } catch (e) {
         compactStatus.textContent = "auto status unavailable";
         renderSummary(null, true, "Status");
@@ -5485,11 +5505,35 @@
       return { ...statusResponse, ...response, autoRefreshEnabled: statusResponse.autoRefreshEnabled, isStale: statusResponse.isStale, ttlMs: statusResponse.ttlMs, hasLastKnownGood: statusResponse.hasLastKnownGood };
     };
 
+    const sourceButtons = createGroup("Source");
+    sourceInput = document.createElement("input");
+    sourceInput.type = "url";
+    sourceInput.placeholder = "https://oss-assistant.github.io/oss-assistant-config/...json";
+    sourceInput.autocomplete = "off";
+    sourceInput.spellcheck = false;
+    sourceInput.style.flex = "1 1 100%";
+    sourceInput.style.minWidth = "0";
+    sourceInput.style.boxSizing = "border-box";
+    sourceInput.style.padding = "3px 6px";
+    sourceInput.style.border = "1px solid #d7d7d7";
+    sourceInput.style.borderRadius = "4px";
+    sourceInput.style.background = "#fff";
+    sourceInput.style.color = "#444";
+    sourceInput.style.fontSize = "11px";
+    sourceInput.style.lineHeight = "1.35";
+    sourceButtons.appendChild(sourceInput);
+
     const checkButtons = createGroup("Check");
     const reviewButtons = createGroup("Review");
     const applyButtons = createGroup("Apply");
     const resetButtons = createGroup("Reset/debug");
 
+    addButton(sourceButtons, "setSourceOverride", "Use debug source", () => {
+      return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.setSourceOverride, { url: sourceInput?.value || "" });
+    });
+    addButton(sourceButtons, "clearSourceOverride", "Use production", () => {
+      return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clearSourceOverride);
+    });
     addButton(checkButtons, "status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh));
     addButton(checkButtons, "refresh", "Refresh remote", () => refreshRemoteAndStatus());
     addButton(reviewButtons, "previewPlan", "Preview plan", () => previewRecycleRemoteResolvedCatalogPlan());

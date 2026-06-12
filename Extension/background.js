@@ -1,4 +1,7 @@
 const RECYCLE_REMOTE_CONFIG_URL = "https://oss-assistant.github.io/oss-assistant-config/config/recycle-device-catalog.json";
+const RECYCLE_REMOTE_CONFIG_ALLOWED_SOURCE_PREFIX = "https://oss-assistant.github.io/oss-assistant-config/";
+const RECYCLE_REMOTE_CONFIG_PRODUCTION_SOURCE_ID = "production";
+const RECYCLE_REMOTE_CONFIG_DEBUG_SOURCE_ID = "debug";
 const RECYCLE_REMOTE_CONFIG_TIMEOUT_MS = 15000;
 const RECYCLE_REMOTE_CONFIG_MAX_BYTES = 1024 * 1024;
 const RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS = 6 * 60 * 60 * 1000;
@@ -32,7 +35,8 @@ const RECYCLE_REMOTE_CONFIG_KEYS = {
   lkg: "wifi_oss_recycle_remote_config_lkg_v1",
   meta: "wifi_oss_recycle_remote_config_meta_v1",
   status: "wifi_oss_recycle_remote_config_status_v1",
-  enabled: "wifi_oss_recycle_remote_config_enabled_v1"
+  enabled: "wifi_oss_recycle_remote_config_enabled_v1",
+  sourceOverride: "wifi_oss_recycle_remote_config_source_override_v1"
 };
 
 const RECYCLE_REMOTE_EXPECTED_TOP_LEVEL_KEYS = [
@@ -93,6 +97,117 @@ function recycleRemoteTrim(value) {
 
 function recycleRemoteGetExtensionVersion() {
   return recycleRemoteTrim(chrome?.runtime?.getManifest?.().version) || RECYCLE_REMOTE_RUNTIME_CONTRACT.extensionVersion;
+}
+
+function recycleRemoteBuildProductionSource() {
+  return {
+    activeSourceId: RECYCLE_REMOTE_CONFIG_PRODUCTION_SOURCE_ID,
+    activeSourceLabel: "production",
+    activeSourceUrl: RECYCLE_REMOTE_CONFIG_URL,
+    sourceOverrideActive: false
+  };
+}
+
+function recycleRemoteBuildSourceResponseFields(source) {
+  const active = source || recycleRemoteBuildProductionSource();
+  return {
+    activeSourceId: active.activeSourceId || RECYCLE_REMOTE_CONFIG_PRODUCTION_SOURCE_ID,
+    activeSourceLabel: active.activeSourceLabel || "production",
+    activeSourceUrl: active.activeSourceUrl || RECYCLE_REMOTE_CONFIG_URL,
+    sourceOverrideActive: active.sourceOverrideActive === true
+  };
+}
+
+function recycleRemoteValidateSourceOverrideUrl(rawUrl) {
+  const input = recycleRemoteTrim(rawUrl);
+  if (!input) return { ok: false, error: "Missing source URL" };
+
+  let parsed;
+  try {
+    parsed = new URL(input);
+  } catch (error) {
+    return { ok: false, error: "Invalid source URL" };
+  }
+
+  let allowed;
+  try {
+    allowed = new URL(RECYCLE_REMOTE_CONFIG_ALLOWED_SOURCE_PREFIX);
+  } catch (error) {
+    return { ok: false, error: "Invalid allowed source prefix" };
+  }
+
+  if (parsed.protocol !== "https:") {
+    return { ok: false, error: "Debug source must use HTTPS" };
+  }
+  if (parsed.username || parsed.password) {
+    return { ok: false, error: "Debug source must not include credentials" };
+  }
+  if (parsed.origin !== allowed.origin || !parsed.pathname.startsWith(allowed.pathname)) {
+    return { ok: false, error: "Debug source must be under oss-assistant-config GitHub Pages" };
+  }
+  let decodedPathname = "";
+  try {
+    decodedPathname = decodeURIComponent(parsed.pathname);
+  } catch (error) {
+    return { ok: false, error: "Debug source path is invalid" };
+  }
+  if (decodedPathname.includes("..") || decodedPathname.includes("\\")) {
+    return { ok: false, error: "Debug source path contains unsafe segments" };
+  }
+  if (!parsed.pathname.endsWith(".json")) {
+    return { ok: false, error: "Debug source must point to a JSON file" };
+  }
+
+  parsed.hash = "";
+  return { ok: true, url: parsed.toString() };
+}
+
+function recycleRemoteNormalizeSourceOverride(value) {
+  if (!value) return null;
+  const rawUrl = recycleRemoteIsPlainObject(value) ? value.url : value;
+  const validation = recycleRemoteValidateSourceOverrideUrl(rawUrl);
+  if (!validation.ok) return null;
+  return {
+    url: validation.url,
+    setAt: recycleRemoteTrim(value?.setAt)
+  };
+}
+
+function recycleRemoteResolveActiveSource(stored) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const override = recycleRemoteNormalizeSourceOverride(stored?.[keys.sourceOverride]);
+  if (!override) return recycleRemoteBuildProductionSource();
+  return {
+    activeSourceId: RECYCLE_REMOTE_CONFIG_DEBUG_SOURCE_ID,
+    activeSourceLabel: "debug",
+    activeSourceUrl: override.url,
+    sourceOverrideActive: true
+  };
+}
+
+function recycleRemoteScopeStoredToActiveSource(stored, source) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const scoped = stored || {};
+  const active = source || recycleRemoteBuildProductionSource();
+  const lkg = scoped[keys.lkg] || null;
+  const meta = scoped[keys.meta] || null;
+  const metaSourceUrl = recycleRemoteTrim(meta?.sourceUrl);
+  if ((lkg || meta) && metaSourceUrl !== active.activeSourceUrl) {
+    return {
+      ...scoped,
+      [keys.lkg]: null,
+      [keys.meta]: null,
+      [keys.status]: null
+    };
+  }
+  if (!lkg) return scoped;
+  if (metaSourceUrl === active.activeSourceUrl) return scoped;
+  return {
+    ...scoped,
+    [keys.lkg]: null,
+    [keys.meta]: null,
+    [keys.status]: null
+  };
 }
 
 function recycleRemoteCompareVersions(left, right) {
@@ -576,7 +691,7 @@ function recycleRemoteParseTimestampMs(value) {
   return Number.isFinite(time) ? time : 0;
 }
 
-function recycleRemoteBuildStatusResponse(stored, result) {
+function recycleRemoteBuildStatusResponse(stored, result, activeSource) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const status = stored?.[keys.status] || null;
   const meta = stored?.[keys.meta] || null;
@@ -600,27 +715,35 @@ function recycleRemoteBuildStatusResponse(stored, result) {
     ageMs,
     isStale,
     hasLastKnownGood,
-    contractCompatibility: recycleRemoteEvaluateCatalogContract(lkg, meta)
+    contractCompatibility: recycleRemoteEvaluateCatalogContract(lkg, meta),
+    ...recycleRemoteBuildSourceResponseFields(activeSource)
   };
 }
 
 async function recycleRemoteGetStatus() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
-  return recycleRemoteBuildStatusResponse(stored, "status");
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  return recycleRemoteBuildStatusResponse(recycleRemoteScopeStoredToActiveSource(stored, source), "status", source);
 }
 
 async function recycleRemoteSetAutoRefreshEnabled(enabled) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   await recycleRemoteChromeSet({ [keys.enabled]: enabled === true });
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
-  return recycleRemoteBuildStatusResponse(stored, enabled === true ? "auto_refresh_enabled" : "auto_refresh_disabled");
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  return recycleRemoteBuildStatusResponse(
+    recycleRemoteScopeStoredToActiveSource(stored, source),
+    enabled === true ? "auto_refresh_enabled" : "auto_refresh_disabled",
+    source
+  );
 }
 
 async function recycleRemoteMaybeRefresh() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
-  const current = recycleRemoteBuildStatusResponse(stored, "status");
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  const current = recycleRemoteBuildStatusResponse(recycleRemoteScopeStoredToActiveSource(stored, source), "status", source);
   if (!current.autoRefreshEnabled) {
     return { ...current, result: "disabled", autoRefreshAttempted: false, errors: [] };
   }
@@ -629,8 +752,13 @@ async function recycleRemoteMaybeRefresh() {
   }
 
   const refreshed = await recycleRemoteRefresh();
-  const after = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled]);
-  const next = recycleRemoteBuildStatusResponse(after, refreshed.result || "refreshed");
+  const after = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled, keys.sourceOverride]);
+  const nextSource = recycleRemoteResolveActiveSource(after);
+  const next = recycleRemoteBuildStatusResponse(
+    recycleRemoteScopeStoredToActiveSource(after, nextSource),
+    refreshed.result || "refreshed",
+    nextSource
+  );
   return {
     ...refreshed,
     ...next,
@@ -1064,58 +1192,80 @@ function recycleRemoteBuildResolvedCatalogApplyPlan(localDevices, remoteCatalog,
 
 async function recycleRemoteGetCatalogDiffPreview(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
-  return recycleRemoteBuildCatalogDiffPreview(
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  return {
+    ...recycleRemoteBuildCatalogDiffPreview(
     Array.isArray(localDevices) ? localDevices : [],
-    stored[keys.lkg] || null,
-    stored[keys.meta] || null,
-    stored[keys.status] || null,
+    scoped[keys.lkg] || null,
+    scoped[keys.meta] || null,
+    scoped[keys.status] || null,
     eligibilityContext || null
-  );
+    ),
+    ...recycleRemoteBuildSourceResponseFields(source)
+  };
 }
 
 async function recycleRemoteGetResolvedCatalogPlan(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
-  return recycleRemoteBuildResolvedCatalogPlan(
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  return {
+    ...recycleRemoteBuildResolvedCatalogPlan(
     Array.isArray(localDevices) ? localDevices : [],
-    stored[keys.lkg] || null,
-    stored[keys.meta] || null,
-    stored[keys.status] || null,
+    scoped[keys.lkg] || null,
+    scoped[keys.meta] || null,
+    scoped[keys.status] || null,
     eligibilityContext || null
-  );
+    ),
+    ...recycleRemoteBuildSourceResponseFields(source)
+  };
 }
 
 async function recycleRemoteGetResolvedCatalogApplyPlan(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
-  return recycleRemoteBuildResolvedCatalogApplyPlan(
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  return {
+    ...recycleRemoteBuildResolvedCatalogApplyPlan(
     Array.isArray(localDevices) ? localDevices : [],
-    stored[keys.lkg] || null,
-    stored[keys.meta] || null,
-    stored[keys.status] || null,
+    scoped[keys.lkg] || null,
+    scoped[keys.meta] || null,
+    scoped[keys.status] || null,
     eligibilityContext || null
-  );
+    ),
+    ...recycleRemoteBuildSourceResponseFields(source)
+  };
 }
 
 async function recycleRemoteGetEligibleDeviceAdditions(localDevices, eligibilityContext) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
-  return recycleRemoteBuildEligibleDeviceAdditions(
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  return {
+    ...recycleRemoteBuildEligibleDeviceAdditions(
     Array.isArray(localDevices) ? localDevices : [],
-    stored[keys.lkg] || null,
-    stored[keys.meta] || null,
-    stored[keys.status] || null,
+    scoped[keys.lkg] || null,
+    scoped[keys.meta] || null,
+    scoped[keys.status] || null,
     eligibilityContext || null
-  );
+    ),
+    ...recycleRemoteBuildSourceResponseFields(source)
+  };
 }
 
 async function recycleRemoteGetVisualOverlay() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
-  const lkg = stored[keys.lkg] || null;
-  const meta = stored[keys.meta] || null;
-  const status = stored[keys.status] || null;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
+  const source = recycleRemoteResolveActiveSource(stored);
+  const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  const lkg = scoped[keys.lkg] || null;
+  const meta = scoped[keys.meta] || null;
+  const status = scoped[keys.status] || null;
 
   if (!lkg) {
     return {
@@ -1123,7 +1273,8 @@ async function recycleRemoteGetVisualOverlay() {
       result: "no_data",
       meta,
       status,
-      overlay: []
+      overlay: [],
+      ...recycleRemoteBuildSourceResponseFields(source)
     };
   }
 
@@ -1133,14 +1284,16 @@ async function recycleRemoteGetVisualOverlay() {
     result: overlay.length ? "ok" : "no_overlay",
     meta,
     status,
-    overlay
+    overlay,
+    ...recycleRemoteBuildSourceResponseFields(source)
   };
 }
 
 async function recycleRemoteClearCache() {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
-  const stored = await recycleRemoteChromeGet([keys.enabled]);
+  const stored = await recycleRemoteChromeGet([keys.enabled, keys.sourceOverride]);
   const autoRefreshEnabled = stored[keys.enabled] === true;
+  const source = recycleRemoteResolveActiveSource(stored);
   await recycleRemoteChromeRemove([keys.lkg, keys.meta, keys.status]);
   return {
     ok: true,
@@ -1155,7 +1308,83 @@ async function recycleRemoteClearCache() {
     ageMs: null,
     isStale: true,
     hasLastKnownGood: false,
-    errors: []
+    errors: [],
+    ...recycleRemoteBuildSourceResponseFields(source)
+  };
+}
+
+async function recycleRemoteSetSourceOverride(rawUrl) {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.enabled, keys.sourceOverride]);
+  const autoRefreshEnabled = stored[keys.enabled] === true;
+  const currentSource = recycleRemoteResolveActiveSource(stored);
+  const validation = recycleRemoteValidateSourceOverrideUrl(rawUrl);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      result: "source_rejected",
+      error: validation.error || "Invalid source URL",
+      status: recycleRemoteBuildStatus("source_rejected", Date.now(), {
+        lastAttemptAt: recycleRemoteNowIso(),
+        lastError: validation.error || "Invalid source URL"
+      }),
+      meta: null,
+      contractCompatibility: recycleRemoteEvaluateCatalogContract(null, null),
+      enabled: autoRefreshEnabled,
+      autoRefreshEnabled,
+      ttlMs: RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS,
+      lastFreshAt: "",
+      ageMs: null,
+      isStale: true,
+      hasLastKnownGood: false,
+      errors: [{ code: "source.invalid", message: validation.error || "Invalid source URL" }],
+      ...recycleRemoteBuildSourceResponseFields(currentSource)
+    };
+  }
+
+  const override = { url: validation.url, setAt: recycleRemoteNowIso() };
+  await recycleRemoteChromeSet({ [keys.sourceOverride]: override });
+  await recycleRemoteChromeRemove([keys.lkg, keys.meta, keys.status]);
+  const source = recycleRemoteResolveActiveSource({ [keys.sourceOverride]: override });
+  return {
+    ok: true,
+    result: "source_override_set",
+    status: recycleRemoteBuildStatus("source_override_set", Date.now(), { lastAttemptAt: override.setAt }),
+    meta: null,
+    contractCompatibility: recycleRemoteEvaluateCatalogContract(null, null),
+    enabled: autoRefreshEnabled,
+    autoRefreshEnabled,
+    ttlMs: RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS,
+    lastFreshAt: "",
+    ageMs: null,
+    isStale: true,
+    hasLastKnownGood: false,
+    errors: [],
+    ...recycleRemoteBuildSourceResponseFields(source)
+  };
+}
+
+async function recycleRemoteClearSourceOverride() {
+  const keys = RECYCLE_REMOTE_CONFIG_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.enabled]);
+  const autoRefreshEnabled = stored[keys.enabled] === true;
+  await recycleRemoteChromeRemove([keys.sourceOverride, keys.lkg, keys.meta, keys.status]);
+  const source = recycleRemoteBuildProductionSource();
+  return {
+    ok: true,
+    result: "source_override_cleared",
+    status: recycleRemoteBuildStatus("source_override_cleared", Date.now(), { lastAttemptAt: recycleRemoteNowIso() }),
+    meta: null,
+    contractCompatibility: recycleRemoteEvaluateCatalogContract(null, null),
+    enabled: autoRefreshEnabled,
+    autoRefreshEnabled,
+    ttlMs: RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS,
+    lastFreshAt: "",
+    ageMs: null,
+    isStale: true,
+    hasLastKnownGood: false,
+    errors: [],
+    ...recycleRemoteBuildSourceResponseFields(source)
   };
 }
 
@@ -1168,14 +1397,16 @@ async function recycleRemoteRefresh() {
   let previousLkg = null;
 
   try {
-    const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status]);
-    previousLkg = stored[keys.lkg] || null;
-    previousMeta = stored[keys.meta] || null;
+    const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
+    const source = recycleRemoteResolveActiveSource(stored);
+    const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+    previousLkg = scoped[keys.lkg] || null;
+    previousMeta = scoped[keys.meta] || null;
     const headers = { Accept: "application/json" };
     if (previousMeta?.etag) headers["If-None-Match"] = previousMeta.etag;
 
     const response = await recycleRemoteFetchWithTimeout(
-      RECYCLE_REMOTE_CONFIG_URL,
+      source.activeSourceUrl,
       { cache: "no-cache", headers },
       RECYCLE_REMOTE_CONFIG_TIMEOUT_MS
     );
@@ -1184,7 +1415,7 @@ async function recycleRemoteRefresh() {
     if (response.status === 304) {
       const status = recycleRemoteBuildStatus("not_modified", startedAt, {
         lastAttemptAt,
-        lastSuccessAt: previousMeta?.fetchedAt || stored[keys.status]?.lastSuccessAt || "",
+        lastSuccessAt: previousMeta?.fetchedAt || scoped[keys.status]?.lastSuccessAt || "",
         lastHttpStatus
       });
       await recycleRemoteChromeSet({ [keys.status]: status });
@@ -1194,7 +1425,8 @@ async function recycleRemoteRefresh() {
         meta: previousMeta,
         status,
         contractCompatibility: recycleRemoteEvaluateCatalogContract(previousLkg, previousMeta),
-        errors: []
+        errors: [],
+        ...recycleRemoteBuildSourceResponseFields(source)
       };
     }
 
@@ -1214,7 +1446,7 @@ async function recycleRemoteRefresh() {
         validationErrors: [{ code: "json.parse", message: error.message || "Invalid JSON" }]
       });
       await recycleRemoteChromeSet({ [keys.status]: status });
-      return { ok: false, result: "validation_failed", meta: previousMeta, status, errors: status.validationErrors };
+      return { ok: false, result: "validation_failed", meta: previousMeta, status, errors: status.validationErrors, ...recycleRemoteBuildSourceResponseFields(source) };
     }
 
     const validation = recycleRemoteValidateCatalog(parsed);
@@ -1226,7 +1458,7 @@ async function recycleRemoteRefresh() {
         validationErrors: validation.errors
       });
       await recycleRemoteChromeSet({ [keys.status]: status });
-      return { ok: false, result: "validation_failed", meta: previousMeta, status, errors: validation.errors };
+      return { ok: false, result: "validation_failed", meta: previousMeta, status, errors: validation.errors, ...recycleRemoteBuildSourceResponseFields(source) };
     }
 
     const etag = recycleRemoteTrim(response.headers?.get?.("etag"));
@@ -1234,7 +1466,9 @@ async function recycleRemoteRefresh() {
     const meta = {
       schemaVersion: validation.sanitized.schemaVersion,
       revision: validation.sanitized.revision,
-      sourceUrl: RECYCLE_REMOTE_CONFIG_URL,
+      sourceUrl: source.activeSourceUrl,
+      sourceId: source.activeSourceId,
+      sourceLabel: source.activeSourceLabel,
       etag,
       fetchedAt,
       byteLength,
@@ -1257,7 +1491,8 @@ async function recycleRemoteRefresh() {
       meta,
       status,
       contractCompatibility: recycleRemoteEvaluateCatalogContract(validation.sanitized, meta),
-      errors: []
+      errors: [],
+      ...recycleRemoteBuildSourceResponseFields(source)
     };
   } catch (error) {
     const status = recycleRemoteBuildStatus("fetch_failed", startedAt, {
@@ -1267,7 +1502,9 @@ async function recycleRemoteRefresh() {
       validationErrors: []
     });
     await recycleRemoteChromeSet({ [keys.status]: status });
-    return { ok: false, result: "fetch_failed", meta: previousMeta, status, errors: [] };
+    const stored = await recycleRemoteChromeGet([keys.sourceOverride]);
+    const source = recycleRemoteResolveActiveSource(stored);
+    return { ok: false, result: "fetch_failed", meta: previousMeta, status, errors: [], ...recycleRemoteBuildSourceResponseFields(source) };
   }
 }
 
@@ -1321,6 +1558,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "recycleConfig.setAutoRefreshEnabled") {
         return respondOnce(await recycleRemoteSetAutoRefreshEnabled(msg.enabled === true));
+      }
+
+      if (msg.type === "recycleConfig.setRemoteSourceOverride") {
+        return respondOnce(await recycleRemoteSetSourceOverride(msg.url));
+      }
+
+      if (msg.type === "recycleConfig.clearRemoteSourceOverride") {
+        return respondOnce(await recycleRemoteClearSourceOverride());
       }
 
       if (msg.type === "recycleConfig.maybeRefreshRemote") {
