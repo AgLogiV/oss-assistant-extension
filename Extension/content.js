@@ -3304,6 +3304,13 @@
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
+  const RECYCLE_STATE_ROOT_ID = "_wflowRecycleState";
+  const RECYCLE_STATE_SERIAL_INPUT_ID = "_wflowRecycleState_SerialNo";
+  const RECYCLE_STATE_SSID1_INPUT_ID = "_wflowRecycleState_Ssid1";
+  const RECYCLE_STATE_SSID2_INPUT_ID = "_wflowRecycleState_Ssid2";
+  const RECYCLE_STATE_EX220_SSID_WARNING_ID = "wifi-oss-recycle-state-ex220-ssid-warning";
+  const RECYCLE_STATE_EX220_DEVICE_IDS = new Set(["tp_link_ex220", "tp_link_ex220_home"]);
+  const RECYCLE_STATE_EX220_SSID_WARNING_TEXT = "\u0418\u043c\u0435\u0442\u043e \u043d\u0430 \u043c\u0440\u0435\u0436\u0430\u0442\u0430 \u0435 \u043d\u0435\u043e\u0431\u0438\u0447\u0430\u0439\u043d\u043e \u0437\u0430 \u0442\u043e\u0437\u0438 \u043c\u043e\u0434\u0435\u043b. \u041f\u0440\u043e\u0432\u0435\u0440\u0438 \u043e\u0442 \u0435\u0442\u0438\u043a\u0435\u0442\u0430 \u043d\u0430 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e\u0442\u043e \u0434\u0430\u043b\u0438 \u0442\u043e\u0432\u0430 \u043d\u0430\u0438\u0441\u0442\u0438\u043d\u0430 \u0435 TP-Link EX220.";
   const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
   const RECYCLE_HISTORY_DAYS_BACK = 3;
   const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
@@ -6432,6 +6439,106 @@
     return true;
   }
 
+  function isRecycleStatePagePath() {
+    const path = String(window.location?.pathname || "");
+    return path.includes("/wflow/recycle-state/");
+  }
+
+  function isRecycleStateEx220SelectedContext() {
+    if (readSelectedRecycleEntryCategory() !== "routers") return false;
+    return readSelectedRecycleDeviceIdsStorage()
+      .some(deviceId => RECYCLE_STATE_EX220_DEVICE_IDS.has(String(deviceId || "").trim()));
+  }
+
+  function isRecycleStateEx220SsidSuspicious(value) {
+    const ssid = String(value || "").trim();
+    if (!ssid) return false;
+    return !ssid.toUpperCase().startsWith("A1");
+  }
+
+  function ensureRecycleStateEx220SsidWarningHost(root, serialInput, ssid1Input, ssid2Input) {
+    const existing = document.getElementById(RECYCLE_STATE_EX220_SSID_WARNING_ID);
+    if (existing) return existing;
+
+    const host = document.createElement("div");
+    host.id = RECYCLE_STATE_EX220_SSID_WARNING_ID;
+    host.className = "half-row";
+    host.style.display = "none";
+    host.style.boxSizing = "border-box";
+    host.style.minHeight = "25px";
+    host.style.marginBottom = "10px";
+
+    const serialRow = serialInput?.closest(".half-row") || serialInput?.parentElement;
+    const recycleFieldset = serialInput?.closest("fieldset");
+    if (recycleFieldset && serialRow && serialRow.parentElement === recycleFieldset) {
+      serialRow.insertAdjacentElement("afterend", host);
+      return host;
+    }
+
+    const ssidRow = ssid2Input?.closest(".half-row") || ssid1Input?.closest(".half-row");
+    if (ssidRow?.parentElement) {
+      ssidRow.insertAdjacentElement("afterend", host);
+      return host;
+    }
+
+    const fallbackParent = ssid1Input?.closest("fieldset") || root;
+    fallbackParent.appendChild(host);
+    return host;
+  }
+
+  function injectRecycleStateEx220SsidWarning() {
+    if (!isRecycleStatePagePath()) return false;
+
+    const root = document.getElementById(RECYCLE_STATE_ROOT_ID);
+    if (!root) return false;
+
+    const ssid1Input = document.getElementById(RECYCLE_STATE_SSID1_INPUT_ID);
+    const ssid2Input = document.getElementById(RECYCLE_STATE_SSID2_INPUT_ID);
+    if (!ssid1Input || !ssid2Input) return false;
+
+    const serialInput = document.getElementById(RECYCLE_STATE_SERIAL_INPUT_ID);
+    let warningHost = document.getElementById(RECYCLE_STATE_EX220_SSID_WARNING_ID);
+    if (isRecycleStateEx220SelectedContext()) {
+      warningHost = ensureRecycleStateEx220SsidWarningHost(root, serialInput, ssid1Input, ssid2Input);
+    }
+
+    const evaluate = () => {
+      if (!warningHost) return;
+      if (!isRecycleStateEx220SelectedContext()) {
+        clearRecycleInlineAlert(warningHost);
+        return;
+      }
+
+      const suspicious = [ssid1Input.value, ssid2Input.value].some(isRecycleStateEx220SsidSuspicious);
+      if (suspicious) {
+        setRecycleInlineAlert(warningHost, RECYCLE_STATE_EX220_SSID_WARNING_TEXT, "warning");
+      } else {
+        clearRecycleInlineAlert(warningHost);
+      }
+    };
+
+    if (warningHost && warningHost.dataset.wifiOssEx220SsidWarningBound !== "1") {
+      warningHost.dataset.wifiOssEx220SsidWarningBound = "1";
+      ssid1Input.addEventListener("input", evaluate);
+      ssid1Input.addEventListener("change", evaluate);
+      ssid2Input.addEventListener("input", evaluate);
+      ssid2Input.addEventListener("change", evaluate);
+    }
+
+    evaluate();
+    return true;
+  }
+
+  function startRecycleStateEx220SsidWarningObserver() {
+    if (!isRecycleStatePagePath()) return;
+    if (injectRecycleStateEx220SsidWarning()) return;
+
+    const obs = new MutationObserver(() => {
+      if (injectRecycleStateEx220SsidWarning()) obs.disconnect();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
   const AFTER_RECYCLE_CAPTURE_SN_BTN_ID = "_wflowSavedTestPictureList_captureSn";
   const AFTER_RECYCLE_CAPTURE_SN_LABEL = "СНИМКА НА S/N";
 
@@ -6479,5 +6586,6 @@
   startDeviceFunctionsObserver();
   startRecycleEntryObserver();
   startCamModulesOperationHintObserver();
+  startRecycleStateEx220SsidWarningObserver();
   startAfterRecycleCaptureSnLabelObserver();
 })();

@@ -254,6 +254,23 @@ Current behavior:
 - the full manual help menu is separate from the automatic floating preview;
 - Android/IPTV currently has device-level help images for its implemented help entries.
 
+### Recycle-State EX220 SSID Warning
+
+On `/wflow/recycle-state/` pages, the extension shows a warning-only yellow inline message for unusual TP-Link EX220 SSID values.
+
+Current behavior:
+
+- reads only `_wflowRecycleState_Ssid1` and `_wflowRecycleState_Ssid2`;
+- applies only when the current per-domain selected concrete device includes `tp_link_ex220` or `tp_link_ex220_home`;
+- does not apply to the broader `routers` category when no concrete EX220 device is selected;
+- treats empty SSID fields as no warning;
+- treats populated SSIDs that start with `A1` or `A1_` as normal;
+- shows the warning when any populated SSID does not start with `A1`;
+- clears the warning when the SSID values are corrected to `A1...`;
+- does not block Continue/Save, change serial validation, auto-click anything, or write to SSID/PSK/Port fields.
+
+The warning uses the same per-domain recycle selection state as the existing category/device flow. It does not introduce cross-domain shared selection or `chrome.storage.local` context.
+
 ### Storage Keys
 
 Recycle entry storage:

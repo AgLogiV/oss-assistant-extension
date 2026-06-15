@@ -104,6 +104,15 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - If possible, reload or reopen the page on the next workday and confirm the old category is not retained.
 - If possible, reload or reopen the page on the next workday and confirm old selected devices are not retained.
 
+## Recycle State: EX220 SSID Warning
+
+- Select `TP-Link EX220` or `TP-Link EX220 Home`, continue to the recycle-state page, and confirm `Ssid1`/`Ssid2` values starting with `A1...` show no warning.
+- With `TP-Link EX220` or `TP-Link EX220 Home` selected, enter a populated non-`A1` SSID in `_wflowRecycleState_Ssid1` or `_wflowRecycleState_Ssid2` and confirm the yellow warning appears.
+- Correct the abnormal SSID back to `A1...` and confirm the warning disappears.
+- Leave both `_wflowRecycleState_Ssid1` and `_wflowRecycleState_Ssid2` empty and confirm there is no warning and Continue/Save is not blocked.
+- Select another router device and enter an abnormal SSID; confirm the EX220 warning does not appear.
+- Use the clipboard autofill buttons and confirm SSID/PSK/Port fields still fill normally and the EX220 warning updates without conflicting with autofill.
+
 ## SAP/Material Step
 
 - Continue from a valid recycle entry to the material step.
