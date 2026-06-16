@@ -3306,8 +3306,14 @@
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
   const RECYCLE_STATE_ROOT_ID = "_wflowRecycleState";
   const RECYCLE_STATE_SERIAL_INPUT_ID = "_wflowRecycleState_SerialNo";
+  const RECYCLE_STATE_MAC_INPUT_ID = "_wflowRecycleState_Mac";
+  const RECYCLE_STATE_STB_PROFILE_SELECT_ID = "_wflowRecycleState_StbProfile";
   const RECYCLE_STATE_SSID1_INPUT_ID = "_wflowRecycleState_Ssid1";
   const RECYCLE_STATE_SSID2_INPUT_ID = "_wflowRecycleState_Ssid2";
+  const RECYCLE_STATE_KSTB5019_DEVICE_ID = "kaon_kstb5019_xploretv";
+  const RECYCLE_STATE_KSTB5019_CATEGORY_ID = "xplore_zapper";
+  const RECYCLE_STATE_KSTB5019_OTT_INFO_ID = "wifi-oss-recycle-state-kstb5019-ott-info";
+  const RECYCLE_STATE_KSTB5019_OTT_INFO_TEXT = "OTT е избрано по подразбиране.";
   const RECYCLE_STATE_EX220_SSID_WARNING_ID = "wifi-oss-recycle-state-ex220-ssid-warning";
   const RECYCLE_STATE_EX220_DEVICE_IDS = new Set(["tp_link_ex220", "tp_link_ex220_home"]);
   const RECYCLE_STATE_EX220_SSID_WARNING_TEXT = "\u0418\u043c\u0435\u0442\u043e \u043d\u0430 \u043c\u0440\u0435\u0436\u0430\u0442\u0430 \u0435 \u043d\u0435\u043e\u0431\u0438\u0447\u0430\u0439\u043d\u043e \u0437\u0430 \u0442\u043e\u0437\u0438 \u043c\u043e\u0434\u0435\u043b. \u041f\u0440\u043e\u0432\u0435\u0440\u0438 \u043e\u0442 \u0435\u0442\u0438\u043a\u0435\u0442\u0430 \u043d\u0430 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e\u0442\u043e \u0434\u0430\u043b\u0438 \u0442\u043e\u0432\u0430 \u043d\u0430\u0438\u0441\u0442\u0438\u043d\u0430 \u0435 TP-Link EX220.";
@@ -6630,6 +6636,249 @@
     obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
   }
 
+  function isRecycleStateKstb5019SelectedContext() {
+    if (readSelectedRecycleEntryCategory() !== RECYCLE_STATE_KSTB5019_CATEGORY_ID) return false;
+    const selectedDeviceIds = readSelectedRecycleDeviceIdsStorage();
+    if (selectedDeviceIds.length !== 1) return false;
+    return String(selectedDeviceIds[0] || "").trim() === RECYCLE_STATE_KSTB5019_DEVICE_ID;
+  }
+
+  function normalizeRecycleStateKstb5019MacSource(value) {
+    const compact = String(value || "").trim().replace(/[\s:.-]+/g, "").toUpperCase();
+    return /^[0-9A-F]{12}$/.test(compact) ? compact : "";
+  }
+
+  function formatRecycleStateKstb5019Mac(value) {
+    const mac = normalizeRecycleStateKstb5019MacSource(value);
+    return mac ? mac.match(/.{1,2}/g).join(":") : "";
+  }
+
+  function rememberRecycleStateKstb5019AutofillOriginalStyles(input) {
+    if (!input) return;
+    if (input.dataset.wifiOssKstb5019AutoFillOriginalStyleSaved === "1") return;
+    input.dataset.wifiOssKstb5019AutoFillOriginalStyleSaved = "1";
+    input.dataset.wifiOssKstb5019AutoFillOriginalBackground = input.style.background || "";
+    input.dataset.wifiOssKstb5019AutoFillOriginalBackgroundColor = input.style.backgroundColor || "";
+    input.dataset.wifiOssKstb5019AutoFillOriginalBackgroundImage = input.style.backgroundImage || "";
+    input.dataset.wifiOssKstb5019AutoFillOriginalBorderColor = input.style.borderColor || "";
+    input.dataset.wifiOssKstb5019AutoFillOriginalBoxShadow = input.style.boxShadow || "";
+  }
+
+  function restoreRecycleStateKstb5019AutofillOriginalStyles(input) {
+    if (!input) return;
+    input.style.removeProperty("background");
+    input.style.removeProperty("background-color");
+    input.style.removeProperty("background-image");
+    input.style.removeProperty("border-color");
+    input.style.removeProperty("box-shadow");
+    const originalBackground = input.dataset.wifiOssKstb5019AutoFillOriginalBackground || "";
+    const originalBackgroundColor = input.dataset.wifiOssKstb5019AutoFillOriginalBackgroundColor || "";
+    const originalBackgroundImage = input.dataset.wifiOssKstb5019AutoFillOriginalBackgroundImage || "";
+    const originalBorderColor = input.dataset.wifiOssKstb5019AutoFillOriginalBorderColor || "";
+    const originalBoxShadow = input.dataset.wifiOssKstb5019AutoFillOriginalBoxShadow || "";
+    if (originalBackground) input.style.background = originalBackground;
+    if (originalBackgroundColor) input.style.backgroundColor = originalBackgroundColor;
+    if (originalBackgroundImage) input.style.backgroundImage = originalBackgroundImage;
+    if (originalBorderColor) input.style.borderColor = originalBorderColor;
+    if (originalBoxShadow) input.style.boxShadow = originalBoxShadow;
+  }
+
+  function clearRecycleStateKstb5019AutofillVisualState(input) {
+    if (!input) return;
+    restoreRecycleStateKstb5019AutofillOriginalStyles(input);
+    delete input.dataset.wifiOssKstb5019AutoFilled;
+    delete input.dataset.wifiOssKstb5019AutoFilledValue;
+  }
+
+  function markRecycleStateKstb5019MacUserTouched(root, input) {
+    if (!root || !input) return;
+    root.dataset.wifiOssKstb5019MacUserTouched = "1";
+    clearRecycleStateKstb5019AutofillVisualState(input);
+  }
+
+  function handleRecycleStateKstb5019MacUserEdit(root, input, event) {
+    if (!root || !input) return;
+    if (!isRecycleStateDthAutofillTrustedEvent(event)) return;
+    if (!input.dataset.wifiOssKstb5019AutoFilledValue) return;
+    markRecycleStateKstb5019MacUserTouched(root, input);
+  }
+
+  function syncRecycleStateKstb5019MacVisualState(root, input, event) {
+    if (!root || !input) return;
+    if (!isRecycleStateDthAutofillTrustedEvent(event)) return;
+    const autoFilledValue = String(input.dataset.wifiOssKstb5019AutoFilledValue || "").trim();
+    if (!autoFilledValue) return;
+    if (String(input.value || "").trim() === autoFilledValue) return;
+    markRecycleStateKstb5019MacUserTouched(root, input);
+  }
+
+  function attachRecycleStateKstb5019MacVisualReset(root, input) {
+    if (!root || !input) return;
+    if (input.dataset.wifiOssKstb5019AutoFillVisualResetBound === "1") return;
+    input.dataset.wifiOssKstb5019AutoFillVisualResetBound = "1";
+    const userEdit = (event) => handleRecycleStateKstb5019MacUserEdit(root, input, event);
+    const sync = (event) => syncRecycleStateKstb5019MacVisualState(root, input, event);
+    input.addEventListener("beforeinput", userEdit);
+    input.addEventListener("paste", userEdit);
+    input.addEventListener("cut", userEdit);
+    input.addEventListener("keydown", (event) => {
+      if (isRecycleStateDthAutofillEditingKey(event)) userEdit(event);
+    });
+    input.addEventListener("input", sync);
+    input.addEventListener("change", sync);
+  }
+
+  function markRecycleStateKstb5019MacAutofilled(root, input, value) {
+    if (!root || !input) return;
+    rememberRecycleStateKstb5019AutofillOriginalStyles(input);
+    input.dataset.wifiOssKstb5019AutoFilled = "1";
+    input.dataset.wifiOssKstb5019AutoFilledValue = String(value || "").trim();
+    input.style.setProperty("background", "#fff2b8", "important");
+    input.style.setProperty("background-color", "#fff2b8", "important");
+    input.style.setProperty("background-image", "none", "important");
+    input.style.setProperty("border-color", "#e2231a", "important");
+    input.style.setProperty("box-shadow", "0 0 0 2px rgba(226, 35, 26, 0.20) inset", "important");
+    attachRecycleStateKstb5019MacVisualReset(root, input);
+  }
+
+  function fillRecycleStateKstb5019Mac(root) {
+    if (!root) return true;
+    if (root.dataset.wifiOssKstb5019MacUserTouched === "1") return true;
+    if (root.dataset.wifiOssKstb5019MacAutofillDone === "1") return true;
+
+    const sourceInput = document.getElementById(RECYCLE_STATE_SERIAL_INPUT_ID);
+    const targetInput = document.getElementById(RECYCLE_STATE_MAC_INPUT_ID);
+    if (!targetInput) return false;
+    attachRecycleStateKstb5019MacVisualReset(root, targetInput);
+
+    const sourceMac = normalizeRecycleStateKstb5019MacSource(sourceInput?.value);
+    if (!sourceMac) return true;
+    if (String(targetInput.value || "").trim()) return true;
+    if (targetInput.disabled || targetInput.readOnly) return true;
+
+    const formattedMac = formatRecycleStateKstb5019Mac(sourceMac);
+    if (!formattedMac) return true;
+    setRecycleStateInputValue(targetInput, formattedMac);
+    markRecycleStateKstb5019MacAutofilled(root, targetInput, formattedMac);
+    root.dataset.wifiOssKstb5019MacAutofillDone = "1";
+    return true;
+  }
+
+  function findRecycleStateKstb5019OttOption(selectEl) {
+    if (!selectEl) return null;
+    const options = Array.from(selectEl.options || []);
+    return options.find(opt => String(opt.textContent || "").trim().toUpperCase() === "OTT")
+      || options.find(opt => String(opt.value || "").trim() === "2")
+      || null;
+  }
+
+  function ensureRecycleStateKstb5019OttInfo(selectEl) {
+    if (!selectEl) return null;
+    const existing = document.getElementById(RECYCLE_STATE_KSTB5019_OTT_INFO_ID);
+    if (existing) return existing;
+
+    const info = document.createElement("div");
+    info.id = RECYCLE_STATE_KSTB5019_OTT_INFO_ID;
+    info.className = "half-row";
+    info.textContent = RECYCLE_STATE_KSTB5019_OTT_INFO_TEXT;
+    info.style.display = "inline-flex";
+    info.style.alignItems = "center";
+    info.style.boxSizing = "border-box";
+    info.style.width = "auto";
+    info.style.marginLeft = "8px";
+    info.style.marginBottom = "8px";
+    info.style.padding = "7px 10px";
+    info.style.border = "1px solid #d28a1d";
+    info.style.borderRadius = "6px";
+    info.style.background = "#fff7e6";
+    info.style.color = "#7a4300";
+    info.style.fontSize = "12px";
+    info.style.fontWeight = "700";
+    info.style.lineHeight = "1.25";
+    info.style.whiteSpace = "nowrap";
+    info.setAttribute("role", "status");
+
+    const row = selectEl.closest(".half-row") || selectEl.parentElement;
+    if (row?.parentElement) {
+      row.insertAdjacentElement("afterend", info);
+      return info;
+    }
+    if (selectEl.parentElement) {
+      selectEl.insertAdjacentElement("afterend", info);
+      return info;
+    }
+    return null;
+  }
+
+  function selectRecycleStateKstb5019Ott(root) {
+    if (!root) return true;
+    if (root.dataset.wifiOssKstb5019OttDone === "1") return true;
+
+    const selectEl = document.getElementById(RECYCLE_STATE_STB_PROFILE_SELECT_ID);
+    if (!selectEl) return false;
+    if (!selectEl.options || !selectEl.options.length) return false;
+
+    const ottOption = findRecycleStateKstb5019OttOption(selectEl);
+    if (!ottOption) {
+      root.dataset.wifiOssKstb5019OttDone = "1";
+      return true;
+    }
+
+    if (String(selectEl.value || "") !== String(ottOption.value || "")) {
+      setChosenValue(selectEl, ottOption.value);
+    } else {
+      updateChosenDisplay(selectEl);
+    }
+    ensureRecycleStateKstb5019OttInfo(selectEl);
+    root.dataset.wifiOssKstb5019OttDone = "1";
+    return true;
+  }
+
+  function injectRecycleStateKstb5019XploreTvHelper() {
+    if (!isRecycleStatePagePath()) return true;
+
+    const root = document.getElementById(RECYCLE_STATE_ROOT_ID);
+    if (!root) return false;
+
+    if (!isRecycleStateKstb5019SelectedContext()) return true;
+
+    const macDone = fillRecycleStateKstb5019Mac(root);
+    const ottDone = selectRecycleStateKstb5019Ott(root);
+    return macDone && ottDone;
+  }
+
+  function startRecycleStateKstb5019XploreTvHelperObserver() {
+    if (!isRecycleStatePagePath()) return;
+
+    let attempts = 0;
+    const maxAttempts = 24;
+    let timer = 0;
+    let obs = null;
+
+    const cleanup = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = 0;
+      }
+      if (obs) {
+        obs.disconnect();
+        obs = null;
+      }
+    };
+
+    const tryInject = () => {
+      attempts += 1;
+      if (injectRecycleStateKstb5019XploreTvHelper() || attempts >= maxAttempts) cleanup();
+    };
+
+    tryInject();
+    if (attempts >= maxAttempts) return;
+
+    obs = new MutationObserver(tryInject);
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    timer = setInterval(tryInject, 250);
+  }
+
   function isRecycleStateEx220SelectedContext() {
     if (readSelectedRecycleEntryCategory() !== "routers") return false;
     return readSelectedRecycleDeviceIdsStorage()
@@ -6773,6 +7022,7 @@
   startRecycleEntryObserver();
   startCamModulesOperationHintObserver();
   startRecycleStateDthAutofillObserver();
+  startRecycleStateKstb5019XploreTvHelperObserver();
   startRecycleStateEx220SsidWarningObserver();
   startAfterRecycleCaptureSnLabelObserver();
 })();
