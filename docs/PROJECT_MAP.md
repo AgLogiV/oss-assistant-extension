@@ -271,6 +271,24 @@ Current behavior:
 
 The warning uses the same per-domain recycle selection state as the existing category/device flow. It does not introduce cross-domain shared selection or `chrome.storage.local` context.
 
+### Later-Page Helpers by Selected Device
+
+The EX220 recycle-state SSID warning is the first implemented example of a broader pattern: a concrete recycle device selected earlier can decide whether a small helper runs on a later OSS page.
+
+General rules for future helpers:
+
+- recycle category/device selection is intentionally per-domain, using the current OSS origin's existing recycle selection state;
+- do not introduce `chrome.storage.local` or global cross-domain shared selection unless a future task proves that the same real workflow changes origin mid-flow and cannot work otherwise;
+- use stable `deviceId` values, not display names, to decide whether a helper applies;
+- if only a category is selected and no concrete device is selected, device-specific helpers should normally stay inactive unless a task explicitly says otherwise;
+- later-page helpers should be guarded by stable page/root selectors and path checks;
+- warning/observe-only helpers should be read-only and must not block Continue/Save, call `preventDefault`, auto-click, or edit fields;
+- automation helpers are allowed only when explicitly requested and must define exact source fields, target fields, timing, overwrite rules, and device/category scope;
+- automation helpers should avoid overwriting a non-empty user-entered target field unless the task explicitly allows it;
+- protect sensitive existing runtime areas: serial validation, CAM flow, material auto-continue, clipboard autofill, and label/barcode generation.
+
+A possible future example is a DTH-specific helper that reads or copies a `chip id` value into a `serial number` field only for selected devices that require that behavior. This is not implemented behavior yet.
+
 ### Storage Keys
 
 Recycle entry storage:
