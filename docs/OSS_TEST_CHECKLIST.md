@@ -113,14 +113,14 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Select another router device and enter an abnormal SSID; confirm the EX220 warning does not appear.
 - Use the clipboard autofill buttons and confirm SSID/PSK/Port fields still fill normally and the EX220 warning updates without conflicting with autofill.
 
-## Recycle State: DTH KAON Chip Id Autofill
+## Recycle State: DTH Chip Id Autofill
 
-- Select exactly `DTH STB KAON KSTB1001`, continue to the recycle-state page, and confirm `_wflowRecycleState_SerialNoDth` (visible `Chip Id:`) is auto-filled from `_wflowRecycleState_ChipIdDth` (visible `Сериен номер:`), remains editable, and `_wflowRecycleState_CardNo` (visible `Карта No:`) receives focus.
-- With category `dth_kaon_nagra` selected but no concrete device selected, continue to the recycle-state page and confirm the DTH KAON helper does not fill or focus anything.
-- Select `DTH Nagra DTS3460`, continue to the recycle-state page, and confirm the DTH KAON helper does not activate.
-- Select multiple DTH devices, continue to the recycle-state page, and confirm the DTH KAON helper does not activate.
+- Select exactly `DTH STB KAON KSTB1001`, continue to the recycle-state page, and confirm `_wflowRecycleState_SerialNoDth` (visible `Chip Id:`) is auto-filled from `_wflowRecycleState_ChipIdDth` (visible `Сериен номер:`), remains editable, gets the yellow/red marker, and `_wflowRecycleState_CardNo` (visible `Карта No:`) receives focus.
+- Select exactly `DTH Nagra DTS3460`, continue to the recycle-state page, and confirm `_wflowRecycleState_SerialNoDth` (visible `Chip Id:`) is auto-filled from `_wflowRecycleState_ChipIdDth` (visible `Сериен номер:`), remains editable, gets the yellow/red marker, and `_wflowRecycleState_CardNo` (visible `Карта No:`) receives focus.
+- With category `dth_kaon_nagra` selected but no concrete device selected, continue to the recycle-state page and confirm the DTH helper does not fill or focus anything.
+- Select multiple DTH devices, continue to the recycle-state page, and confirm the DTH helper does not activate.
 - If `_wflowRecycleState_SerialNoDth` is already non-empty before extension interaction, confirm it is not overwritten and focus is not moved by the helper.
-- Confirm Continue/Save on the recycle-state page is not blocked by the DTH KAON helper.
+- Confirm Continue/Save on the recycle-state page is not blocked by the DTH helper.
 - Regression smoke: confirm the EX220 SSID warning still works and existing clipboard SSID/password autofill buttons still fill supported recycle-state fields normally.
 
 ## SAP/Material Step

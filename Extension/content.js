@@ -3317,6 +3317,12 @@
       sourceInputId: "_wflowRecycleState_ChipIdDth",
       targetInputId: "_wflowRecycleState_SerialNoDth",
       focusInputId: "_wflowRecycleState_CardNo"
+    },
+    dth_nagra_dts3460: {
+      categoryId: "dth_kaon_nagra",
+      sourceInputId: "_wflowRecycleState_ChipIdDth",
+      targetInputId: "_wflowRecycleState_SerialNoDth",
+      focusInputId: "_wflowRecycleState_CardNo"
     }
   };
   const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
