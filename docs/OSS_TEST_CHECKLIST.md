@@ -123,6 +123,19 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm Continue/Save on the recycle-state page is not blocked by the DTH helper.
 - Regression smoke: confirm the EX220 SSID warning still works and existing clipboard SSID/password autofill buttons still fill supported recycle-state fields normally.
 
+## Recycle State: KSTB5019 MAC + OTT Helper
+
+- Select exactly `KSTB5019 XploreTV` (`deviceId` `kaon_kstb5019_xploretv`) in category `xplore_zapper`, continue to the recycle-state page, and confirm `_wflowRecycleState_Mac` is auto-filled from same-page disabled `_wflowRecycleState_SerialNo`.
+- With source `_wflowRecycleState_SerialNo` value `840112DA0EDB`, confirm `_wflowRecycleState_Mac` receives formatted value `84:01:12:DA:0E:DB`.
+- Confirm the MAC field receives the yellow/red auto-filled marker and remains editable.
+- Confirm `_wflowRecycleState_StbProfile` is set to option `OTT`, the Chosen UI shows `OTT`, and the yellow inline notice `OTT е избрано по подразбиране.` appears inside the `Тип ОТТ` fieldset.
+- If `_wflowRecycleState_SerialNo` is missing, empty, or not a valid 12-hex MAC, confirm the helper does not fill `_wflowRecycleState_Mac` and does not block Continue/Save.
+- If `_wflowRecycleState_Mac` is already non-empty before extension interaction, confirm it is not overwritten.
+- Edit the auto-filled MAC manually and confirm the yellow/red marker is removed and the helper does not re-fill the MAC again on the same page load.
+- Manually change the OTT dropdown away from `OTT` and confirm the UI allows the change and the helper does not repeatedly force it back to `OTT`.
+- Continue with no concrete device selected, category-only `xplore_zapper`, multiple selected Xplore/Zapper devices, `KSTB5020 XploreTV`, and `KSTB6106 Zapper`; confirm the KSTB5019 helper does not activate.
+- Regression smoke: confirm DTH KAON/Nagra Chip Id autofill, EX220 SSID warning, clipboard autofill, and SAP/material flow still work.
+
 ## SAP/Material Step
 
 - Continue from a valid recycle entry to the material step.

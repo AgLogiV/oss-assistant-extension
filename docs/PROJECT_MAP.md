@@ -287,9 +287,30 @@ Current behavior:
 - applies a yellow/red auto-filled marker to `Chip Id:` and focuses `_wflowRecycleState_CardNo` (visible label `Карта No:`) once after a successful fill;
 - does not block Continue/Save, call `preventDefault`, auto-click anything, change serial validation, or write to the disabled source field.
 
+### Recycle-State KSTB5019 XploreTV MAC + OTT Helper
+
+On `/wflow/recycle-state/` pages, the extension can auto-fill the MAC field and default the OTT profile for the selected `KSTB5019 XploreTV` recycle flow.
+
+Current behavior:
+
+- applies only when the current per-domain selected category is exactly `xplore_zapper`;
+- applies only when the selected concrete devices list contains exactly one `deviceId`, and it is `kaon_kstb5019_xploretv`;
+- does not apply to category-only `xplore_zapper`, no concrete device, multi-select, `KSTB5020 XploreTV`, `KSTB6106 Zapper`, or any other device/category;
+- reads the current operation serial/MAC only from the same-page disabled source field `_wflowRecycleState_SerialNo`;
+- does not use `wifi_oss_recycle_entry_last_serial`, does not add a storage fallback, and does not use `chrome.storage.local`;
+- normalizes the source as uppercase 12-hex MAC and treats missing, empty, or invalid source values as a safe no-op;
+- fills only an empty editable `_wflowRecycleState_Mac` target field, formatting `840112DA0EDB` as `84:01:12:DA:0E:DB`;
+- leaves a non-empty MAC unchanged and keeps the field editable after extension fill;
+- dispatches `input` and `change` after MAC fill so OSS can detect the value;
+- applies a yellow/red auto-filled marker to the MAC field, removes it if the operator edits the MAC, and does not re-fill again on the same page load after manual edit;
+- selects the `OTT` option in `_wflowRecycleState_StbProfile`, dispatches the existing select/Chosen events, and updates the Chosen UI so it displays `OTT`;
+- shows a yellow inline informational notice inside the `Тип ОТТ` fieldset with text `OTT е избрано по подразбиране.`;
+- allows the operator to manually change the MAC field or OTT dropdown after automation;
+- does not block Continue/Save, call `preventDefault`, auto-click anything, change serial validation, or change SAP/material flow.
+
 ### Later-Page Helpers by Selected Device
 
-The EX220 recycle-state SSID warning and DTH Chip Id autofill are implemented examples of a broader pattern: a concrete recycle device selected earlier can decide whether a small helper runs on a later OSS page.
+The EX220 recycle-state SSID warning, DTH Chip Id autofill, and KSTB5019 MAC + OTT helper are implemented examples of a broader pattern: a concrete recycle device selected earlier can decide whether a small helper runs on a later OSS page.
 
 General rules for future helpers:
 
