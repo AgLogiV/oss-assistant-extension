@@ -3311,6 +3311,14 @@
   const RECYCLE_STATE_EX220_SSID_WARNING_ID = "wifi-oss-recycle-state-ex220-ssid-warning";
   const RECYCLE_STATE_EX220_DEVICE_IDS = new Set(["tp_link_ex220", "tp_link_ex220_home"]);
   const RECYCLE_STATE_EX220_SSID_WARNING_TEXT = "\u0418\u043c\u0435\u0442\u043e \u043d\u0430 \u043c\u0440\u0435\u0436\u0430\u0442\u0430 \u0435 \u043d\u0435\u043e\u0431\u0438\u0447\u0430\u0439\u043d\u043e \u0437\u0430 \u0442\u043e\u0437\u0438 \u043c\u043e\u0434\u0435\u043b. \u041f\u0440\u043e\u0432\u0435\u0440\u0438 \u043e\u0442 \u0435\u0442\u0438\u043a\u0435\u0442\u0430 \u043d\u0430 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e\u0442\u043e \u0434\u0430\u043b\u0438 \u0442\u043e\u0432\u0430 \u043d\u0430\u0438\u0441\u0442\u0438\u043d\u0430 \u0435 TP-Link EX220.";
+  const RECYCLE_STATE_DTH_AUTOFILL_CONFIG_BY_DEVICE_ID = {
+    dth_kaon_kstb1001: {
+      categoryId: "dth_kaon_nagra",
+      sourceInputId: "_wflowRecycleState_ChipIdDth",
+      targetInputId: "_wflowRecycleState_SerialNoDth",
+      focusInputId: "_wflowRecycleState_CardNo"
+    }
+  };
   const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
   const RECYCLE_HISTORY_DAYS_BACK = 3;
   const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
@@ -6444,6 +6452,178 @@
     return path.includes("/wflow/recycle-state/");
   }
 
+  function getRecycleStateDthAutofillConfigForContext() {
+    const selectedDeviceIds = readSelectedRecycleDeviceIdsStorage();
+    if (selectedDeviceIds.length !== 1) return null;
+    const deviceId = String(selectedDeviceIds[0] || "").trim();
+    const config = RECYCLE_STATE_DTH_AUTOFILL_CONFIG_BY_DEVICE_ID[deviceId];
+    if (!config) return null;
+    if (readSelectedRecycleEntryCategory() !== config.categoryId) return null;
+    return config;
+  }
+
+  function setRecycleStateInputValue(input, value) {
+    if (!input) return;
+    const proto = Object.getPrototypeOf(input);
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (typeof setter === "function") setter.call(input, value);
+    else input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function rememberRecycleStateDthAutofillOriginalStyles(input) {
+    if (!input) return;
+    if (input.dataset.wifiOssDthAutoFillOriginalStyleSaved === "1") return;
+    input.dataset.wifiOssDthAutoFillOriginalStyleSaved = "1";
+    input.dataset.wifiOssDthAutoFillOriginalBackground = input.style.background || "";
+    input.dataset.wifiOssDthAutoFillOriginalBackgroundColor = input.style.backgroundColor || "";
+    input.dataset.wifiOssDthAutoFillOriginalBackgroundImage = input.style.backgroundImage || "";
+    input.dataset.wifiOssDthAutoFillOriginalBorderColor = input.style.borderColor || "";
+    input.dataset.wifiOssDthAutoFillOriginalBoxShadow = input.style.boxShadow || "";
+  }
+
+  function restoreRecycleStateDthAutofillOriginalStyles(input) {
+    if (!input) return;
+    input.style.removeProperty("background");
+    input.style.removeProperty("background-color");
+    input.style.removeProperty("background-image");
+    input.style.removeProperty("border-color");
+    input.style.removeProperty("box-shadow");
+    const originalBackground = input.dataset.wifiOssDthAutoFillOriginalBackground || "";
+    const originalBackgroundColor = input.dataset.wifiOssDthAutoFillOriginalBackgroundColor || "";
+    const originalBackgroundImage = input.dataset.wifiOssDthAutoFillOriginalBackgroundImage || "";
+    const originalBorderColor = input.dataset.wifiOssDthAutoFillOriginalBorderColor || "";
+    const originalBoxShadow = input.dataset.wifiOssDthAutoFillOriginalBoxShadow || "";
+    if (originalBackground) input.style.background = originalBackground;
+    if (originalBackgroundColor) input.style.backgroundColor = originalBackgroundColor;
+    if (originalBackgroundImage) input.style.backgroundImage = originalBackgroundImage;
+    if (originalBorderColor) input.style.borderColor = originalBorderColor;
+    if (originalBoxShadow) input.style.boxShadow = originalBoxShadow;
+  }
+
+  function clearRecycleStateDthAutofillVisualState(input) {
+    if (!input) return;
+    restoreRecycleStateDthAutofillOriginalStyles(input);
+    delete input.dataset.wifiOssDthAutoFilled;
+    delete input.dataset.wifiOssDthAutoFilledValue;
+  }
+
+  function markRecycleStateDthAutofillUserTouched(root, input) {
+    if (!root || !input) return;
+    root.dataset.wifiOssDthAutofillUserTouched = "1";
+    clearRecycleStateDthAutofillVisualState(input);
+  }
+
+  function isRecycleStateDthAutofillTrustedEvent(event) {
+    return !event || event.isTrusted !== false;
+  }
+
+  function isRecycleStateDthAutofillEditingKey(event) {
+    if (!event) return false;
+    if (event.defaultPrevented) return false;
+    const key = String(event.key || "");
+    if (key === "Backspace" || key === "Delete") return true;
+    if (event.ctrlKey || event.altKey || event.metaKey) return false;
+    return [...key].length === 1;
+  }
+
+  function handleRecycleStateDthAutofillUserEdit(root, input, event) {
+    if (!root || !input) return;
+    if (!isRecycleStateDthAutofillTrustedEvent(event)) return;
+    if (!input.dataset.wifiOssDthAutoFilledValue) return;
+    markRecycleStateDthAutofillUserTouched(root, input);
+  }
+
+  function syncRecycleStateDthAutofillVisualState(root, input, event) {
+    if (!root || !input) return;
+    if (!isRecycleStateDthAutofillTrustedEvent(event)) return;
+    const autoFilledValue = String(input.dataset.wifiOssDthAutoFilledValue || "").trim();
+    if (!autoFilledValue) return;
+    if (String(input.value || "").trim() === autoFilledValue) return;
+    markRecycleStateDthAutofillUserTouched(root, input);
+  }
+
+  function attachRecycleStateDthAutofillVisualReset(root, input) {
+    if (!root || !input) return;
+    if (input.dataset.wifiOssDthAutoFillVisualResetBound === "1") return;
+    input.dataset.wifiOssDthAutoFillVisualResetBound = "1";
+    const userEdit = (event) => handleRecycleStateDthAutofillUserEdit(root, input, event);
+    const sync = (event) => syncRecycleStateDthAutofillVisualState(root, input, event);
+    input.addEventListener("beforeinput", userEdit);
+    input.addEventListener("paste", userEdit);
+    input.addEventListener("cut", userEdit);
+    input.addEventListener("keydown", (event) => {
+      if (isRecycleStateDthAutofillEditingKey(event)) userEdit(event);
+    });
+    input.addEventListener("input", sync);
+    input.addEventListener("change", sync);
+  }
+
+  function markRecycleStateDthAutofilled(root, input, value) {
+    if (!root || !input) return;
+    rememberRecycleStateDthAutofillOriginalStyles(input);
+    input.dataset.wifiOssDthAutoFilled = "1";
+    input.dataset.wifiOssDthAutoFilledValue = String(value || "").trim();
+    input.style.setProperty("background", "#fff2b8", "important");
+    input.style.setProperty("background-color", "#fff2b8", "important");
+    input.style.setProperty("background-image", "none", "important");
+    input.style.setProperty("border-color", "#e2231a", "important");
+    input.style.setProperty("box-shadow", "0 0 0 2px rgba(226, 35, 26, 0.20) inset", "important");
+    attachRecycleStateDthAutofillVisualReset(root, input);
+  }
+
+  function focusRecycleStateInputOnce(root, input) {
+    if (!root || !input) return;
+    if (root.dataset.wifiOssDthAutofillFocused === "1") return;
+    if (!document.contains(input) || input.disabled || input.readOnly) return;
+    const active = document.activeElement;
+    const canTakeFocus = !active || active === document.body || active === document.documentElement || active === input;
+    if (!canTakeFocus) return;
+    root.dataset.wifiOssDthAutofillFocused = "1";
+    try { input.focus({ preventScroll: true }); } catch (e) {
+      try { input.focus(); } catch (e2) {}
+    }
+  }
+
+  function injectRecycleStateDthAutofill() {
+    if (!isRecycleStatePagePath()) return false;
+
+    const root = document.getElementById(RECYCLE_STATE_ROOT_ID);
+    if (!root) return false;
+
+    const config = getRecycleStateDthAutofillConfigForContext();
+    if (!config) return true;
+    if (root.dataset.wifiOssDthAutofillDone === "1") return true;
+
+    const sourceInput = document.getElementById(config.sourceInputId);
+    const targetInput = document.getElementById(config.targetInputId);
+    const focusInput = document.getElementById(config.focusInputId);
+    if (!sourceInput || !targetInput || !focusInput) return false;
+
+    root.dataset.wifiOssDthAutofillDone = "1";
+
+    const sourceValue = String(sourceInput.value || "").trim();
+    if (!sourceValue) return true;
+    if (String(targetInput.value || "").trim()) return true;
+    if (targetInput.disabled || targetInput.readOnly) return true;
+
+    setRecycleStateInputValue(targetInput, sourceValue);
+    markRecycleStateDthAutofilled(root, targetInput, sourceValue);
+    setTimeout(() => focusRecycleStateInputOnce(root, focusInput), 0);
+    return true;
+  }
+
+  function startRecycleStateDthAutofillObserver() {
+    if (!isRecycleStatePagePath()) return;
+    if (injectRecycleStateDthAutofill()) return;
+
+    const obs = new MutationObserver(() => {
+      if (injectRecycleStateDthAutofill()) obs.disconnect();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
   function isRecycleStateEx220SelectedContext() {
     if (readSelectedRecycleEntryCategory() !== "routers") return false;
     return readSelectedRecycleDeviceIdsStorage()
@@ -6586,6 +6766,7 @@
   startDeviceFunctionsObserver();
   startRecycleEntryObserver();
   startCamModulesOperationHintObserver();
+  startRecycleStateDthAutofillObserver();
   startRecycleStateEx220SsidWarningObserver();
   startAfterRecycleCaptureSnLabelObserver();
 })();

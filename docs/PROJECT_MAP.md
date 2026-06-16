@@ -271,9 +271,25 @@ Current behavior:
 
 The warning uses the same per-domain recycle selection state as the existing category/device flow. It does not introduce cross-domain shared selection or `chrome.storage.local` context.
 
+### Recycle-State DTH KAON Chip Id Autofill
+
+On `/wflow/recycle-state/` pages, the extension can auto-fill the DTH KAON `Chip Id:` field from the OSS-populated serial field.
+
+Current behavior:
+
+- applies only when the current per-domain selected category is `dth_kaon_nagra`;
+- applies only when the selected concrete devices list contains exactly one `deviceId`: `dth_kaon_kstb1001`;
+- does not apply to category-only `dth_kaon_nagra`, `dth_nagra_dts3460`, any multi-select, or any other category/device;
+- reads only the disabled source field `_wflowRecycleState_ChipIdDth` (visible label `Сериен номер:`);
+- fills only the empty editable target field `_wflowRecycleState_SerialNoDth` (visible label `Chip Id:`);
+- leaves a non-empty `Chip Id:` unchanged and keeps the field editable after extension fill;
+- dispatches `input` and `change` after extension fill so OSS can detect the value;
+- applies a yellow/red auto-filled marker to `Chip Id:` and focuses `_wflowRecycleState_CardNo` (visible label `Карта No:`) once after a successful fill;
+- does not block Continue/Save, call `preventDefault`, auto-click anything, change serial validation, or write to the disabled source field.
+
 ### Later-Page Helpers by Selected Device
 
-The EX220 recycle-state SSID warning is the first implemented example of a broader pattern: a concrete recycle device selected earlier can decide whether a small helper runs on a later OSS page.
+The EX220 recycle-state SSID warning and DTH KAON Chip Id autofill are implemented examples of a broader pattern: a concrete recycle device selected earlier can decide whether a small helper runs on a later OSS page.
 
 General rules for future helpers:
 
