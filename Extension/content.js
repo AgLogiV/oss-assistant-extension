@@ -3297,6 +3297,8 @@
   const RECYCLE_ENTRY_SELECTED_KEY = "wifi_oss_recycle_entry_category";
   const RECYCLE_ENTRY_SELECTED_DATE_KEY = "wifi_oss_recycle_entry_category_date";
   const RECYCLE_ENTRY_SELECTED_DEVICES_KEY = "wifi_oss_recycle_entry_selected_devices";
+  const RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY = "wifi_oss_debug_recycle_device_required_enabled";
+  const RECYCLE_ENTRY_DEVICE_REQUIRED_EXCLUDED_CATEGORY_IDS = new Set(["cam_modules", "modems"]);
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY = "wifi_oss_recycle_entry_material_snapshot";
@@ -5894,6 +5896,33 @@
       clearRecycleEntrySelectedDevicesStorage();
     };
 
+    const isRecycleDeviceRequiredGuardEnabled = () => {
+      try { return sessionStorage.getItem(RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY) !== "0"; } catch (e) {}
+      return true;
+    };
+
+    const isRecycleDeviceCardVisibleAndEnabled = (card) => {
+      if (!card || card.disabled || card.hidden || card.getAttribute("aria-disabled") === "true") return false;
+      const style = window.getComputedStyle ? window.getComputedStyle(card) : null;
+      if (style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")) return false;
+      return card.offsetParent !== null || card.getClientRects().length > 0;
+    };
+
+    const categoryRequiresDeviceSelection = (categoryId) => {
+      const category = String(categoryId || "").trim();
+      if (!category || RECYCLE_ENTRY_DEVICE_REQUIRED_EXCLUDED_CATEGORY_IDS.has(category)) return false;
+      if (!isRecycleDeviceRequiredGuardEnabled()) return false;
+      return Array.from(panel.querySelectorAll("[data-wifi-oss-recycle-device]")).some(card => {
+        const deviceId = String(card?.dataset?.wifiOssRecycleDevice || "").trim();
+        const device = deviceId ? getRecycleDeviceById(deviceId) : null;
+        return device?.categoryId === category && isRecycleDeviceCardVisibleAndEnabled(card);
+      });
+    };
+
+    const hasSelectedRecycleDeviceForCategory = (categoryId) => (
+      getSelectedRecycleDevicesForValidation(categoryId).length > 0
+    );
+
     const setSelected = (id) => {
       const previous = getSelected();
       if (previous !== id) clearSelectedRecycleDeviceIds();
@@ -5948,6 +5977,9 @@
       else selectedRecycleDeviceIds.add(id);
       saveSelectedRecycleDeviceIds();
       applyRecycleDeviceSelectedState(card, selectedRecycleDeviceIds.has(id));
+      if (selectedRecycleDeviceIds.has(id) && serialMsg.dataset.wifiOssRecycleSerialAlertKind === "device-required") {
+        clearSerialInlineAlert();
+      }
       refreshRecycleSerialHelpAvailability(getSelected());
     };
 
@@ -6339,6 +6371,13 @@
         e.stopPropagation();
         hideRecycleSerialHelp();
         setRecycleInlineAlert(serialMsg, "Избери категория преди да продължиш.", "error");
+        return;
+      }
+      if (categoryRequiresDeviceSelection(cat) && !hasSelectedRecycleDeviceForCategory(cat)) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideRecycleSerialHelp();
+        setSerialInlineAlert("\u0418\u0437\u0431\u0435\u0440\u0438 \u043f\u043e\u043d\u0435 \u0435\u0434\u043d\u043e \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e.", "error", "device-required");
         return;
       }
       const r = validateRecycleSerialForSelection(cat, serialInput.value);
