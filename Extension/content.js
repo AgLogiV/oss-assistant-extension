@@ -2186,6 +2186,7 @@
       else sessionStorage.setItem(MATERIAL_AUTO_CONTINUE_DEBUG_KEY, "0");
     } catch (e) {}
     updateMaterialAutoContinueDebugToggles();
+    try { updateRecycleDebugGuardsToggles(); } catch (e) {}
   }
 
   function updateMaterialAutoContinueDebugToggles() {
@@ -3299,6 +3300,9 @@
   const RECYCLE_ENTRY_SELECTED_DEVICES_KEY = "wifi_oss_recycle_entry_selected_devices";
   const RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY = "wifi_oss_debug_recycle_device_required_enabled";
   const RECYCLE_ENTRY_DEVICE_REQUIRED_EXCLUDED_CATEGORY_IDS = new Set(["cam_modules", "modems"]);
+  const RECYCLE_DEBUG_GUARDS_TRAY_ATTR = "data-wifi-oss-recycle-debug-guards-tray";
+  const RECYCLE_DEBUG_GUARDS_STATUS_ATTR = "data-wifi-oss-recycle-debug-guards-status";
+  const RECYCLE_DEVICE_REQUIRED_TOGGLE_ATTR = "data-wifi-oss-recycle-device-required-toggle";
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY = "wifi_oss_recycle_entry_material_snapshot";
@@ -3312,6 +3316,39 @@
   const RECYCLE_STATE_STB_PROFILE_SELECT_ID = "_wflowRecycleState_StbProfile";
   const RECYCLE_STATE_SSID1_INPUT_ID = "_wflowRecycleState_Ssid1";
   const RECYCLE_STATE_SSID2_INPUT_ID = "_wflowRecycleState_Ssid2";
+
+  function isRecycleDeviceRequiredGuardEnabled() {
+    try { return sessionStorage.getItem(RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY) !== "0"; } catch (e) {}
+    return true;
+  }
+
+  function setRecycleDeviceRequiredGuardEnabled(enabled) {
+    try {
+      if (enabled) sessionStorage.removeItem(RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY);
+      else sessionStorage.setItem(RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY, "0");
+    } catch (e) {}
+    updateRecycleDebugGuardsToggles();
+  }
+
+  function updateRecycleDebugGuardsToggles(root = document) {
+    const materialEnabled = isMaterialAutoContinueEnabled();
+    const deviceRequiredEnabled = isRecycleDeviceRequiredGuardEnabled();
+    const statusText = `material ${materialEnabled ? "ON" : "OFF"} | device required ${deviceRequiredEnabled ? "ON" : "OFF"}`;
+    const trays = [];
+    if (root?.matches?.(`[${RECYCLE_DEBUG_GUARDS_TRAY_ATTR}]`)) trays.push(root);
+    root?.querySelectorAll?.(`[${RECYCLE_DEBUG_GUARDS_TRAY_ATTR}]`).forEach(tray => trays.push(tray));
+    trays.forEach(tray => {
+      const status = tray.querySelector(`[${RECYCLE_DEBUG_GUARDS_STATUS_ATTR}]`);
+      if (status) status.textContent = statusText;
+
+      const btn = tray.querySelector(`[${RECYCLE_DEVICE_REQUIRED_TOGGLE_ATTR}]`);
+      if (!btn) return;
+      btn.textContent = `Device required ${deviceRequiredEnabled ? "ON" : "OFF"}`;
+      btn.style.background = deviceRequiredEnabled ? "#f3f3f3" : "#fff4e5";
+      btn.style.borderColor = deviceRequiredEnabled ? "#c9c9c9" : "#d28a1d";
+      btn.style.color = deviceRequiredEnabled ? "#333" : "#8a4b00";
+    });
+  }
   const RECYCLE_STATE_KSTB5019_DEVICE_ID = "kaon_kstb5019_xploretv";
   const RECYCLE_STATE_KSTB5019_CATEGORY_ID = "xplore_zapper";
   const RECYCLE_STATE_KSTB5019_OTT_INFO_ID = "wifi-oss-recycle-state-kstb5019-ott-info";
@@ -5589,6 +5626,105 @@
     return wrap;
   }
 
+  function ensureRecycleDebugGuardsTray(panel) {
+    if (!panel) return null;
+    const existing = panel.querySelector(`[${RECYCLE_DEBUG_GUARDS_TRAY_ATTR}]`);
+    if (existing) {
+      updateMaterialAutoContinueDebugToggles();
+      updateRecycleDebugGuardsToggles(panel);
+      return existing;
+    }
+
+    const wrap = document.createElement("div");
+    wrap.setAttribute(RECYCLE_DEBUG_GUARDS_TRAY_ATTR, "1");
+    wrap.style.margin = "6px 0 0";
+    wrap.style.display = "flex";
+    wrap.style.justifyContent = "flex-end";
+    wrap.style.alignItems = "flex-start";
+
+    const details = document.createElement("details");
+    details.style.maxWidth = "420px";
+    details.style.width = "min(420px, 100%)";
+    details.style.border = "1px solid #dedede";
+    details.style.borderRadius = "6px";
+    details.style.background = "#fafafa";
+    details.style.color = "#555";
+    details.style.fontSize = "11px";
+    details.style.lineHeight = "1.35";
+    details.style.boxSizing = "border-box";
+    details.style.padding = "5px 7px";
+    details.style.opacity = "0.76";
+
+    const summary = document.createElement("summary");
+    summary.style.cursor = "pointer";
+    summary.style.userSelect = "none";
+    summary.style.display = "flex";
+    summary.style.alignItems = "center";
+    summary.style.justifyContent = "space-between";
+    summary.style.gap = "10px";
+
+    const label = document.createElement("span");
+    label.textContent = "Debug guards";
+    label.style.fontWeight = "700";
+    label.style.whiteSpace = "nowrap";
+
+    const compactStatus = document.createElement("span");
+    compactStatus.setAttribute(RECYCLE_DEBUG_GUARDS_STATUS_ATTR, "1");
+    compactStatus.style.fontWeight = "500";
+    compactStatus.style.color = "#777";
+    compactStatus.style.textAlign = "right";
+    compactStatus.style.overflow = "hidden";
+    compactStatus.style.textOverflow = "ellipsis";
+    compactStatus.style.whiteSpace = "nowrap";
+
+    summary.appendChild(label);
+    summary.appendChild(compactStatus);
+    details.appendChild(summary);
+
+    const controls = document.createElement("div");
+    controls.style.marginTop = "7px";
+    controls.style.display = "flex";
+    controls.style.flexWrap = "wrap";
+    controls.style.gap = "5px";
+    controls.style.alignItems = "center";
+
+    const materialToggle = ensureMaterialAutoContinueDebugToggle(controls);
+    if (materialToggle) {
+      materialToggle.style.margin = "0";
+      materialToggle.style.justifyContent = "flex-start";
+      materialToggle.style.opacity = "1";
+      const materialBtn = materialToggle.querySelector("button[data-wifi-oss-material-auto-continue-toggle]");
+      if (materialBtn) {
+        materialBtn.style.padding = "2px 6px";
+        materialBtn.style.fontSize = "10px";
+        materialBtn.style.lineHeight = "1.25";
+      }
+    }
+
+    const deviceBtn = document.createElement("button");
+    deviceBtn.type = "button";
+    deviceBtn.setAttribute(RECYCLE_DEVICE_REQUIRED_TOGGLE_ATTR, "1");
+    deviceBtn.style.padding = "2px 6px";
+    deviceBtn.style.border = "1px solid #c9c9c9";
+    deviceBtn.style.borderRadius = "999px";
+    deviceBtn.style.fontSize = "10px";
+    deviceBtn.style.lineHeight = "1.25";
+    deviceBtn.style.cursor = "pointer";
+    deviceBtn.style.boxShadow = "none";
+    deviceBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRecycleDeviceRequiredGuardEnabled(!isRecycleDeviceRequiredGuardEnabled());
+    });
+    controls.appendChild(deviceBtn);
+
+    details.appendChild(controls);
+    wrap.appendChild(details);
+    updateMaterialAutoContinueDebugToggles();
+    updateRecycleDebugGuardsToggles(wrap);
+    return wrap;
+  }
+
   let recycleEntryStorageSyncInstalled = false;
   function installRecycleEntryStorageSync() {
     if (recycleEntryStorageSyncInstalled) return;
@@ -5894,11 +6030,6 @@
     const clearSelectedRecycleDeviceIds = () => {
       selectedRecycleDeviceIds.clear();
       clearRecycleEntrySelectedDevicesStorage();
-    };
-
-    const isRecycleDeviceRequiredGuardEnabled = () => {
-      try { return sessionStorage.getItem(RECYCLE_ENTRY_DEVICE_REQUIRED_DEBUG_KEY) !== "0"; } catch (e) {}
-      return true;
     };
 
     const isRecycleDeviceCardVisibleAndEnabled = (card) => {
@@ -6333,18 +6464,8 @@
     panel.appendChild(grid);
     const remoteDebugTray = ensureRecycleRemoteConfigDebugTray(panel);
     if (remoteDebugTray) panel.appendChild(remoteDebugTray);
-    const debugToggle = ensureMaterialAutoContinueDebugToggle(panel);
-    if (debugToggle) {
-      debugToggle.style.margin = "8px 0 0";
-      debugToggle.style.justifyContent = "flex-start";
-      debugToggle.style.opacity = "0.65";
-      const debugBtn = debugToggle.querySelector("button[data-wifi-oss-material-auto-continue-toggle]");
-      if (debugBtn) {
-        debugBtn.style.padding = "2px 6px";
-        debugBtn.style.fontSize = "10px";
-        debugBtn.style.lineHeight = "1.25";
-      }
-    }
+    const debugGuardsTray = ensureRecycleDebugGuardsTray(panel);
+    if (debugGuardsTray) panel.appendChild(debugGuardsTray);
     fieldset.appendChild(panel);
     renderCategories();
     try { preloadRecycleHistoryCache({ force: true }); } catch (e) {}
