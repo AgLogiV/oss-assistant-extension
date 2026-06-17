@@ -387,6 +387,9 @@ Risks:
 Behavior:
 
 - If no category is selected, prevents continuing and shows `Избери категория преди да продължиш.`
+- If a category is selected, that category renders visible/enabled concrete device cards, and no active concrete device is selected for that category, prevents continuing and shows `Избери поне едно устройство.`
+- The selected-device-required guard does not apply to `cam_modules`, `modems`, or categories without visible/enabled concrete device cards.
+- The selected-device-required guard is controlled only by the same-tab `sessionStorage` debug key `wifi_oss_debug_recycle_device_required_enabled`; missing key/default state means `ON`, and value `"0"` bypasses only this new guard.
 - If the serial is invalid for the current category/device context, prevents continuing, shows the validation message, focuses/selects the serial input.
 - If valid, stores `wifi_oss_recycle_entry_last_serial` and sets `wifi_oss_recycle_entry_pending_material` to `1` for the next material step.
 
@@ -397,6 +400,17 @@ Validation behavior:
 - multiple selected devices -> OR logic, where the serial is valid if at least one selected device profile accepts it;
 - selected device with no implemented profile -> safe fallback to category-level validation;
 - empty serial and Cyrillic checks are common guards and are not bypassed by OR logic.
+
+### Recycle Entry Debug Guards
+
+The recycle entry panel includes a small collapsed `Debug guards` tray in the extension-owned panel area near the `Remote config` tray. It is not injected into `#footer` and does not create its own observer, polling loop, or repeated remove/reinsert cycle.
+
+Controls:
+
+- `Debug: Material auto-continue ON/OFF` uses same-tab `sessionStorage` key `wifi_oss_debug_material_auto_continue_enabled`; missing key/default state means `ON`, and value `"0"` means `OFF`.
+- `Device required ON/OFF` uses same-tab `sessionStorage` key `wifi_oss_debug_recycle_device_required_enabled`; missing key/default state means `ON`, and value `"0"` bypasses only the selected-device-required recycle entry guard.
+
+The device-required toggle does not bypass no-category validation, serial validation, duplicate recycle-history guards, SAP/material logic, CAM flow, clipboard autofill, label/barcode helpers, or `Remote config` behavior.
 
 ### Serial Keyboard Layout Protection
 
@@ -506,7 +520,7 @@ Debug/test toggle:
 - `wifi_oss_debug_material_auto_continue_enabled` in `sessionStorage` controls a temporary test override.
 - Missing key/default state means material auto-continue is `ON`.
 - Value `"0"` means material auto-continue is `OFF` for the current tab/session.
-- The small `Debug: Material auto-continue ON/OFF` control is injected through the existing recycle entry and SAP/material panels, not through a separate global observer or floating panel.
+- The small `Debug: Material auto-continue ON/OFF` control is injected through the existing SAP/material panel and through the recycle entry `Debug guards` tray, not through a separate global observer, footer control, or floating panel.
 - When `OFF`, a prefilled `_wflowSwapShopMaterial_MaterialId` does not auto-click Continue, so the SAP/material page and filtered material grid can be inspected.
 - This is a debug/test helper for validating material filters, not a primary operator workflow.
 - `cam_modules` missing-material redirect flow is unchanged.
@@ -678,6 +692,7 @@ Fallback behavior:
 - `wifi_oss_recycle_remote_debug_session_state_v1` - `sessionStorage`, minimal same-tab debug projection for remote-added devices/material enablement; cleared by Remote config debug `Clear`.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
 - `wifi_oss_debug_material_auto_continue_enabled` - `sessionStorage`, temporary debug/test override for material auto-continue (`"0"` means off; missing key means on).
+- `wifi_oss_debug_recycle_device_required_enabled` - `sessionStorage`, temporary debug/test override for the recycle entry selected-device-required guard (`"0"` means off; missing key means on).
 - `wifi_oss_serial_keyboard_debug` - `sessionStorage`, opt-in serial keyboard diagnostic logging (`"1"` means on).
 - `obb_admin_token` - dashboard `sessionStorage`, admin token in dashboard UI only.
 

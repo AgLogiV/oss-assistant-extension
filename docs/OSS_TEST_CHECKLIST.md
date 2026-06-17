@@ -50,6 +50,15 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm the serial input attributes: `id`, `name`, `class`, `value`, `readonly`, `disabled`.
 - Without choosing a category, enter a serial and press Continue. Expected: blocked with an inline message.
 - Test Continue by mouse click and by pressing Enter in the serial field.
+- Choose a category that renders visible concrete device cards, do not select a concrete device, then press Continue. Expected: blocked with inline message `Избери поне едно устройство.`
+- Select a concrete device after the new selected-device-required alert. Expected: the alert clears, and normal serial validation continues.
+- With a selected concrete device and an invalid non-empty serial, confirm the normal selected-device validation still applies and the help image/preview behavior is unchanged.
+- Confirm `cam_modules` and `modems` do not get the new selected-device-required block.
+- Expand the recycle entry `Debug guards` tray and confirm it appears inside the recycle panel, not in the footer, and does not duplicate after normal interaction or reload.
+- In `Debug guards`, toggle `Device required` ON and confirm a category with visible device cards but no selected device blocks with `Избери поне едно устройство.`
+- In `Debug guards`, toggle `Device required` OFF and confirm only the selected-device-required guard is bypassed; no-category, serial validation, duplicate warning, SAP/material, and CAM behavior remain unchanged.
+- Confirm the `Debug guards` material auto-continue toggle still controls only `wifi_oss_debug_material_auto_continue_enabled` for the current session.
+- Confirm the `Remote config` tray remains visible and unchanged while `Debug guards` is present.
 - Test a recycle-history duplicate where `_recycleDevicesByTechnician` has `Успешно рециклиран = Да`. Expected: duplicate warning appears and the flow does not continue without explicit `Да`.
 - Test a recycle-history duplicate where `_recycleDevicesByTechnician` has `Успешно рециклиран = Не`. Expected: duplicate warning appears and the flow does not continue without explicit `Да`.
 - Test a duplicate serial that appears more than once in `_recycleDevicesByTechnician` with conflicting `Да`/`Не` values. Expected MVP safety behavior: duplicate warning appears and the flow does not continue without explicit `Да`.
