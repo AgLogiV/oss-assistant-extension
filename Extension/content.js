@@ -1910,6 +1910,8 @@
   const CAM_MODULES_MISSING_MATERIAL_HINT_ID = "wifi-oss-cam-modules-missing-material-hint";
   const CAM_MODULES_MISSING_MATERIAL_HINT_TEXT = "Не е открита история за този сериен номер в SAP. Опитайте с другия номер на CAM модула. При повторен неуспех предайте устройството на супервайзър.";
   const SWAP_MATERIAL_SIMILAR_WARNING_ID = "wifi-oss-swap-material-similar-warning";
+  const SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING = "Това устройство няма Material ID, стойността е попълнена автоматично.";
+  const SWAP_MATERIAL_MISSING_AMBIGUOUS_WARNING = "Това устройство няма Material ID, моля изберете кое е устройството.";
   const SWAP_MATERIAL_SIMILAR_WARNINGS = {
     "1000059633": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
     "1000055165": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
@@ -2792,6 +2794,24 @@
     };
   }
 
+  function getRecycleSelectedSnapshotMaterialFilter(categoryId) {
+    const snapshot = readValidRecycleEntryMaterialSnapshot(categoryId);
+    if (!snapshot || !snapshot.deviceIds.length) return null;
+    const seen = new Set();
+    const normalizedIds = snapshot.materialIds
+      .map(normalizeSwapMaterialId)
+      .filter(id => {
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    return {
+      idSet: new Set(normalizedIds),
+      order: new Map(normalizedIds.map((id, idx) => [id, idx])),
+      hasSelectedDevices: true
+    };
+  }
+
   function getSelectedRecycleDeviceMaterialOrder(categoryId) {
     const category = String(categoryId || "").trim();
     if (!category) return new Map();
@@ -2934,12 +2954,24 @@
     const autoContinueEnabled = isMaterialAutoContinueEnabled();
     const category = getSelectedRecycleEntryCategory();
     const materialWasEmptyBeforeControlledFill = !normalizeSwapMaterialId(input.value);
-    const recycleMaterialFilter = (materialWasEmptyBeforeControlledFill || !autoContinueEnabled)
-      ? getSwapMaterialRecycleFilter(category)
-      : null;
+    const selectedSnapshotMaterialFilter = getRecycleSelectedSnapshotMaterialFilter(category);
+    const hasSelectedSnapshotDevices = Boolean(selectedSnapshotMaterialFilter?.hasSelectedDevices);
+    const recycleMaterialFilter = hasSelectedSnapshotDevices
+      ? selectedSnapshotMaterialFilter
+      : ((materialWasEmptyBeforeControlledFill || !autoContinueEnabled)
+        ? getSwapMaterialRecycleFilter(category)
+        : null);
     const materialModelsForRecycleContext = getSwapMaterialModelsWithRecycleFallback(swapMaterialModels, recycleMaterialFilter);
     const fillCandidate = getRecycleMaterialFillCandidate(category, input, materialModelsForRecycleContext);
-    if (fillCandidate.ok) setSwapMaterialInputValue(input, fillCandidate.materialId);
+    let materialNoticeMessage = "";
+    let shouldAutoContinueAfterControlledFill = false;
+    if (fillCandidate.ok) {
+      setSwapMaterialInputValue(input, fillCandidate.materialId);
+      materialNoticeMessage = SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING;
+      shouldAutoContinueAfterControlledFill = true;
+    } else if (materialWasEmptyBeforeControlledFill && hasSelectedSnapshotDevices) {
+      materialNoticeMessage = SWAP_MATERIAL_MISSING_AMBIGUOUS_WARNING;
+    }
 
     const panel = document.createElement("div");
     panel.className = "wifi-oss-swap-material-panel";
@@ -2980,6 +3012,8 @@
       materialWarningHost.appendChild(input);
       materialWarningHost.appendChild(materialWarning);
     }
+    if (materialNoticeMessage) setRecycleInlineAlert(materialWarning, materialNoticeMessage, "warning");
+    if (shouldAutoContinueAfterControlledFill) autoContinueSwapMaterialIfReady(root, input);
 
     const title = document.createElement("div");
     title.textContent = "Бърз избор на Material Id";
