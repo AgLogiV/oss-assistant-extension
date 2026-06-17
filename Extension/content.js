@@ -6093,12 +6093,16 @@
       card.style.outline = "none";
       card.style.outlineOffset = "0";
       card.style.boxShadow = isSelected ? "0 8px 20px rgba(218,41,28,0.22)" : "0 2px 9px rgba(0,0,0,0.10)";
+      if (isSelected) card.style.transform = "";
 
       const titleBar = card.querySelector("[data-wifi-oss-recycle-device-title]");
       if (titleBar) titleBar.style.background = isSelected ? "#DA291C" : "#3f3f3f";
 
       const check = card.querySelector("[data-wifi-oss-recycle-device-check]");
       if (check) check.style.display = isSelected ? "flex" : "none";
+
+      const strip = card.querySelector("[data-wifi-oss-recycle-device-strip]");
+      if (strip) strip.style.height = "3px";
     };
 
     const toggleRecycleDeviceSelection = (deviceId, card) => {
@@ -6268,7 +6272,8 @@
       card.style.fontFamily = "inherit";
       card.style.appearance = "none";
       card.style.cursor = "pointer";
-      card.style.transition = "border-color 160ms ease, box-shadow 160ms ease";
+      card.style.transition = "transform 180ms cubic-bezier(0.2, 0, 0.2, 1), border-color 160ms ease, box-shadow 160ms ease";
+      card.style.willChange = "transform";
 
       const media = document.createElement("div");
       media.style.position = "relative";
@@ -6386,20 +6391,36 @@
       }
 
       const strip = document.createElement("div");
+      strip.dataset.wifiOssRecycleDeviceStrip = "1";
       strip.style.position = "absolute";
       strip.style.left = "0";
       strip.style.right = "0";
       strip.style.bottom = "0";
       strip.style.height = "3px";
       strip.style.background = red;
+      strip.style.transition = "height 160ms ease";
       card.appendChild(media);
       card.appendChild(titleBar);
       card.appendChild(strip);
+      const applyUnselectedHover = (isHovering) => {
+        const isSelected = card.dataset.wifiOssRecycleDeviceSelected === "1";
+        if (isSelected) {
+          applyRecycleDeviceSelectedState(card, true);
+          return;
+        }
+        card.style.transform = isHovering ? "translateY(-2px)" : "";
+        card.style.borderColor = isHovering ? red : "#d8d8d8";
+        card.style.boxShadow = isHovering ? "0 8px 20px rgba(218,41,28,0.18)" : "0 2px 9px rgba(0,0,0,0.10)";
+        strip.style.height = isHovering ? "6px" : "3px";
+      };
       card.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         toggleRecycleDeviceSelection(deviceId, card);
+        applyUnselectedHover(card.matches(":hover"));
       });
+      card.addEventListener("mouseenter", () => applyUnselectedHover(true));
+      card.addEventListener("mouseleave", () => applyUnselectedHover(false));
       applyRecycleDeviceSelectedState(card, selectedRecycleDeviceIds.has(deviceId));
       return card;
     };
