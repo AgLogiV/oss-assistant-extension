@@ -2339,10 +2339,19 @@
   const RECYCLE_DEVICE_ID_SET = new Set(RECYCLE_DEVICE_CATALOG.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
   const RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS = ["displayName", "imagePath", "helpImagePath", "warningText"];
   const RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS = ["cam_modules", "modems"];
+  const RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY = "remoteAdditionsAuto";
   const RECYCLE_REMOTE_DEBUG_SESSION_STATE_KEY = "wifi_oss_recycle_remote_debug_session_state_v1";
   let recycleRemoteVisualOverlayByDeviceId = new Map();
+  let recycleRemoteAutoDevicesByDeviceId = new Map();
   let recycleRemoteAddedDevicesByDeviceId = new Map();
   let recycleRemoteMaterialEnabledByDeviceId = new Map();
+  let recycleRemoteAutoApplyState = {
+    result: "not_checked",
+    autoAddedCount: 0,
+    autoBlockedCount: 0,
+    blockReason: ""
+  };
+  let recycleRemoteAutoApplyInFlight = null;
 
   function getRecycleDeviceVisualView(device) {
     const id = String(device?.deviceId || "").trim();
@@ -2584,7 +2593,7 @@
   function getRecycleEffectiveDeviceById(deviceId) {
     const id = String(deviceId || "").trim();
     if (!id) return null;
-    return getRecycleLocalDeviceById(id) || recycleRemoteAddedDevicesByDeviceId.get(id) || null;
+    return getRecycleLocalDeviceById(id) || recycleRemoteAutoDevicesByDeviceId.get(id) || recycleRemoteAddedDevicesByDeviceId.get(id) || null;
   }
 
   function getRecycleLocalDevicesByCategory(categoryId) {
@@ -2597,8 +2606,19 @@
     const id = String(categoryId || "").trim();
     if (!id) return [];
     const localDevices = getRecycleLocalDevicesByCategory(id);
-    const remoteDevices = Array.from(recycleRemoteAddedDevicesByDeviceId.values())
-      .filter(device => device.categoryId === id && isRecycleDeviceEnabled(device));
+    const seenDeviceIds = new Set(localDevices.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
+    const remoteDevices = [];
+    const addRemoteDevices = (devices) => {
+      Array.from(devices || []).forEach(device => {
+        const deviceId = String(device?.deviceId || "").trim();
+        if (!deviceId || seenDeviceIds.has(deviceId)) return;
+        if (device.categoryId !== id || !isRecycleDeviceEnabled(device)) return;
+        seenDeviceIds.add(deviceId);
+        remoteDevices.push(device);
+      });
+    };
+    addRemoteDevices(recycleRemoteAutoDevicesByDeviceId.values());
+    addRemoteDevices(recycleRemoteAddedDevicesByDeviceId.values());
     return localDevices.concat(remoteDevices);
   }
 
@@ -4948,6 +4968,111 @@
     return { overlayMap, blocked };
   }
 
+  function setRecycleRemoteAutoApplyState(patch) {
+    recycleRemoteAutoApplyState = {
+      result: "not_checked",
+      autoAddedCount: 0,
+      autoBlockedCount: 0,
+      blockReason: "",
+      ...(patch || {})
+    };
+  }
+
+  function getRecycleRemoteAutoCapabilityBlockReason(response) {
+    const compatibility = response?.contractCompatibility;
+    if (!compatibility || typeof compatibility !== "object") return "contract missing";
+    if (compatibility.ok === false) return "contract incompatible";
+    if (compatibility.mode !== "explicit_contract") return "no auto capability";
+    const supported = Array.isArray(compatibility.supportedCapabilities) ? compatibility.supportedCapabilities : [];
+    if (!supported.includes(RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY)) return "no auto capability";
+    if (response?.hasLastKnownGood === false) return "no LKG";
+    if (response?.isStale === true) return "stale LKG";
+    return "";
+  }
+
+  function clearRecycleRemoteAutoDeviceOverlay(reason) {
+    recycleRemoteAutoDevicesByDeviceId = new Map();
+    setRecycleRemoteAutoApplyState({
+      result: reason || "local_fallback",
+      autoAddedCount: 0,
+      autoBlockedCount: 0,
+      blockReason: reason || ""
+    });
+  }
+
+  async function applyRecycleRemoteAutomaticEligibleDevices() {
+    if (recycleRemoteAutoApplyInFlight) return recycleRemoteAutoApplyInFlight;
+
+    recycleRemoteAutoApplyInFlight = (async () => {
+      const response = await getRecycleRemoteResolvedCatalogApplyPlan();
+      const sourceRevision = String(response?.sourceRevision || response?.meta?.revision || "").trim();
+      const blockReason = getRecycleRemoteAutoCapabilityBlockReason(response);
+      if (blockReason) {
+        clearRecycleRemoteAutoDeviceOverlay(blockReason);
+        return {
+          ok: false,
+          result: "auto_blocked",
+          sourceRevision,
+          blockReason,
+          autoAddedCount: 0,
+          autoBlockedCount: blockReason === "no auto capability" ? 0 : 1
+        };
+      }
+
+      const additions = Array.isArray(response?.eligibleAdditions?.entries) ? response.eligibleAdditions.entries : [];
+      if (!response?.ok || !additions.length) {
+        clearRecycleRemoteAutoDeviceOverlay(response?.result || "no_eligible");
+        return {
+          ok: Boolean(response?.ok),
+          result: response?.result || "no_eligible",
+          sourceRevision,
+          autoAddedCount: 0,
+          autoBlockedCount: Number(response?.summary?.blocked || 0)
+        };
+      }
+
+      const { overlayMap, blocked } = buildRecycleRemoteAddedDeviceOverlay(additions);
+      recycleRemoteAutoDevicesByDeviceId = overlayMap;
+      const autoBlockedCount = blocked.length + Number(response?.summary?.blocked || 0);
+      setRecycleRemoteAutoApplyState({
+        ok: true,
+        result: overlayMap.size ? "auto_applied" : "auto_no_eligible",
+        sourceRevision,
+        autoAddedCount: overlayMap.size,
+        autoBlockedCount,
+        blockedSamples: blocked.slice(0, 5),
+        blockReason: overlayMap.size ? "" : "no eligible"
+      });
+      return {
+        ok: true,
+        result: recycleRemoteAutoApplyState.result,
+        sourceRevision,
+        autoAddedCount: overlayMap.size,
+        autoBlockedCount,
+        blockedSamples: blocked.slice(0, 5)
+      };
+    })();
+
+    try {
+      return await recycleRemoteAutoApplyInFlight;
+    } finally {
+      recycleRemoteAutoApplyInFlight = null;
+    }
+  }
+
+  function scheduleRecycleRemoteAutomaticEligibleDevices() {
+    setTimeout(async () => {
+      try {
+        const result = await applyRecycleRemoteAutomaticEligibleDevices();
+        if (result?.autoAddedCount || recycleRemoteAutoDevicesByDeviceId.size) {
+          refreshRecycleRemoteVisualOverlayPanels();
+        }
+      } catch (error) {
+        clearRecycleRemoteAutoDeviceOverlay(String(error?.message || error || "auto failed"));
+      }
+    }, 0);
+  }
+
   async function applyRecycleRemoteEligibleDevices() {
     const response = await sendRecycleRemoteConfigDebugMessage(
       RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.resolvedApplyPlan,
@@ -5004,6 +5129,7 @@
 
   function clearRecycleRemoteVisualOverlay(reason) {
     recycleRemoteVisualOverlayByDeviceId = new Map();
+    clearRecycleRemoteAutoDeviceOverlay(reason || "local_fallback");
     recycleRemoteAddedDevicesByDeviceId = new Map();
     clearRecycleRemoteMaterialEnablement();
     clearRecycleRemoteDebugSessionState();
@@ -5280,6 +5406,28 @@
     if (sampleParts.length) parts.push(sampleParts.join(" | "));
   }
 
+  function appendRecycleRemoteAutoApplyStatus(parts, response) {
+    const autoState = response?.autoRemote && typeof response.autoRemote === "object"
+      ? response.autoRemote
+      : recycleRemoteAutoApplyState;
+    if (!autoState || autoState.result === "not_checked") return;
+
+    const result = String(autoState.result || "").trim();
+    if (result === "auto_applied") {
+      parts.push(`auto remote applied ${Number(autoState.autoAddedCount || 0)}`);
+    } else if (result === "auto_blocked") {
+      parts.push(`auto remote blocked${autoState.blockReason ? `: ${String(autoState.blockReason).trim()}` : ""}`);
+    } else if (result === "no auto capability" || autoState.blockReason === "no auto capability") {
+      parts.push("auto remote disabled: no capability");
+    } else if (result) {
+      parts.push(`auto remote ${result}`);
+    }
+
+    if (Number(autoState.autoBlockedCount || 0)) {
+      parts.push(`auto blocked ${Number(autoState.autoBlockedCount || 0)}`);
+    }
+  }
+
   function formatRecycleRemoteDebugStatus(action, response) {
     const result = String(response?.result || (response?.ok ? "ok" : "error")).trim();
     const meta = response?.meta || {};
@@ -5301,6 +5449,7 @@
     if (typeof response?.materialBlockedCount === "number") parts.push(`material blocked ${response.materialBlockedCount}`);
     if (typeof response?.renderedPanels === "number") parts.push(`rendered ${response.renderedPanels}`);
     if (response?.blockReason) parts.push(`blocked: ${String(response.blockReason).trim()}`);
+    appendRecycleRemoteAutoApplyStatus(parts, response);
     appendRecycleRemoteResolvedPlanStatus(parts, response);
     appendRecycleRemoteDiffPreviewStatus(parts, response);
     if (response?.hasLastKnownGood === true) parts.push("LKG yes");
@@ -5514,6 +5663,12 @@
       if (typeof response.materialEnabledCount === "number") addSummaryChip(`material enabled ${response.materialEnabledCount}`, response.materialEnabledCount ? "ok" : "info");
       if (typeof response.blockedCount === "number") addSummaryChip(`blocked ${response.blockedCount}`, response.blockedCount ? "warn" : "ok");
       if (typeof response.materialBlockedCount === "number") addSummaryChip(`material blocked ${response.materialBlockedCount}`, response.materialBlockedCount ? "warn" : "ok");
+      if (response.autoRemote && typeof response.autoRemote === "object") {
+        const autoRemote = response.autoRemote;
+        if (autoRemote.result === "auto_applied") addSummaryChip(`auto remote applied ${Number(autoRemote.autoAddedCount || 0)}`, Number(autoRemote.autoAddedCount || 0) ? "ok" : "info");
+        else if (autoRemote.blockReason === "no auto capability") addSummaryChip("auto remote disabled", "info");
+        else if (autoRemote.result === "auto_blocked") addSummaryChip("auto remote blocked", "warn");
+      }
       if (typeof response.autoRefreshEnabled === "boolean") addSummaryChip(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`, response.autoRefreshEnabled ? "warn" : "info");
       if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? "stale" : "fresh", response.isStale ? "warn" : "ok");
       if (response.hasLastKnownGood === true) addSummaryChip("LKG yes", "ok");
@@ -5602,7 +5757,9 @@
     const refreshRemoteAndStatus = async () => {
       const response = await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.refresh);
       const statusResponse = await readRemoteStatus();
-      return { ...statusResponse, ...response, autoRefreshEnabled: statusResponse.autoRefreshEnabled, isStale: statusResponse.isStale, ttlMs: statusResponse.ttlMs, hasLastKnownGood: statusResponse.hasLastKnownGood };
+      const autoRemote = response?.ok ? await applyRecycleRemoteAutomaticEligibleDevices() : null;
+      if (autoRemote) autoRemote.renderedPanels = refreshRecycleRemoteVisualOverlayPanels();
+      return { ...statusResponse, ...response, autoRemote, autoRefreshEnabled: statusResponse.autoRefreshEnabled, isStale: statusResponse.isStale, ttlMs: statusResponse.ttlMs, hasLastKnownGood: statusResponse.hasLastKnownGood };
     };
 
     const sourceButtons = createGroup("Source");
@@ -5629,9 +5786,11 @@
     const resetButtons = createGroup("Reset/debug");
 
     addButton(sourceButtons, "setSourceOverride", "Use debug source", () => {
+      clearRecycleRemoteVisualOverlay("source_changed");
       return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.setSourceOverride, { url: sourceInput?.value || "" });
     });
     addButton(sourceButtons, "clearSourceOverride", "Use production", () => {
+      clearRecycleRemoteVisualOverlay("source_changed");
       return sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.clearSourceOverride);
     });
     addButton(checkButtons, "status", "Status", () => sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh));
@@ -6534,6 +6693,7 @@
     if (debugGuardsTray) panel.appendChild(debugGuardsTray);
     fieldset.appendChild(panel);
     renderCategories();
+    scheduleRecycleRemoteAutomaticEligibleDevices();
     try { preloadRecycleHistoryCache({ force: true }); } catch (e) {}
 
     const focusSerialInputOnce = () => {

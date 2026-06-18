@@ -14,6 +14,7 @@ const RECYCLE_REMOTE_RUNTIME_CONTRACT = {
     "visualOverlay",
     "resolvedPlanPreview",
     "remoteAdditionsDebug",
+    "remoteAdditionsAuto",
     "remoteMaterialPreview",
     "remoteMaterialDebug"
   ],
@@ -1212,6 +1213,7 @@ async function recycleRemoteGetResolvedCatalogPlan(localDevices, eligibilityCont
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
   const source = recycleRemoteResolveActiveSource(stored);
   const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  const sourceStatus = recycleRemoteBuildStatusResponse(scoped, "status", source);
   return {
     ...recycleRemoteBuildResolvedCatalogPlan(
     Array.isArray(localDevices) ? localDevices : [],
@@ -1220,6 +1222,11 @@ async function recycleRemoteGetResolvedCatalogPlan(localDevices, eligibilityCont
     scoped[keys.status] || null,
     eligibilityContext || null
     ),
+    autoRefreshEnabled: sourceStatus.autoRefreshEnabled,
+    lastFreshAt: sourceStatus.lastFreshAt,
+    ageMs: sourceStatus.ageMs,
+    isStale: sourceStatus.isStale,
+    hasLastKnownGood: sourceStatus.hasLastKnownGood,
     ...recycleRemoteBuildSourceResponseFields(source)
   };
 }
@@ -1229,6 +1236,7 @@ async function recycleRemoteGetResolvedCatalogApplyPlan(localDevices, eligibilit
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.sourceOverride]);
   const source = recycleRemoteResolveActiveSource(stored);
   const scoped = recycleRemoteScopeStoredToActiveSource(stored, source);
+  const sourceStatus = recycleRemoteBuildStatusResponse(scoped, "status", source);
   return {
     ...recycleRemoteBuildResolvedCatalogApplyPlan(
     Array.isArray(localDevices) ? localDevices : [],
@@ -1237,6 +1245,11 @@ async function recycleRemoteGetResolvedCatalogApplyPlan(localDevices, eligibilit
     scoped[keys.status] || null,
     eligibilityContext || null
     ),
+    autoRefreshEnabled: sourceStatus.autoRefreshEnabled,
+    lastFreshAt: sourceStatus.lastFreshAt,
+    ageMs: sourceStatus.ageMs,
+    isStale: sourceStatus.isStale,
+    hasLastKnownGood: sourceStatus.hasLastKnownGood,
     ...recycleRemoteBuildSourceResponseFields(source)
   };
 }
