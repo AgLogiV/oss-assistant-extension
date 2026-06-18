@@ -113,18 +113,22 @@ Implemented multi-select behavior is conservative:
 - selection is shared across OSS tabs/windows for the same browser origin;
 - no selected devices keeps category-level validation active;
 - selected devices activate predefined local validation profiles when implemented;
-- SAP/material behavior remains unchanged until a later milestone;
-- help menu can later use selected devices, but currently remains category-level;
-- selecting no concrete device should either keep category-level behavior or show all devices for that category on the material step, depending on the final UX decision.
+- SAP/material quick-button filtering and controlled fill use the valid per-flow material snapshot saved after recycle Continue;
+- when the valid snapshot has selected devices, the SAP/material quick-button grid is restricted to those selected devices/material IDs;
+- if exactly one safe selected-device Material ID candidate exists and OSS `MaterialId` is empty, the extension auto-fills it and then applies the existing material auto-continue behavior;
+- if selected devices exist but there is no single safe Material ID candidate, the extension does not auto-fill or auto-continue and asks the operator to choose the device;
+- no selected devices keeps category-level SAP/material filtering active;
+- selected-device help images are preferred where available, with category-level help fallback;
+- selecting no concrete device keeps category-level validation and SAP/material filtering behavior.
 
 Recommended first rule:
 
 ```text
 category selected, no devices selected -> category-level behavior
-category selected, one or more devices selected -> selected-device validation profiles can apply; SAP/material/help still stay category-level
+category selected, one or more devices selected -> selected-device validation profiles can apply; SAP/material uses the valid per-flow selected-device snapshot; help can use selected-device context where available
 ```
 
-This keeps selected-device state useful while avoiding SAP/material and help-menu behavior changes.
+This keeps selected-device state useful while preserving category-level fallbacks where no concrete device was selected.
 
 ## 5. Validation profiles and OR logic
 
@@ -204,16 +208,17 @@ Important rules:
 - Prefilled OSS `MaterialId` auto-continue behavior should remain unchanged until there is evidence it is wrong.
 - `cam_modules` missing-material behavior must stay separate from normal material quick buttons.
 
-Possible future selected-device material behavior:
+Current selected-device material behavior:
 
 ```text
 OSS MaterialId prefilled -> preserve current auto-continue rules
-MaterialId empty + selected devices exist -> show selected devices first or only selected devices
-MaterialId empty + no selected devices -> show category devices
+MaterialId empty + selected devices exist + one safe candidate -> auto-fill, warn, then apply existing material auto-continue logic
+MaterialId empty + selected devices exist + no single safe candidate -> selected-only quick buttons, warning, no auto-fill, no auto-continue
+MaterialId empty + no selected devices -> category-level material filtering
 Unknown/unmapped category -> keep existing full-list fallback
 ```
 
-The exact "show first" versus "show only" choice should be validated in real OSS workflow before implementation.
+Prefilled OSS `MaterialId` values are not overwritten. `CAM Модули` missing-material behavior remains a separate breadcrumb redirect flow and must not be generalized to normal categories. Known low-priority UI follow-up: after choosing a quick button in the ambiguous multi-select case, the warning can disappear and the layout can shift slightly.
 
 ## 7. Austrian special behavior
 
@@ -413,8 +418,8 @@ Recommended next milestones:
    - Keep Netbox IMEI behavior unchanged.
 
 5. **SAP/material mapping from selected devices**
-   - Use selected `deviceId` values to prioritize or restrict quick buttons.
-   - Preserve prefilled `MaterialId` and CAM behavior.
+   - Implemented current behavior: valid per-flow selected-device snapshots restrict quick buttons to selected devices/material IDs, safe single candidates auto-fill empty `MaterialId`, and ambiguous selected-device candidates warn without auto-fill or auto-continue.
+   - Preserve prefilled `MaterialId`, no-selected category-level filtering, Austrian no-selected legacy fallback, and CAM behavior.
    - Keep dashboard optional.
 
 6. **Help menu by selected device**
@@ -460,7 +465,6 @@ Manual OSS evidence is required when selector or behavior assumptions are uncert
 
 ## 14. Open questions
 
-- Should selected devices restrict SAP/material buttons or only prioritize them?
 - Should "no selected devices" after choosing a category mean "all category devices" or "must select at least one device"?
 - Which exact Austrian devices exist and which material strategy applies to each?
 - Are there Austrian devices that should never show normal material quick buttons?
@@ -487,7 +491,7 @@ Do not implement yet:
 - moving CAM flow, auto-continue, clipboard parsers, keyboard normalization, or label/barcode generation into dashboard config;
 - new storage keys without a dedicated state design;
 - `manifest.json` changes for local JSON/assets until the schema and loading model are approved;
-- SAP/material behavior changes as part of selected-device validation work;
+- broad SAP/material behavior changes beyond the current selected-device snapshot filtering/fill behavior;
 - new device-level validation profiles before business rules are confirmed;
 - broad refactors of `Extension/content.js`;
 - dashboard deployment/security work before local extension behavior is stable.

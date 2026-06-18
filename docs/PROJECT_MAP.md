@@ -238,7 +238,7 @@ The normalized contract supports:
 - `validationProfileId`
 - `enabled`
 
-After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context, recycle help context, SAP/material quick-button ordering, and controlled SAP/material auto-fill when a safe single material candidate exists. SAP/material filtering remains category-level.
+After a category is selected, mapped categories render concrete device cards in the right-side area. Device cards use 16:9 packaged images where available, fall back safely, and can be visually multi-selected. Multi-select currently affects validation context, recycle help context, SAP/material quick-button filtering, and controlled SAP/material auto-fill when a safe single material candidate exists. With a valid per-flow material snapshot, selected devices restrict the SAP/material quick-button grid to only the selected devices/material IDs; without selected devices, SAP/material filtering remains category-level.
 
 ### Recycle Help UI
 
@@ -589,24 +589,25 @@ Behavior for mapped categories:
 
 - Only allowlisted material buttons are rendered.
 - The button order follows the allowlist order.
-- If one or more recycle devices are selected in the current category, their matching material buttons are shown first when present in the current material model list.
-- After a valid recycle serial Continue, a per-flow material snapshot is saved in `sessionStorage`; the SAP/material grid uses a valid snapshot for selected-device ordering before falling back to live shared selected devices.
+- After a valid recycle serial Continue, a per-flow material snapshot is saved in `sessionStorage`; the SAP/material step uses only a valid per-flow snapshot for selected-device material decisions, so another OSS tab changing the shared selected devices does not affect the current material step.
+- If one or more recycle devices exist in the valid per-flow snapshot, the quick-button grid is restricted to only the selected devices/material IDs instead of merely prioritizing them first.
 - `getRecycleMaterialFillCandidate(...)` calculates a controlled fill candidate from the snapshot and current material model list, returning `{ ok, materialId, reason }`.
-- If the candidate is safe, `MaterialId` is empty, and the material exists in the current material model list, the extension fills `MaterialId` without calling auto-continue again.
+- If the candidate is safe, `MaterialId` is empty, and the material exists in the current material model list, the extension fills `MaterialId`, shows a yellow warning that the value was filled automatically, and calls the existing material auto-continue logic again. Debug auto-continue `ON` may continue forward; debug auto-continue `OFF` keeps the material page visible.
+- If selected devices exist in the valid snapshot but there is no single safe Material ID candidate, the extension does not auto-fill, does not auto-continue, and shows a yellow warning asking the operator to choose the device.
 - Prefilled OSS `MaterialId` values are not overwritten.
-- Selected devices do not restrict the grid to selected devices only; all category-allowlisted buttons remain available.
+- If no selected devices exist in the valid snapshot, the current category-level material filtering behavior remains unchanged.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
 - Search stays scoped to the rendered allowlisted devices.
 - There is no fallback to all devices when a mapped category is active.
 - For recycle-scoped grids, missing dashboard-provided models can be supplemented from built-in material models when the local catalog allowlist requires them.
+- Known low-priority UI follow-up: after choosing a quick button in the ambiguous multi-select case, the warning can disappear and the layout can shift slightly.
 
 Unmapped categories keep the older full-list behavior.
 
 Current Austrian behavior:
 
 - `austrian` has device cards for `ADB Modem 2220` and `Huawei HA35-22 HYBRID`.
-- A selected Austrian device can controlled-fill empty `MaterialId` through the per-flow snapshot.
-- Extension-filled Austrian material values do not auto-continue.
+- A selected Austrian device can controlled-fill empty `MaterialId` through the per-flow snapshot and follows the same selected-device material auto-continue behavior as other selected-device controlled fills.
 - No selected Austrian device keeps the legacy preset fallback: `PI* -> 1200017460`, otherwise `1200017462`.
 - Known UI polish: `Huawei HA35-22 HYBRID` quick material button/card can render through the fallback material model even if no dedicated quick-button image is available yet.
 - `cam_modules` is a separate flow. With empty `MaterialId`, it redirects back to the operation page and does not use the quick-buttons grid.
@@ -720,7 +721,7 @@ Latest confirmed real-OSS checks:
 - Austrian label generation works.
 - CAM modules flow works.
 - Recycle-specific material filtering works for the mapped categories.
-- Selected recycle devices are prioritized first in mapped SAP/material quick-button grids; safe single-candidate selections can controlled-fill empty `MaterialId` without auto-continue or selected-only restriction.
+- Selected recycle devices restrict mapped SAP/material quick-button grids to the valid per-flow selected devices/material IDs. Safe single-candidate selections can controlled-fill empty `MaterialId`; debug auto-continue `ON` may continue forward after that fill, while debug auto-continue `OFF` keeps the page visible.
 - Austrian ADB/Huawei device cards, selected-device validation, and selected-device material fill are implemented; no selected Austrian device keeps the legacy preset fallback.
 - `Material auto-continue` debug toggle works and no longer freezes the page.
 

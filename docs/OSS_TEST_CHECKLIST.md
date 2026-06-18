@@ -158,18 +158,20 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Set the toggle back to `ON` and confirm following material pages with prefilled `MaterialId` auto-continue again.
 - For mapped categories (`xplore_zapper`, `dth_kaon_nagra`, `android_iptv`, `netbox`, `routers`, `gpon`, `austrian`), confirm only the expected allowlisted material buttons appear.
 - Confirm known legacy SAP/material IDs are not visible as quick buttons, while OSS-prefilled legacy values still rewrite to the current SAP before continuing.
-- With one selected recycle device in a mapped category, confirm its material button is shown first when it exists in the current material model list.
-- With multiple selected recycle devices in a mapped category, confirm their material buttons are shown first without duplicates, followed by the remaining category buttons.
-- After valid Continue from the recycle serial step, confirm selected-device material ordering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
-- With one selected recycle device, a valid per-flow snapshot, and an empty `MaterialId`, confirm controlled auto-fill writes the expected SAP/material value without auto-continuing.
+- With one selected recycle device in a mapped category, confirm the quick-button grid is restricted to that selected device/material ID when a valid per-flow snapshot exists.
+- With multiple selected recycle devices in a mapped category, confirm the quick-button grid is restricted to only those selected devices/material IDs without duplicates.
+- After valid Continue from the recycle serial step, confirm selected-device material filtering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
+- With one selected recycle device, a valid per-flow snapshot, and an empty `MaterialId`, confirm controlled auto-fill writes the expected SAP/material value and shows the yellow warning `Това устройство няма Material ID, стойността е попълнена автоматично.`
+- With debug auto-continue `ON`, confirm the existing material auto-continue logic may continue after extension auto-fill; with debug auto-continue `OFF`, confirm the page remains visible with the filled SAP/material value and warning.
 - For `ZTE G5B`, confirm the quick-button card and `MaterialId` use `124173`, remain `124173` after waiting more than 30 seconds, and still show the ZTE G5B / ZTE MC888A similar-device warning.
-- With multiple selected recycle devices that have different SAP/material IDs, confirm there is no auto-fill.
+- With multiple selected recycle devices that have different SAP/material IDs, confirm there is no auto-fill, there is no auto-continue, and the yellow warning `Това устройство няма Material ID, моля изберете кое е устройството.` appears.
 - With a prefilled OSS `MaterialId`, confirm the extension does not overwrite the value.
-- Confirm selected recycle devices do not restrict the grid to selected devices only.
+- With no selected devices in the valid per-flow snapshot, confirm the current category-level material filtering remains unchanged.
+- In the ambiguous multi-select case, note the known low-priority UI follow-up: after choosing a quick button manually, the warning may disappear and the layout may shift slightly.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
 - For unmapped categories, confirm the older full-list behavior remains.
-- For `austrian`, select `ADB Modem 2220` and confirm valid serial fills `1200017460` without auto-continuing.
-- For `austrian`, select `Huawei HA35-22 HYBRID` and confirm valid serial fills `1200017462` without auto-continuing.
+- For `austrian`, select `ADB Modem 2220` and confirm valid serial fills `1200017460`; debug auto-continue `ON` may continue, while debug auto-continue `OFF` keeps the page visible.
+- For `austrian`, select `Huawei HA35-22 HYBRID` and confirm valid serial fills `1200017462`; debug auto-continue `ON` may continue, while debug auto-continue `OFF` keeps the page visible.
 - For `austrian`, confirm invalid ADB/Huawei serial lengths or non-alphanumeric values are blocked.
 - For `austrian` with no selected device, confirm the legacy preset fallback still applies.
 - For `austrian`, note whether the Huawei quick material button/card has a dedicated image; text/material fallback is acceptable for now.
@@ -204,7 +206,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Confirm Austrian label generation still works.
 - Confirm CAM Modules flow still works.
 - Confirm material filtering by recycle category still works for the mapped categories.
-- Confirm selected device cards prioritize matching SAP/material quick buttons first; safe single-candidate selections can fill empty `MaterialId`, but they do not hide other category buttons or auto-continue after extension fill.
+- Confirm selected device cards restrict matching SAP/material quick buttons to the valid per-flow selected devices/material IDs; safe single-candidate selections can fill empty `MaterialId`, and the existing material auto-continue logic applies after extension fill.
 - Confirm Austrian no-selected-device legacy fallback still works.
 - Confirm `cam_modules` and `modems` remain unchanged during the next regression pass.
 - Confirm the `Material auto-continue` debug toggle still works and does not freeze the OSS page.
