@@ -21,7 +21,8 @@ const EXPECTED_TOP_LEVEL_KEYS = [
 ];
 
 const OPTIONAL_TOP_LEVEL_KEYS = [
-  "runtimeContract"
+  "runtimeContract",
+  "remoteMaterialModels"
 ];
 
 const ALLOWED_DEVICE_FIELDS = [
@@ -41,8 +42,12 @@ const SUPPORTED_RUNTIME_CONTRACT_VERSIONS = new Set([1]);
 const SUPPORTED_RUNTIME_CAPABILITIES = new Set([
   "visualOverlay",
   "remoteAdditionsDebug",
+  "remoteAdditionsAuto",
   "remoteMaterialPreview",
+  "remoteMaterialAuto",
+  "remoteMaterialModelsAuto",
   "remoteMaterialDebug",
+  "resolvedPlanPreview",
   "resolvedApplyPlan"
 ]);
 const PERMANENTLY_FORBIDDEN_RUNTIME_CAPABILITIES = new Set([
@@ -73,7 +78,8 @@ const RUNTIME_FIELD_POLICY_KEYS = new Set([
   "enabled",
   "categoryHelp",
   "validationProfiles",
-  "generatedMaterialFilters"
+  "generatedMaterialFilters",
+  "remoteMaterialModels"
 ]);
 const RUNTIME_FIELD_POLICY_SAFE_FORBIDDEN = new Set([
   "legacyMaterialIds",
@@ -532,6 +538,16 @@ function changedSection(name, candidateValue, runtimeValue) {
     : "";
 }
 
+function collectRemoteMaterialModelReview(candidate) {
+  const value = candidate && candidate.remoteMaterialModels;
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return ["remoteMaterialModels must be an array when present"];
+  return value.slice(0, MANUAL_REVIEW_LIMIT).map((model, index) => {
+    if (!isPlainObject(model)) return `remoteMaterialModels[${index}] is not an object`;
+    return `${String(model.materialId || "").trim() || "(missing materialId)"} -> ${String(model.deviceId || "").trim() || "(missing deviceId)"} / ${String(model.categoryId || "").trim() || "(missing categoryId)"} / ${String(model.name || "").trim() || "(missing name)"}`;
+  });
+}
+
 function formatChangeValue(value) {
   if (Array.isArray(value)) return `[${value.join(", ")}]`;
   return JSON.stringify(value);
@@ -563,12 +579,14 @@ function main() {
   const deviceChanges = collectDeviceChanges(candidate, runtime);
   const reorderedDevices = collectReorderedDevices(candidate, runtime);
   const materialFilterReview = collectMaterialFilterIssues(candidate, runtime);
+  const remoteMaterialModelReview = collectRemoteMaterialModelReview(candidate);
   const categoryHelpChange = changedSection("categoryHelp", candidate.categoryHelp, runtime.categoryHelp);
   const validationProfilesChange = changedSection("validationProfiles", candidate.validationProfiles, runtime.validationProfiles);
 
   const manualReviewOnly = [
     categoryHelpChange,
     validationProfilesChange,
+    ...remoteMaterialModelReview.map(issue => `remoteMaterialModels review: ${issue}`),
     ...runtimeContractIssues.warnings.map(issue => `runtimeContract review: ${issue}`)
   ].filter(Boolean);
 
@@ -615,6 +633,7 @@ function main() {
   ], item => item);
   printList("Asset/profile issues", assetAndProfileIssues, item => item);
   printList("Generated material filter review", materialFilterReview.issues, item => item);
+  printList("Remote material model review", remoteMaterialModelReview, item => item);
   printList("Manual-review-only sections", manualReviewOnly, item => item);
 
   console.log("");

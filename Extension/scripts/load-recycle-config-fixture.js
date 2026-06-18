@@ -19,15 +19,20 @@ const EXPECTED_TOP_LEVEL_KEYS = [
 ];
 
 const OPTIONAL_TOP_LEVEL_KEYS = [
-  "runtimeContract"
+  "runtimeContract",
+  "remoteMaterialModels"
 ];
 
 const SUPPORTED_RUNTIME_CONTRACT_VERSIONS = new Set([1]);
 const SUPPORTED_RUNTIME_CAPABILITIES = new Set([
   "visualOverlay",
   "remoteAdditionsDebug",
+  "remoteAdditionsAuto",
   "remoteMaterialPreview",
+  "remoteMaterialAuto",
+  "remoteMaterialModelsAuto",
   "remoteMaterialDebug",
+  "resolvedPlanPreview",
   "resolvedApplyPlan"
 ]);
 const PERMANENTLY_FORBIDDEN_RUNTIME_CAPABILITIES = new Set([
@@ -58,7 +63,8 @@ const RUNTIME_FIELD_POLICY_KEYS = new Set([
   "enabled",
   "categoryHelp",
   "validationProfiles",
-  "generatedMaterialFilters"
+  "generatedMaterialFilters",
+  "remoteMaterialModels"
 ]);
 const RUNTIME_FIELD_POLICY_SAFE_FORBIDDEN = new Set([
   "legacyMaterialIds",
@@ -277,8 +283,49 @@ function buildAdapterShape(fixture) {
     devicesByCategory,
     categoryHelp: fixture.categoryHelp,
     validationProfiles: new Set(fixture.validationProfiles),
-    materialFilters: buildMaterialFilters(normalizedDevices)
+    materialFilters: buildMaterialFilters(normalizedDevices),
+    remoteMaterialModels: Array.isArray(fixture.remoteMaterialModels) ? fixture.remoteMaterialModels : []
   };
+}
+
+function validateRemoteMaterialModels(remoteMaterialModels, devices, errors) {
+  if (remoteMaterialModels === undefined) return;
+  if (!Array.isArray(remoteMaterialModels)) {
+    addIssue(errors, "remoteMaterialModels.notArray", "remoteMaterialModels must be an array when present");
+    return;
+  }
+  const deviceMap = new Map((Array.isArray(devices) ? devices : []).map(device => [device.deviceId, device]));
+  const seenMaterialIds = new Set();
+  const seenDeviceIds = new Set();
+  remoteMaterialModels.forEach((model, index) => {
+    const label = `remoteMaterialModels[${index}]`;
+    if (!isPlainObject(model)) {
+      addIssue(errors, "remoteMaterialModel.notObject", `${label} is not an object`);
+      return;
+    }
+    const materialId = normalizeMaterialId(model.materialId);
+    const rawMaterialId = String(model.materialId || "").trim();
+    const deviceId = String(model.deviceId || "").trim();
+    const categoryId = String(model.categoryId || "").trim();
+    const name = String(model.name || "").trim();
+    if (!rawMaterialId || rawMaterialId !== materialId || !/^\d+$/.test(rawMaterialId)) addIssue(errors, "remoteMaterialModel.invalidMaterialId", `${label} materialId must be digits-only`);
+    else if (seenMaterialIds.has(materialId)) addIssue(errors, "remoteMaterialModel.duplicateMaterialId", `${materialId} is duplicated`);
+    if (materialId) seenMaterialIds.add(materialId);
+    if (!deviceId) addIssue(errors, "remoteMaterialModel.missingDeviceId", `${label} is missing deviceId`);
+    else if (seenDeviceIds.has(deviceId)) addIssue(errors, "remoteMaterialModel.duplicateDeviceId", `${deviceId} has multiple remote material models`);
+    if (deviceId) seenDeviceIds.add(deviceId);
+    if (categoryId === "cam_modules" || categoryId === "modems") addIssue(errors, "remoteMaterialModel.specialCategory", `${label} must not use special category ${categoryId}`);
+    if (!name) addIssue(errors, "remoteMaterialModel.missingName", `${label} is missing name`);
+    else if (name.length > 120) addIssue(errors, "remoteMaterialModel.nameTooLong", `${label} name is too long`);
+    const device = deviceMap.get(deviceId);
+    if (!device) addIssue(errors, "remoteMaterialModel.unknownDevice", `${label} references unknown deviceId ${deviceId}`);
+    else {
+      if (device.categoryId !== categoryId) addIssue(errors, "remoteMaterialModel.categoryMismatch", `${label} categoryId does not match bound device`);
+      if (device.materialId !== materialId) addIssue(errors, "remoteMaterialModel.materialMismatch", `${label} materialId does not match bound device`);
+      if (device.enabled === false) addIssue(errors, "remoteMaterialModel.disabledDevice", `${label} is bound to a disabled device`);
+      if (Array.isArray(device.legacyMaterialIds) && device.legacyMaterialIds.length) addIssue(errors, "remoteMaterialModel.legacyMaterialIds", `${label} must not rely on legacyMaterialIds`);
+    }
+  });
 }
 
 function validateTopLevel(fixture, errors) {
@@ -372,6 +419,9 @@ function main() {
   const fixture = readFixture();
   validateTopLevel(fixture, errors);
   validateRuntimeContract(fixture && fixture.runtimeContract, errors, warnings);
+  if (Array.isArray(fixture.devices)) {
+    validateRemoteMaterialModels(fixture.remoteMaterialModels, fixture.devices.map(normalizeDevice), errors);
+  }
 
   if (errors.length) {
     printSummary(null, fixture, errors, warnings);

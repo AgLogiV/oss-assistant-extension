@@ -19,15 +19,20 @@ const EXPECTED_TOP_LEVEL_KEYS = [
 ];
 
 const OPTIONAL_TOP_LEVEL_KEYS = [
-  "runtimeContract"
+  "runtimeContract",
+  "remoteMaterialModels"
 ];
 
 const SUPPORTED_RUNTIME_CONTRACT_VERSIONS = new Set([1]);
 const SUPPORTED_RUNTIME_CAPABILITIES = new Set([
   "visualOverlay",
   "remoteAdditionsDebug",
+  "remoteAdditionsAuto",
   "remoteMaterialPreview",
+  "remoteMaterialAuto",
+  "remoteMaterialModelsAuto",
   "remoteMaterialDebug",
+  "resolvedPlanPreview",
   "resolvedApplyPlan"
 ]);
 const PERMANENTLY_FORBIDDEN_RUNTIME_CAPABILITIES = new Set([
@@ -58,7 +63,8 @@ const RUNTIME_FIELD_POLICY_KEYS = new Set([
   "enabled",
   "categoryHelp",
   "validationProfiles",
-  "generatedMaterialFilters"
+  "generatedMaterialFilters",
+  "remoteMaterialModels"
 ]);
 const RUNTIME_FIELD_POLICY_SAFE_FORBIDDEN = new Set([
   "legacyMaterialIds",
@@ -424,6 +430,91 @@ function validateDevices(devices, profileSet, errors, options) {
   return normalizedDevices;
 }
 
+function validateRemoteMaterialModels(remoteMaterialModels, normalizedDevices, errors) {
+  if (remoteMaterialModels === undefined) return [];
+  if (!Array.isArray(remoteMaterialModels)) {
+    addIssue(errors, "remoteMaterialModels.notArray", "remoteMaterialModels must be an array when present");
+    return [];
+  }
+
+  const deviceMap = new Map();
+  normalizedDevices.forEach(device => {
+    if (device.deviceId && !deviceMap.has(device.deviceId)) deviceMap.set(device.deviceId, device);
+  });
+  const seenMaterialIds = new Set();
+  const seenDeviceIds = new Set();
+  const normalizedModels = [];
+
+  remoteMaterialModels.forEach((model, index) => {
+    const label = `remoteMaterialModels[${index}]`;
+    if (!isPlainObject(model)) {
+      addIssue(errors, "remoteMaterialModel.notObject", `${label} is not an object`);
+      return;
+    }
+
+    const materialId = normalizeMaterialId(model.materialId);
+    const rawMaterialId = String(model.materialId || "").trim();
+    const deviceId = String(model.deviceId || "").trim();
+    const categoryId = String(model.categoryId || "").trim();
+    const name = String(model.name || "").trim();
+    const idLabel = materialId || deviceId || label;
+
+    Object.keys(model).forEach(field => {
+      if (!["materialId", "deviceId", "categoryId", "name"].includes(field)) {
+        addIssue(errors, "remoteMaterialModel.unknownField", `${label} has unknown field ${field}`);
+      }
+    });
+
+    if (!rawMaterialId || rawMaterialId !== materialId || !/^\d+$/.test(rawMaterialId)) {
+      addIssue(errors, "remoteMaterialModel.invalidMaterialId", `${idLabel} materialId must be digits-only`);
+    } else if (seenMaterialIds.has(materialId)) {
+      addIssue(errors, "remoteMaterialModel.duplicateMaterialId", `${materialId} is duplicated`);
+    }
+    if (materialId) seenMaterialIds.add(materialId);
+
+    if (!deviceId) {
+      addIssue(errors, "remoteMaterialModel.missingDeviceId", `${idLabel} is missing deviceId`);
+    } else if (seenDeviceIds.has(deviceId)) {
+      addIssue(errors, "remoteMaterialModel.duplicateDeviceId", `${deviceId} has multiple remote material models`);
+    }
+    if (deviceId) seenDeviceIds.add(deviceId);
+
+    if (!ALLOWED_CATEGORY_IDS.has(categoryId)) {
+      addIssue(errors, "remoteMaterialModel.invalidCategoryId", `${idLabel} has invalid categoryId ${categoryId}`);
+    }
+    if (categoryId === "cam_modules" || categoryId === "modems") {
+      addIssue(errors, "remoteMaterialModel.specialCategory", `${idLabel} must not use special category ${categoryId}`);
+    }
+    if (!name) {
+      addIssue(errors, "remoteMaterialModel.missingName", `${idLabel} is missing name`);
+    } else if (name.length > 120) {
+      addIssue(errors, "remoteMaterialModel.nameTooLong", `${idLabel} name is too long`);
+    }
+
+    const device = deviceMap.get(deviceId);
+    if (!device) {
+      addIssue(errors, "remoteMaterialModel.unknownDevice", `${idLabel} references unknown deviceId ${deviceId}`);
+    } else {
+      if (device.categoryId !== categoryId) {
+        addIssue(errors, "remoteMaterialModel.categoryMismatch", `${idLabel} categoryId does not match bound device`);
+      }
+      if (device.materialId !== materialId) {
+        addIssue(errors, "remoteMaterialModel.materialMismatch", `${idLabel} materialId does not match bound device`);
+      }
+      if (device.enabled === false) {
+        addIssue(errors, "remoteMaterialModel.disabledDevice", `${idLabel} is bound to a disabled device`);
+      }
+      if (Array.isArray(device.legacyMaterialIds) && device.legacyMaterialIds.length) {
+        addIssue(errors, "remoteMaterialModel.legacyMaterialIds", `${idLabel} must not rely on legacyMaterialIds`);
+      }
+    }
+
+    normalizedModels.push({ materialId, deviceId, categoryId, name });
+  });
+
+  return normalizedModels;
+}
+
 function validateCategoryHelp(categoryHelp, errors) {
   if (!isPlainObject(categoryHelp)) {
     addIssue(errors, "categoryHelp.notObject", "categoryHelp is not an object");
@@ -531,6 +622,7 @@ function main() {
   validateRuntimeContract(fixture && fixture.runtimeContract, errors, warnings);
   const profileSet = validateValidationProfiles(fixture.validationProfiles, errors);
   const normalizedDevices = validateDevices(fixture.devices, profileSet, errors, options);
+  const remoteMaterialModels = validateRemoteMaterialModels(fixture.remoteMaterialModels, normalizedDevices, errors);
   validateCategoryHelp(fixture.categoryHelp, errors);
   validateMaterialFilters(fixture.generatedMaterialFilters, normalizedDevices, errors, options);
 
@@ -548,6 +640,7 @@ function main() {
   console.log(`Validation profiles: ${Array.isArray(fixture.validationProfiles) ? fixture.validationProfiles.length : 0}`);
   console.log(`Generated material filter categories: ${isPlainObject(fixture.generatedMaterialFilters) ? Object.keys(fixture.generatedMaterialFilters).length : 0}`);
   console.log(`Runtime contract: ${isPlainObject(fixture && fixture.runtimeContract) ? "present" : "absent"}`);
+  console.log(`Remote material models: ${remoteMaterialModels.length}`);
 
   printIssueList("Warnings", warnings);
   printIssueList("Errors", errors);
