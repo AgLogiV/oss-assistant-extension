@@ -16,6 +16,7 @@ const RECYCLE_REMOTE_RUNTIME_CONTRACT = {
     "remoteAdditionsDebug",
     "remoteAdditionsAuto",
     "remoteMaterialPreview",
+    "remoteMaterialAuto",
     "remoteMaterialDebug"
   ],
   blockedCapabilities: [

@@ -2340,15 +2340,24 @@
   const RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS = ["displayName", "imagePath", "helpImagePath", "warningText"];
   const RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS = ["cam_modules", "modems"];
   const RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY = "remoteAdditionsAuto";
+  const RECYCLE_REMOTE_AUTO_MATERIAL_CAPABILITY = "remoteMaterialAuto";
+  const RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY = "wifi_oss_recycle_remote_auto_session_state_v1";
   const RECYCLE_REMOTE_DEBUG_SESSION_STATE_KEY = "wifi_oss_recycle_remote_debug_session_state_v1";
   let recycleRemoteVisualOverlayByDeviceId = new Map();
   let recycleRemoteAutoDevicesByDeviceId = new Map();
+  let recycleRemoteAutoMaterialEnabledByDeviceId = new Map();
   let recycleRemoteAddedDevicesByDeviceId = new Map();
   let recycleRemoteMaterialEnabledByDeviceId = new Map();
   let recycleRemoteAutoApplyState = {
     result: "not_checked",
     autoAddedCount: 0,
     autoBlockedCount: 0,
+    blockReason: ""
+  };
+  let recycleRemoteAutoMaterialApplyState = {
+    result: "not_checked",
+    autoMaterialEnabledCount: 0,
+    autoMaterialBlockedCount: 0,
     blockReason: ""
   };
   let recycleRemoteAutoApplyInFlight = null;
@@ -2450,7 +2459,8 @@
     if (!isRecycleRemoteAddedDevice(device)) return "";
     const deviceId = String(device?.deviceId || "").trim();
     if (!deviceId) return "";
-    return normalizeSwapMaterialId(recycleRemoteMaterialEnabledByDeviceId.get(deviceId));
+    return normalizeSwapMaterialId(recycleRemoteAutoMaterialEnabledByDeviceId.get(deviceId))
+      || normalizeSwapMaterialId(recycleRemoteMaterialEnabledByDeviceId.get(deviceId));
   }
 
   function isRecycleRemoteMaterialEnabledDevice(device) {
@@ -2485,7 +2495,7 @@
     );
   }
 
-  function classifyRecycleRemoteAddedMaterialEligibility(device) {
+  function classifyRecycleRemoteAddedMaterialEligibility(device, options) {
     const reasons = [];
     const warnings = [];
     const deviceId = String(device?.deviceId || "").trim();
@@ -2495,10 +2505,11 @@
     const materialId = normalizeSwapMaterialId(rawMaterialId);
     const normalCategoryIds = getRecycleRemoteNormalCategoryIdSet();
     const materialModelIds = getRecycleRemoteKnownMaterialIdSet();
+    const appliedMap = options?.appliedMap || recycleRemoteAddedDevicesByDeviceId;
 
     if (!isRecycleRemoteAddedDevice(device)) reasons.push("not remote-added");
     if (!deviceId || !isRecycleRemoteSafeId(deviceId)) reasons.push("unsafe deviceId");
-    else if (!recycleRemoteAddedDevicesByDeviceId.has(deviceId)) reasons.push("not applied");
+    else if (!appliedMap?.has?.(deviceId)) reasons.push("not applied");
 
     if (!categoryId || !isRecycleRemoteSafeId(categoryId)) reasons.push("invalid category");
     else if (RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS.includes(categoryId)) reasons.push(`special category ${categoryId}`);
@@ -2639,10 +2650,21 @@
   function getRecycleRemoteEnabledMaterialIdsByCategory(categoryId) {
     const id = String(categoryId || "").trim();
     if (!id) return [];
-    return Array.from(recycleRemoteAddedDevicesByDeviceId.values())
-      .filter(device => device.categoryId === id && isRecycleDeviceEnabled(device) && isRecycleRemoteMaterialEnabledDevice(device))
-      .map(device => getRecycleEffectiveMaterialId(device, "sap"))
-      .filter(Boolean);
+    const seenDeviceIds = new Set();
+    const materialIds = [];
+    const addMaterialIds = (devices) => {
+      Array.from(devices || []).forEach(device => {
+        const deviceId = String(device?.deviceId || "").trim();
+        if (!deviceId || seenDeviceIds.has(deviceId)) return;
+        if (device.categoryId !== id || !isRecycleDeviceEnabled(device) || !isRecycleRemoteMaterialEnabledDevice(device)) return;
+        seenDeviceIds.add(deviceId);
+        const materialId = getRecycleEffectiveMaterialId(device, "sap");
+        if (materialId) materialIds.push(materialId);
+      });
+    };
+    addMaterialIds(recycleRemoteAutoDevicesByDeviceId.values());
+    addMaterialIds(recycleRemoteAddedDevicesByDeviceId.values());
+    return materialIds;
   }
 
   function getRecycleEffectiveMaterialIdsByCategory(categoryId) {
@@ -2690,6 +2712,102 @@
         materialId: normalizeSwapMaterialId(materialId)
       }))
       .filter(entry => entry.deviceId && entry.materialId);
+  }
+
+  function getRecycleRemoteAutoMaterialEnabledSessionEntries() {
+    return Array.from(recycleRemoteAutoMaterialEnabledByDeviceId.entries())
+      .map(([deviceId, materialId]) => ({
+        deviceId: String(deviceId || "").trim(),
+        materialId: normalizeSwapMaterialId(materialId)
+      }))
+      .filter(entry => entry.deviceId && entry.materialId);
+  }
+
+  function saveRecycleRemoteAutoSessionState() {
+    const materialEnabled = getRecycleRemoteAutoMaterialEnabledSessionEntries();
+    const enabledDeviceIds = new Set(materialEnabled.map(entry => entry.deviceId));
+    const devices = Array.from(recycleRemoteAutoDevicesByDeviceId.values())
+      .filter(device => enabledDeviceIds.has(String(device?.deviceId || "").trim()))
+      .map(serializeRecycleRemoteAddedDeviceForSession)
+      .filter(Boolean);
+    try {
+      if (!devices.length || !materialEnabled.length) {
+        sessionStorage.removeItem(RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY);
+        return;
+      }
+      sessionStorage.setItem(RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY, JSON.stringify({
+        version: 1,
+        savedAt: Date.now(),
+        devices,
+        materialEnabled
+      }));
+    } catch (e) {}
+  }
+
+  function clearRecycleRemoteAutoSessionState() {
+    try { sessionStorage.removeItem(RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY); } catch (e) {}
+  }
+
+  function restoreRecycleRemoteAutoSessionState() {
+    let parsed = null;
+    try {
+      const raw = String(sessionStorage.getItem(RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY) || "");
+      if (!raw) return false;
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      clearRecycleRemoteAutoSessionState();
+      return false;
+    }
+
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.devices)) {
+      clearRecycleRemoteAutoSessionState();
+      return false;
+    }
+
+    const overlayMap = new Map();
+    parsed.devices.forEach(entry => {
+      const normalized = normalizeRecycleRemoteAddedDeviceEntry(entry, overlayMap);
+      if (normalized.ok) overlayMap.set(normalized.device.deviceId, normalized.device);
+    });
+
+    const materialMap = new Map();
+    (Array.isArray(parsed.materialEnabled) ? parsed.materialEnabled : []).forEach(entry => {
+      const deviceId = String(entry?.deviceId || "").trim();
+      const materialId = normalizeSwapMaterialId(entry?.materialId);
+      const device = overlayMap.get(deviceId);
+      if (!device || !materialId) return;
+      materialMap.set(deviceId, materialId);
+    });
+
+    Array.from(materialMap.keys()).forEach(deviceId => {
+      const device = overlayMap.get(deviceId);
+      const materialId = materialMap.get(deviceId);
+      const eligibility = classifyRecycleRemoteAddedMaterialEligibility(device, { appliedMap: overlayMap });
+      if (!eligibility.eligible || eligibility.materialId !== materialId) {
+        materialMap.delete(deviceId);
+      }
+    });
+
+    if (!overlayMap.size || !materialMap.size) {
+      clearRecycleRemoteAutoSessionState();
+      return false;
+    }
+
+    recycleRemoteAutoDevicesByDeviceId = overlayMap;
+    recycleRemoteAutoMaterialEnabledByDeviceId = materialMap;
+    setRecycleRemoteAutoApplyState({
+      ok: true,
+      result: "auto_applied",
+      autoAddedCount: overlayMap.size,
+      autoBlockedCount: 0
+    });
+    setRecycleRemoteAutoMaterialApplyState({
+      ok: true,
+      result: "auto_material_enabled",
+      autoMaterialEnabledCount: materialMap.size,
+      autoMaterialBlockedCount: 0
+    });
+    return true;
   }
 
   function saveRecycleRemoteDebugSessionState() {
@@ -2967,6 +3085,7 @@
     input.style.backgroundColor = "#f3f3f3";
     input.style.cursor = "not-allowed";
     attachSwapMaterialRewriteRule(input);
+    restoreRecycleRemoteAutoSessionState();
     // If we came from a recycle flow with a material preset, prefill based on serial.
     try { applyRecycleCategoryMaterialPreset(input); } catch (e) {}
     autoContinueSwapMaterialIfReady(root, input);
@@ -4978,6 +5097,16 @@
     };
   }
 
+  function setRecycleRemoteAutoMaterialApplyState(patch) {
+    recycleRemoteAutoMaterialApplyState = {
+      result: "not_checked",
+      autoMaterialEnabledCount: 0,
+      autoMaterialBlockedCount: 0,
+      blockReason: "",
+      ...(patch || {})
+    };
+  }
+
   function getRecycleRemoteAutoCapabilityBlockReason(response) {
     const compatibility = response?.contractCompatibility;
     if (!compatibility || typeof compatibility !== "object") return "contract missing";
@@ -4990,14 +5119,112 @@
     return "";
   }
 
+  function getRecycleRemoteAutoMaterialCapabilityBlockReason(response) {
+    const baseReason = getRecycleRemoteAutoCapabilityBlockReason(response);
+    if (baseReason) return baseReason;
+    const supported = Array.isArray(response?.contractCompatibility?.supportedCapabilities)
+      ? response.contractCompatibility.supportedCapabilities
+      : [];
+    if (!supported.includes(RECYCLE_REMOTE_AUTO_MATERIAL_CAPABILITY)) return "no material auto capability";
+    return "";
+  }
+
+  function clearRecycleRemoteAutoMaterialOverlay(reason) {
+    recycleRemoteAutoMaterialEnabledByDeviceId = new Map();
+    clearRecycleRemoteAutoSessionState();
+    setRecycleRemoteAutoMaterialApplyState({
+      result: reason || "local_fallback",
+      autoMaterialEnabledCount: 0,
+      autoMaterialBlockedCount: 0,
+      blockReason: reason || ""
+    });
+  }
+
   function clearRecycleRemoteAutoDeviceOverlay(reason) {
     recycleRemoteAutoDevicesByDeviceId = new Map();
+    clearRecycleRemoteAutoMaterialOverlay(reason || "local_fallback");
     setRecycleRemoteAutoApplyState({
       result: reason || "local_fallback",
       autoAddedCount: 0,
       autoBlockedCount: 0,
       blockReason: reason || ""
     });
+  }
+
+  function applyRecycleRemoteAutomaticMaterialEnablementFromPlan(response) {
+    const sourceRevision = String(response?.sourceRevision || response?.meta?.revision || "").trim();
+    const blockReason = getRecycleRemoteAutoMaterialCapabilityBlockReason(response);
+    if (blockReason) {
+      clearRecycleRemoteAutoMaterialOverlay(blockReason);
+      return {
+        ok: false,
+        result: "auto_material_blocked",
+        sourceRevision,
+        blockReason,
+        autoMaterialEnabledCount: 0,
+        autoMaterialBlockedCount: blockReason === "no material auto capability" ? 0 : 1
+      };
+    }
+
+    const candidates = Array.isArray(response?.materialEligibleAdditions?.entries)
+      ? response.materialEligibleAdditions.entries
+      : [];
+    const candidateIds = new Set();
+    const enabledMap = new Map();
+    const blocked = [];
+    let blockedCount = 0;
+    const pushBlocked = (sample) => {
+      blockedCount += 1;
+      if (blocked.length < 5) blocked.push(sample);
+    };
+
+    candidates.forEach(entry => {
+      const deviceId = String(entry?.deviceId || "").trim();
+      if (!deviceId || candidateIds.has(deviceId)) return;
+      candidateIds.add(deviceId);
+      const device = recycleRemoteAutoDevicesByDeviceId.get(deviceId);
+      if (!device) {
+        pushBlocked(buildRecycleRemoteMaterialPlanSample(entry, ["not auto-applied"], []));
+        return;
+      }
+
+      const eligibility = classifyRecycleRemoteAddedMaterialEligibility(device, { appliedMap: recycleRemoteAutoDevicesByDeviceId });
+      const planMaterialId = normalizeSwapMaterialId(entry?.materialId);
+      if (eligibility.eligible && planMaterialId && eligibility.materialId === planMaterialId) {
+        enabledMap.set(deviceId, eligibility.materialId);
+      } else {
+        const reasons = eligibility.reasons.slice();
+        if (eligibility.eligible) reasons.push("material plan mismatch");
+        pushBlocked(buildRecycleRemoteMaterialEligibilitySample(device, reasons, eligibility.warnings));
+      }
+    });
+
+    Array.from(recycleRemoteAutoDevicesByDeviceId.values()).forEach(device => {
+      if (!isRecycleRemoteAddedDevice(device)) return;
+      const deviceId = String(device?.deviceId || "").trim();
+      if (!deviceId || candidateIds.has(deviceId)) return;
+      pushBlocked(buildRecycleRemoteMaterialEligibilitySample(device, ["not in resolved material plan"], []));
+    });
+
+    recycleRemoteAutoMaterialEnabledByDeviceId = enabledMap;
+    setRecycleRemoteAutoMaterialApplyState({
+      ok: true,
+      result: enabledMap.size ? "auto_material_enabled" : "auto_material_none",
+      sourceRevision,
+      autoMaterialEnabledCount: enabledMap.size,
+      autoMaterialBlockedCount: blockedCount,
+      blockedSamples: blocked,
+      blockReason: enabledMap.size ? "" : "no material enabled"
+    });
+    saveRecycleRemoteAutoSessionState();
+    return {
+      ok: true,
+      result: recycleRemoteAutoMaterialApplyState.result,
+      sourceRevision,
+      autoMaterialEnabledCount: enabledMap.size,
+      autoMaterialBlockedCount: blockedCount,
+      blockedSamples: blocked
+    };
   }
 
   async function applyRecycleRemoteAutomaticEligibleDevices() {
@@ -5034,6 +5261,7 @@
       const { overlayMap, blocked } = buildRecycleRemoteAddedDeviceOverlay(additions);
       recycleRemoteAutoDevicesByDeviceId = overlayMap;
       const autoBlockedCount = blocked.length + Number(response?.summary?.blocked || 0);
+      const autoMaterial = applyRecycleRemoteAutomaticMaterialEnablementFromPlan(response);
       setRecycleRemoteAutoApplyState({
         ok: true,
         result: overlayMap.size ? "auto_applied" : "auto_no_eligible",
@@ -5049,7 +5277,8 @@
         sourceRevision,
         autoAddedCount: overlayMap.size,
         autoBlockedCount,
-        blockedSamples: blocked.slice(0, 5)
+        blockedSamples: blocked.slice(0, 5),
+        autoMaterial
       };
     })();
 
@@ -5426,6 +5655,23 @@
     if (Number(autoState.autoBlockedCount || 0)) {
       parts.push(`auto blocked ${Number(autoState.autoBlockedCount || 0)}`);
     }
+
+    const materialState = response?.autoMaterial && typeof response.autoMaterial === "object"
+      ? response.autoMaterial
+      : autoState.autoMaterial || recycleRemoteAutoMaterialApplyState;
+    if (!materialState || materialState.result === "not_checked") return;
+    if (materialState.result === "auto_material_enabled") {
+      parts.push(`auto material enabled ${Number(materialState.autoMaterialEnabledCount || 0)}`);
+    } else if (materialState.result === "auto_material_blocked") {
+      parts.push(`auto material blocked${materialState.blockReason ? `: ${String(materialState.blockReason).trim()}` : ""}`);
+    } else if (materialState.blockReason === "no material auto capability") {
+      parts.push("auto material disabled: no capability");
+    } else if (materialState.result) {
+      parts.push(`auto material ${String(materialState.result).trim()}`);
+    }
+    if (Number(materialState.autoMaterialBlockedCount || 0)) {
+      parts.push(`auto material blocked ${Number(materialState.autoMaterialBlockedCount || 0)}`);
+    }
   }
 
   function formatRecycleRemoteDebugStatus(action, response) {
@@ -5668,6 +5914,12 @@
         if (autoRemote.result === "auto_applied") addSummaryChip(`auto remote applied ${Number(autoRemote.autoAddedCount || 0)}`, Number(autoRemote.autoAddedCount || 0) ? "ok" : "info");
         else if (autoRemote.blockReason === "no auto capability") addSummaryChip("auto remote disabled", "info");
         else if (autoRemote.result === "auto_blocked") addSummaryChip("auto remote blocked", "warn");
+        const autoMaterial = autoRemote.autoMaterial || response.autoMaterial;
+        if (autoMaterial && typeof autoMaterial === "object") {
+          if (autoMaterial.result === "auto_material_enabled") addSummaryChip(`auto material ${Number(autoMaterial.autoMaterialEnabledCount || 0)}`, Number(autoMaterial.autoMaterialEnabledCount || 0) ? "ok" : "info");
+          else if (autoMaterial.blockReason === "no material auto capability") addSummaryChip("auto material disabled", "info");
+          else if (autoMaterial.result === "auto_material_blocked") addSummaryChip("auto material blocked", "warn");
+        }
       }
       if (typeof response.autoRefreshEnabled === "boolean") addSummaryChip(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`, response.autoRefreshEnabled ? "warn" : "info");
       if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? "stale" : "fresh", response.isStale ? "warn" : "ok");
