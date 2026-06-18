@@ -6258,6 +6258,15 @@
 
       b.appendChild(media);
       b.appendChild(titleBar);
+      const strip = document.createElement("div");
+      strip.style.position = "absolute";
+      strip.style.left = "0";
+      strip.style.right = "0";
+      strip.style.bottom = "0";
+      strip.style.height = "0";
+      strip.style.background = red;
+      strip.style.transition = "height 160ms ease";
+      b.appendChild(strip);
       b.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -6268,12 +6277,14 @@
         b.style.borderColor = red;
         b.style.boxShadow = featured ? "0 10px 24px rgba(0,0,0,0.18)" : "0 7px 18px rgba(0,0,0,0.18)";
         if (img) img.style.transform = "scale(1.025)";
+        if (!featured) strip.style.height = "6px";
       });
       b.addEventListener("mouseleave", () => {
         b.style.transform = "";
         b.style.borderColor = baseBorder;
         b.style.boxShadow = baseShadow;
         if (img) img.style.transform = "";
+        strip.style.height = "0";
       });
 
       return b;
