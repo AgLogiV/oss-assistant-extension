@@ -6275,7 +6275,7 @@
       b.addEventListener("mouseenter", () => {
         b.style.transform = featured ? "translateY(-1px)" : "translateY(-2px)";
         b.style.borderColor = red;
-        b.style.boxShadow = featured ? "0 10px 24px rgba(0,0,0,0.18)" : "0 7px 18px rgba(0,0,0,0.18)";
+        b.style.boxShadow = featured ? "0 10px 24px rgba(0,0,0,0.18)" : "0 8px 20px rgba(218,41,28,0.18)";
         if (img) img.style.transform = "scale(1.025)";
         if (!featured) strip.style.height = "6px";
       });
