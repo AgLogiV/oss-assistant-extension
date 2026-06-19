@@ -269,16 +269,23 @@ function buildDeviceMap(devices) {
   return map;
 }
 
-function buildMaterialFilters(devices) {
+function buildMaterialFilters(devices, ignoredMaterialIds) {
   return (Array.isArray(devices) ? devices : []).reduce((filters, device) => {
     if (!device || device.enabled === false) return filters;
     const categoryId = normalizeString(device.categoryId);
     const materialId = normalizeMaterialId(device.materialId);
+    if (ignoredMaterialIds && ignoredMaterialIds.has(materialId)) return filters;
     if (!categoryId || !materialId) return filters;
     if (!filters[categoryId]) filters[categoryId] = [];
     filters[categoryId].push(materialId);
     return filters;
   }, {});
+}
+
+function buildRemoteMaterialModelIdSet(remoteMaterialModels) {
+  return new Set((Array.isArray(remoteMaterialModels) ? remoteMaterialModels : [])
+    .map(model => normalizeMaterialId(model && model.materialId))
+    .filter(Boolean));
 }
 
 function compareArrayObjects(left, right) {
@@ -509,7 +516,8 @@ function collectReorderedDevices(candidate, runtime) {
 
 function collectMaterialFilterIssues(candidate, runtime) {
   const issues = [];
-  const rebuilt = buildMaterialFilters(candidate.devices);
+  const remoteMaterialModelIds = buildRemoteMaterialModelIdSet(candidate.remoteMaterialModels);
+  const rebuilt = buildMaterialFilters(candidate.devices, remoteMaterialModelIds);
   const candidateFilters = isPlainObject(candidate.generatedMaterialFilters) ? candidate.generatedMaterialFilters : {};
 
   Object.entries(rebuilt).forEach(([categoryId, expected]) => {

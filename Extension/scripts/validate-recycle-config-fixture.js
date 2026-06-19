@@ -325,16 +325,23 @@ function normalizeDevice(device) {
   };
 }
 
-function buildMaterialFilters(devices) {
+function buildMaterialFilters(devices, ignoredMaterialIds) {
   return devices.reduce((filters, device) => {
     if (!isEnabled(device)) return filters;
     const categoryId = String(device.categoryId || "").trim();
     const materialId = normalizeMaterialId(device.materialId);
+    if (ignoredMaterialIds && ignoredMaterialIds.has(materialId)) return filters;
     if (!categoryId || !materialId) return filters;
     if (!filters[categoryId]) filters[categoryId] = [];
     filters[categoryId].push(materialId);
     return filters;
   }, {});
+}
+
+function buildRemoteMaterialModelIdSet(remoteMaterialModels) {
+  return new Set((Array.isArray(remoteMaterialModels) ? remoteMaterialModels : [])
+    .map(model => normalizeMaterialId(model && model.materialId))
+    .filter(Boolean));
 }
 
 function validateTopLevel(fixture, errors) {
@@ -565,13 +572,14 @@ function validateValidationProfiles(validationProfiles, errors) {
   return profileSet;
 }
 
-function validateMaterialFilters(generatedMaterialFilters, normalizedDevices, errors, options) {
+function validateMaterialFilters(generatedMaterialFilters, normalizedDevices, remoteMaterialModels, errors, options) {
   if (!isPlainObject(generatedMaterialFilters)) {
     addIssue(errors, "generatedMaterialFilters.notObject", "generatedMaterialFilters is not an object");
     return;
   }
 
-  const rebuiltFilters = buildMaterialFilters(normalizedDevices);
+  const remoteMaterialModelIds = buildRemoteMaterialModelIdSet(remoteMaterialModels);
+  const rebuiltFilters = buildMaterialFilters(normalizedDevices, remoteMaterialModelIds);
 
   Object.entries(rebuiltFilters).forEach(([categoryId, expected]) => {
     const actual = generatedMaterialFilters[categoryId] || [];
@@ -624,7 +632,7 @@ function main() {
   const normalizedDevices = validateDevices(fixture.devices, profileSet, errors, options);
   const remoteMaterialModels = validateRemoteMaterialModels(fixture.remoteMaterialModels, normalizedDevices, errors);
   validateCategoryHelp(fixture.categoryHelp, errors);
-  validateMaterialFilters(fixture.generatedMaterialFilters, normalizedDevices, errors, options);
+  validateMaterialFilters(fixture.generatedMaterialFilters, normalizedDevices, remoteMaterialModels, errors, options);
 
   const categoriesWithDevices = new Set(normalizedDevices.map(device => device.categoryId).filter(Boolean));
 
