@@ -348,8 +348,7 @@ function recycleRemoteEvaluateCatalogContract(catalog, meta) {
     minExtensionVersion,
     extensionVersion,
     supportedCapabilities: supportedCapabilities
-      .filter(capability => RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedCapabilities.includes(capability))
-      .slice(0, RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT),
+      .filter(capability => RECYCLE_REMOTE_RUNTIME_CONTRACT.supportedCapabilities.includes(capability)),
     blockedCapabilities: blockedCapabilities.slice(0, RECYCLE_REMOTE_CONTRACT_SAMPLE_LIMIT),
     warnings,
     errors
