@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "revision": "dev-current",
   "devices": [
+    {
       "deviceId": "stb_zxv_b700v5",
       "categoryId": "android_iptv",
       "displayName": "STB ZXV B700v5",
@@ -26,7 +27,7 @@
       "enabled": true
     },
     {
-      "deviceId": "stb_zte_b866v2f02_androidtv,
+      "deviceId": "stb_zte_b866v2f02_androidtv",
       "categoryId": "android_iptv",
       "displayName": "B866V2F02 (AndroidTV)",
       "materialId": "121678",
