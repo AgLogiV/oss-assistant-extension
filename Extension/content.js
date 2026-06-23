@@ -5283,8 +5283,16 @@
     const supported = Array.isArray(compatibility.supportedCapabilities) ? compatibility.supportedCapabilities : [];
     if (!supported.includes(RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY)) return "no auto capability";
     if (response?.hasLastKnownGood === false) return "no LKG";
-    if (response?.isStale === true) return "stale LKG";
+    if (response?.isStale === true && !isRecycleRemoteUsingStaleLastKnownGood(response)) return "stale LKG";
     return "";
+  }
+
+  function isRecycleRemoteUsingStaleLastKnownGood(response) {
+    const statusResult = String(response?.status?.result || "").trim();
+    return response?.normalRefreshEnabled === true
+      && response?.hasLastKnownGood === true
+      && response?.isStale === true
+      && statusResult === "fetch_failed";
   }
 
   function getRecycleRemoteAutoMaterialCapabilityBlockReason(response) {
@@ -5482,6 +5490,7 @@
   function scheduleRecycleRemoteAutomaticEligibleDevices() {
     setTimeout(async () => {
       try {
+        await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh);
         const result = await applyRecycleRemoteAutomaticEligibleDevices();
         refreshRecycleRemoteVisualOverlayPanels();
       } catch (error) {
@@ -5872,9 +5881,14 @@
     const lastError = String(status.lastError || response?.error || "").trim();
     const parts = [action, result].filter(Boolean);
     const sourceLabel = String(response?.activeSourceLabel || response?.activeSourceId || "").trim();
+    const usingStaleLkg = isRecycleRemoteUsingStaleLastKnownGood(response);
     if (sourceLabel) parts.push(`source ${sourceLabel}`);
     if (typeof response?.autoRefreshEnabled === "boolean") parts.push(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`);
-    if (typeof response?.isStale === "boolean") parts.push(response.isStale ? "stale" : "fresh");
+    if (response?.normalRefreshEnabled === true) {
+      const ttlHours = Math.max(1, Math.round(Number(response?.ttlMs || 0) / (60 * 60 * 1000)));
+      parts.push(`normal refresh ${ttlHours}h`);
+    }
+    if (typeof response?.isStale === "boolean") parts.push(response.isStale ? (usingStaleLkg ? "stale using LKG" : "stale") : "fresh");
     if (revision) parts.push(`rev ${revision}`);
     appendRecycleRemoteContractStatus(parts, response);
     if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
@@ -6111,7 +6125,12 @@
         }
       }
       if (typeof response.autoRefreshEnabled === "boolean") addSummaryChip(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`, response.autoRefreshEnabled ? "warn" : "info");
-      if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? "stale" : "fresh", response.isStale ? "warn" : "ok");
+      if (response.normalRefreshEnabled === true) {
+        const ttlHours = Math.max(1, Math.round(Number(response.ttlMs || 0) / (60 * 60 * 1000)));
+        addSummaryChip(`normal refresh ${ttlHours}h`, "info");
+      }
+      const usingStaleLkg = isRecycleRemoteUsingStaleLastKnownGood(response);
+      if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? (usingStaleLkg ? "stale using LKG" : "stale") : "fresh", response.isStale ? "warn" : "ok");
       if (response.hasLastKnownGood === true) addSummaryChip("LKG yes", "ok");
       if (response.hasLastKnownGood === false) addSummaryChip("LKG no", "warn");
       if (response.blockReason) addSummaryChip(`blocked: ${String(response.blockReason).trim()}`, "warn");

@@ -123,9 +123,9 @@ function recycleRemoteGetExtensionVersion() {
 
 function recycleRemoteBuildProductionSource() {
   return {
-    activeSourceId: RECYCLE_REMOTE_CONFIG_PRODUCTION_SOURCE_ID,
-    activeSourceLabel: "production",
-    activeSourceUrl: RECYCLE_REMOTE_CONFIG_URL,
+    activeSourceId: RECYCLE_REMOTE_CONFIG_EXTERNAL_SIMPLE_SOURCE_ID,
+    activeSourceLabel: "external",
+    activeSourceUrl: RECYCLE_REMOTE_EXTERNAL_SIMPLE_CONFIG_URL,
     sourceOverrideActive: false
   };
 }
@@ -134,13 +134,20 @@ function recycleRemoteIsExternalSimpleSourceUrl(url) {
   return recycleRemoteTrim(url) === RECYCLE_REMOTE_EXTERNAL_SIMPLE_CONFIG_URL;
 }
 
+function recycleRemoteIsNormalExternalSource(source) {
+  const active = source || {};
+  return active.sourceOverrideActive !== true
+    && recycleRemoteIsExternalSimpleSourceUrl(active.activeSourceUrl);
+}
+
 function recycleRemoteBuildSourceResponseFields(source) {
   const active = source || recycleRemoteBuildProductionSource();
   return {
     activeSourceId: active.activeSourceId || RECYCLE_REMOTE_CONFIG_PRODUCTION_SOURCE_ID,
     activeSourceLabel: active.activeSourceLabel || "production",
     activeSourceUrl: active.activeSourceUrl || RECYCLE_REMOTE_CONFIG_URL,
-    sourceOverrideActive: active.sourceOverrideActive === true
+    sourceOverrideActive: active.sourceOverrideActive === true,
+    normalRefreshEnabled: recycleRemoteIsNormalExternalSource(active)
   };
 }
 
@@ -394,8 +401,12 @@ function recycleRemoteAdaptExternalSimpleCatalog(catalog, context) {
   };
 }
 
+function recycleRemoteCanAdaptExternalSimpleCatalog(source) {
+  return recycleRemoteIsExternalSimpleSourceUrl(source?.activeSourceUrl);
+}
+
 function recycleRemoteAdaptCatalogForSource(catalog, context) {
-  if (recycleRemoteIsExternalSimpleCatalog(catalog)) {
+  if (recycleRemoteIsExternalSimpleCatalog(catalog) && recycleRemoteCanAdaptExternalSimpleCatalog(context?.source)) {
     return recycleRemoteAdaptExternalSimpleCatalog(catalog, context);
   }
   return {
@@ -974,7 +985,8 @@ async function recycleRemoteMaybeRefresh() {
   const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta, keys.status, keys.enabled, keys.sourceOverride]);
   const source = recycleRemoteResolveActiveSource(stored);
   const current = recycleRemoteBuildStatusResponse(recycleRemoteScopeStoredToActiveSource(stored, source), "status", source);
-  if (!current.autoRefreshEnabled) {
+  const normalRefreshEnabled = recycleRemoteIsNormalExternalSource(source);
+  if (!current.autoRefreshEnabled && !normalRefreshEnabled) {
     return { ...current, result: "disabled", autoRefreshAttempted: false, errors: [] };
   }
   if (!current.isStale) {
