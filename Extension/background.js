@@ -1,10 +1,16 @@
 const RECYCLE_REMOTE_CONFIG_URL = "https://oss-assistant.github.io/oss-assistant-config/config/recycle-device-catalog.json";
 const RECYCLE_REMOTE_CONFIG_ALLOWED_SOURCE_PREFIX = "https://oss-assistant.github.io/oss-assistant-config/";
+const RECYCLE_REMOTE_EXTERNAL_SIMPLE_CONFIG_URL = "https://raw.githubusercontent.com/AgLogiV/oss-assistant-extension/main/config/recycle-device-catalog.fixture.json";
 const RECYCLE_REMOTE_CONFIG_PRODUCTION_SOURCE_ID = "production";
 const RECYCLE_REMOTE_CONFIG_DEBUG_SOURCE_ID = "debug";
+const RECYCLE_REMOTE_CONFIG_EXTERNAL_SIMPLE_SOURCE_ID = "external_simple";
 const RECYCLE_REMOTE_CONFIG_TIMEOUT_MS = 15000;
 const RECYCLE_REMOTE_CONFIG_MAX_BYTES = 1024 * 1024;
 const RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS = 6 * 60 * 60 * 1000;
+const RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS = [
+  "thfvnext.bing.com",
+  "tse2.mm.bing.net"
+];
 
 const RECYCLE_REMOTE_RUNTIME_CONTRACT = {
   extensionVersion: "1.0.1",
@@ -13,6 +19,7 @@ const RECYCLE_REMOTE_RUNTIME_CONTRACT = {
   supportedCapabilities: [
     "visualOverlay",
     "resolvedPlanPreview",
+    "resolvedApplyPlan",
     "remoteAdditionsDebug",
     "remoteAdditionsAuto",
     "remoteMaterialPreview",
@@ -106,6 +113,10 @@ function recycleRemoteTrim(value) {
   return String(value || "").trim();
 }
 
+function recycleRemoteHasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object || {}, key);
+}
+
 function recycleRemoteGetExtensionVersion() {
   return recycleRemoteTrim(chrome?.runtime?.getManifest?.().version) || RECYCLE_REMOTE_RUNTIME_CONTRACT.extensionVersion;
 }
@@ -117,6 +128,10 @@ function recycleRemoteBuildProductionSource() {
     activeSourceUrl: RECYCLE_REMOTE_CONFIG_URL,
     sourceOverrideActive: false
   };
+}
+
+function recycleRemoteIsExternalSimpleSourceUrl(url) {
+  return recycleRemoteTrim(url) === RECYCLE_REMOTE_EXTERNAL_SIMPLE_CONFIG_URL;
 }
 
 function recycleRemoteBuildSourceResponseFields(source) {
@@ -153,6 +168,10 @@ function recycleRemoteValidateSourceOverrideUrl(rawUrl) {
   if (parsed.username || parsed.password) {
     return { ok: false, error: "Debug source must not include credentials" };
   }
+  parsed.hash = "";
+  if (parsed.toString() === RECYCLE_REMOTE_EXTERNAL_SIMPLE_CONFIG_URL) {
+    return { ok: true, url: parsed.toString() };
+  }
   if (parsed.origin !== allowed.origin || !parsed.pathname.startsWith(allowed.pathname)) {
     return { ok: false, error: "Debug source must be under oss-assistant-config GitHub Pages" };
   }
@@ -169,7 +188,6 @@ function recycleRemoteValidateSourceOverrideUrl(rawUrl) {
     return { ok: false, error: "Debug source must point to a JSON file" };
   }
 
-  parsed.hash = "";
   return { ok: true, url: parsed.toString() };
 }
 
@@ -188,6 +206,14 @@ function recycleRemoteResolveActiveSource(stored) {
   const keys = RECYCLE_REMOTE_CONFIG_KEYS;
   const override = recycleRemoteNormalizeSourceOverride(stored?.[keys.sourceOverride]);
   if (!override) return recycleRemoteBuildProductionSource();
+  if (recycleRemoteIsExternalSimpleSourceUrl(override.url)) {
+    return {
+      activeSourceId: RECYCLE_REMOTE_CONFIG_EXTERNAL_SIMPLE_SOURCE_ID,
+      activeSourceLabel: "external",
+      activeSourceUrl: override.url,
+      sourceOverrideActive: true
+    };
+  }
   return {
     activeSourceId: RECYCLE_REMOTE_CONFIG_DEBUG_SOURCE_ID,
     activeSourceLabel: "debug",
@@ -244,6 +270,138 @@ function recycleRemoteNormalizeStringArray(value) {
     }
   });
   return normalized;
+}
+
+function recycleRemoteBuildStableContentHash(text) {
+  const input = String(text || "");
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function recycleRemoteIsExternalSimpleCatalog(catalog) {
+  if (!recycleRemoteIsPlainObject(catalog)) return false;
+  const keys = Object.keys(catalog);
+  return keys.length === 1
+    && keys[0] === "devices"
+    && Array.isArray(catalog.devices)
+    && !recycleRemoteHasOwn(catalog, "schemaVersion")
+    && !recycleRemoteHasOwn(catalog, "revision");
+}
+
+function recycleRemoteNormalizeExternalLegacyMaterialIds(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(item => recycleRemoteTrim(item))
+    .filter(Boolean);
+}
+
+function recycleRemoteIsExtensionRelativeImagePath(value) {
+  const pathValue = recycleRemoteTrim(value);
+  if (!pathValue) return false;
+  if (!pathValue.startsWith("images/")) return false;
+  if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) return false;
+  if (pathValue.includes("\\") || pathValue.includes("..")) return false;
+  return /\.(?:webp|png|jpe?g)$/i.test(pathValue);
+}
+
+function recycleRemoteNormalizeExternalImagePath(value) {
+  const pathValue = recycleRemoteTrim(value);
+  if (!pathValue) return "";
+  if (recycleRemoteIsApprovedHttpsImageUrl(pathValue)) return pathValue;
+  if (recycleRemoteIsExtensionRelativeImagePath(pathValue)) return pathValue;
+  return "";
+}
+
+function recycleRemoteNormalizeExternalSimpleDevice(device) {
+  return {
+    deviceId: recycleRemoteTrim(device?.deviceId),
+    categoryId: recycleRemoteTrim(device?.categoryId),
+    displayName: recycleRemoteTrim(device?.displayName),
+    materialId: recycleRemoteTrim(device?.materialId),
+    legacyMaterialIds: recycleRemoteNormalizeExternalLegacyMaterialIds(
+      Array.isArray(device?.legacyMaterialIdsJson) ? device.legacyMaterialIdsJson : device?.legacyMaterialIds
+    ),
+    imagePath: recycleRemoteNormalizeExternalImagePath(device?.imagePath),
+    helpImagePath: recycleRemoteNormalizeExternalImagePath(device?.helpImagePath),
+    warningText: recycleRemoteTrim(device?.warningText),
+    validationProfileId: recycleRemoteTrim(device?.validationProfileId),
+    enabled: device?.enabled !== false
+  };
+}
+
+function recycleRemoteBuildGeneratedMaterialFiltersMetadata(devices) {
+  return (Array.isArray(devices) ? devices : []).reduce((filters, device) => {
+    if (device?.enabled === false) return filters;
+    const categoryId = recycleRemoteTrim(device?.categoryId);
+    const materialId = recycleRemoteTrim(device?.materialId);
+    if (!categoryId || !materialId) return filters;
+    if (!filters[categoryId]) filters[categoryId] = [];
+    filters[categoryId].push(materialId);
+    return filters;
+  }, {});
+}
+
+function recycleRemoteBuildExternalRemoteMaterialModels(devices) {
+  return (Array.isArray(devices) ? devices : [])
+    .filter(device => recycleRemoteTrim(device?.materialId))
+    .map(device => {
+      const materialId = recycleRemoteTrim(device.materialId);
+      const deviceId = recycleRemoteTrim(device.deviceId);
+      const nameBase = recycleRemoteTrim(device.displayName) || deviceId || materialId;
+      return {
+        materialId,
+        deviceId,
+        categoryId: recycleRemoteTrim(device.categoryId),
+        name: `${nameBase} SAP ${materialId}`
+      };
+    });
+}
+
+function recycleRemoteAdaptExternalSimpleCatalog(catalog, context) {
+  const devices = (Array.isArray(catalog?.devices) ? catalog.devices : [])
+    .map(recycleRemoteNormalizeExternalSimpleDevice);
+  const validationProfiles = Array.from(new Set(devices
+    .map(device => recycleRemoteTrim(device.validationProfileId))
+    .filter(Boolean)));
+  const rawText = context?.rawText || JSON.stringify(catalog || {});
+  const hash = recycleRemoteBuildStableContentHash(rawText);
+
+  return {
+    sourceFormat: "external_simple_v1",
+    catalog: {
+      schemaVersion: 1,
+      revision: `external-simple:${hash}`,
+      devices,
+      categoryHelp: {},
+      validationProfiles,
+      generatedMaterialFilters: recycleRemoteBuildGeneratedMaterialFiltersMetadata(devices),
+      runtimeContract: {
+        contractVersion: 1,
+        supportedCapabilities: [
+          "remoteAdditionsAuto",
+          "remoteMaterialAuto",
+          "remoteMaterialModelsAuto",
+          "remoteMaterialPreview",
+          "resolvedApplyPlan"
+        ],
+        blockedCapabilities: RECYCLE_REMOTE_RUNTIME_CONTRACT.blockedCapabilities.slice()
+      },
+      remoteMaterialModels: recycleRemoteBuildExternalRemoteMaterialModels(devices)
+    }
+  };
+}
+
+function recycleRemoteAdaptCatalogForSource(catalog, context) {
+  if (recycleRemoteIsExternalSimpleCatalog(catalog)) {
+    return recycleRemoteAdaptExternalSimpleCatalog(catalog, context);
+  }
+  return {
+    sourceFormat: "oss_remote_v1",
+    catalog
+  };
 }
 
 function recycleRemoteNormalizeRuntimeContract(value) {
@@ -444,16 +602,32 @@ function recycleRemoteAddIssue(issues, code, message) {
 }
 
 function recycleRemoteIsSafeId(value) {
-  return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(String(value || ""));
+  return /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(String(value || ""));
 }
 
 function recycleRemoteIsSafeProfileId(value) {
   return /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$/.test(String(value || ""));
 }
 
+function recycleRemoteIsApprovedHttpsImageUrl(value) {
+  const raw = recycleRemoteTrim(value);
+  if (!raw) return false;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (error) {
+    return false;
+  }
+  return parsed.protocol === "https:"
+    && !parsed.username
+    && !parsed.password
+    && RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS.includes(parsed.hostname);
+}
+
 function recycleRemoteValidateAssetPath(pathValue, fieldName, label, issues) {
   const value = recycleRemoteTrim(pathValue);
   if (!value) return "";
+  if (recycleRemoteIsApprovedHttpsImageUrl(value)) return value;
   if (!value.startsWith("images/")) {
     recycleRemoteAddIssue(issues, "asset.invalidPrefix", `${label}.${fieldName} must start with images/: ${value}`);
   }
@@ -891,6 +1065,7 @@ function recycleRemoteBuildPreviewSet(values) {
 function recycleRemoteGetPreviewAssetPathIssue(value, fieldName) {
   const pathValue = recycleRemoteTrim(value);
   if (!pathValue) return "";
+  if (recycleRemoteIsApprovedHttpsImageUrl(pathValue)) return "";
   if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) {
     return `${fieldName} absolute/remote`;
   }
@@ -1667,6 +1842,7 @@ async function recycleRemoteRefresh() {
       throw new Error(`HTTP ${response.status}`);
     }
 
+    const etag = recycleRemoteTrim(response.headers?.get?.("etag"));
     const { text, byteLength } = await recycleRemoteReadTextWithLimit(response, RECYCLE_REMOTE_CONFIG_MAX_BYTES);
     let parsed;
     try {
@@ -1682,7 +1858,12 @@ async function recycleRemoteRefresh() {
       return { ok: false, result: "validation_failed", meta: previousMeta, status, errors: status.validationErrors, ...recycleRemoteBuildSourceResponseFields(source) };
     }
 
-    const validation = recycleRemoteValidateCatalog(parsed);
+    const adapted = recycleRemoteAdaptCatalogForSource(parsed, {
+      source,
+      rawText: text,
+      etag
+    });
+    const validation = recycleRemoteValidateCatalog(adapted.catalog);
     if (!validation.ok) {
       const status = recycleRemoteBuildStatus("validation_failed", startedAt, {
         lastAttemptAt,
@@ -1694,11 +1875,11 @@ async function recycleRemoteRefresh() {
       return { ok: false, result: "validation_failed", meta: previousMeta, status, errors: validation.errors, ...recycleRemoteBuildSourceResponseFields(source) };
     }
 
-    const etag = recycleRemoteTrim(response.headers?.get?.("etag"));
     const fetchedAt = recycleRemoteNowIso();
     const meta = {
       schemaVersion: validation.sanitized.schemaVersion,
       revision: validation.sanitized.revision,
+      sourceFormat: adapted.sourceFormat || "oss_remote_v1",
       sourceUrl: source.activeSourceUrl,
       sourceId: source.activeSourceId,
       sourceLabel: source.activeSourceLabel,
