@@ -2377,7 +2377,7 @@
     { names: ["Advanced ONT", "GPONs Basic", "GPON CPE ZXHN F670L V1.1"], categoryId: "gpon", reason: "broad_gpon" },
     { names: ["DTV CAM", "DTH CAM"], categoryId: "cam_modules", reason: "broad_cam_modules" },
     { names: ["D3 Wifi Modems", "D3 Modems"], categoryId: "modems", reason: "broad_modems" },
-    { names: ["DTH STB"], categoryId: "dth_kaon_nagra", reason: "broad_dth" },
+    { names: ["DTH STB", "SD STB"], categoryId: "dth_kaon_nagra", reason: "broad_dth" },
     { names: ["IPTV ZTE"], categoryId: "android_iptv", reason: "broad_iptv" },
     { names: ["ZTE MF296N+ Antenna"], categoryId: "netbox", reason: "device_not_exact_in_local_catalog" },
     { names: ["A1 Hybrid"], categoryId: "austrian", reason: "broad_austrian" }
