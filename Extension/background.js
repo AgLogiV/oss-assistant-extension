@@ -705,6 +705,26 @@ function dailyworkBuildCompactResponse(payload, options = {}) {
   };
 }
 
+function dailyworkAttachItemsForResponse(response, payload, options = {}) {
+  if (!options.includeItems) return response;
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return {
+    ...response,
+    items: items.map(item => ({
+      user: dailyworkTrim(item?.user),
+      names: dailyworkTrim(item?.names),
+      device: dailyworkTrim(item?.device),
+      rawIndex: Number.isFinite(Number(item?.rawIndex)) ? Number(item.rawIndex) : null
+    }))
+  };
+}
+
+function dailyworkStripItemsForResponse(response, options = {}) {
+  if (options.includeItems || !response || typeof response !== "object") return response;
+  const { items, ...summary } = response;
+  return summary;
+}
+
 function dailyworkValidateCachedPayload(payload) {
   if (!payload || payload.version !== 1 || !Array.isArray(payload.items)) return null;
   const rebuilt = dailyworkBuildValidatedPayload({ ...payload, items: payload.items }, { fetchedAt: payload.fetchedAt });
@@ -729,7 +749,7 @@ async function dailyworkReadLastKnownGood() {
   };
 }
 
-async function dailyworkFetchScheduleFresh() {
+async function dailyworkFetchScheduleFresh(options = {}) {
   const fetchedAt = dailyworkNowIso();
   const response = await recycleRemoteFetchWithTimeout(
     DAILYWORK_SCHEDULE_URL,
@@ -762,44 +782,54 @@ async function dailyworkFetchScheduleFresh() {
     [DAILYWORK_CACHE_KEYS.lkg]: payload,
     [DAILYWORK_CACHE_KEYS.meta]: meta
   });
-  return dailyworkBuildCompactResponse(payload, { source: "remote", fetchedAt, warnings: [] });
+  return dailyworkAttachItemsForResponse(
+    dailyworkBuildCompactResponse(payload, { source: "remote", fetchedAt, warnings: [] }),
+    payload,
+    options
+  );
 }
 
 let dailyworkFetchInFlight = null;
-async function dailyworkFetchSchedule() {
-  if (dailyworkFetchInFlight) return dailyworkFetchInFlight;
-  dailyworkFetchInFlight = (async () => {
-    try {
-      return await dailyworkFetchScheduleFresh();
-    } catch (error) {
-      const fallback = await dailyworkReadLastKnownGood().catch(() => ({ payload: null, meta: null }));
-      const errorMessage = error?.name === "AbortError" ? "Request timed out" : String(error?.message || error || "Dailywork fetch failed");
-      if (fallback.payload) {
-        return dailyworkBuildCompactResponse(fallback.payload, {
-          source: "cache",
-          fetchedAt: fallback.payload.fetchedAt || fallback.meta?.fetchedAt,
-          warnings: [`remote fetch failed: ${errorMessage}`]
-        });
+async function dailyworkFetchSchedule(options = {}) {
+  if (!dailyworkFetchInFlight) {
+    dailyworkFetchInFlight = (async () => {
+      const internalOptions = { includeItems: true };
+      try {
+        return await dailyworkFetchScheduleFresh(internalOptions);
+      } catch (error) {
+        const fallback = await dailyworkReadLastKnownGood().catch(() => ({ payload: null, meta: null }));
+        const errorMessage = error?.name === "AbortError" ? "Request timed out" : String(error?.message || error || "Dailywork fetch failed");
+        if (fallback.payload) {
+          return dailyworkAttachItemsForResponse(
+            dailyworkBuildCompactResponse(fallback.payload, {
+              source: "cache",
+              fetchedAt: fallback.payload.fetchedAt || fallback.meta?.fetchedAt,
+              warnings: [`remote fetch failed: ${errorMessage}`]
+            }),
+            fallback.payload,
+            internalOptions
+          );
+        }
+        return {
+          ok: false,
+          source: "remote",
+          generatedAt: "",
+          dayOfWeek: "",
+          itemCount: 0,
+          validItemCount: 0,
+          invalidItemCount: 0,
+          uniqueUserCount: 0,
+          uniqueDeviceCount: 0,
+          fetchedAt: "",
+          warnings: [],
+          error: errorMessage
+        };
+      } finally {
+        dailyworkFetchInFlight = null;
       }
-      return {
-        ok: false,
-        source: "remote",
-        generatedAt: "",
-        dayOfWeek: "",
-        itemCount: 0,
-        validItemCount: 0,
-        invalidItemCount: 0,
-        uniqueUserCount: 0,
-        uniqueDeviceCount: 0,
-        fetchedAt: "",
-        warnings: [],
-        error: errorMessage
-      };
-    } finally {
-      dailyworkFetchInFlight = null;
-    }
-  })();
-  return dailyworkFetchInFlight;
+    })();
+  }
+  return dailyworkStripItemsForResponse(await dailyworkFetchInFlight, options);
 }
 
 function recycleRemoteAddIssue(issues, code, message) {
@@ -2169,7 +2199,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!msg || typeof msg !== "object") return respondOnce({ ok: false, error: "Bad message" });
 
       if (msg.type === "dailywork.fetchSchedule") {
-        return respondOnce(await dailyworkFetchSchedule());
+        return respondOnce(await dailyworkFetchSchedule({ includeItems: msg.includeItems === true }));
       }
 
       if (msg.type === "recycleConfig.refreshRemote") {

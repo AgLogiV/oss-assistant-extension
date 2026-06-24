@@ -4110,6 +4110,128 @@
     }
   }
 
+  function createDailyworkMatchDryRunResult(overrides = {}) {
+    return {
+      ok: false,
+      technicianId: "",
+      technicianSource: "",
+      scheduleSource: "",
+      scheduleGeneratedAt: "",
+      scheduleRowStatus: "invalid",
+      scheduleNames: "",
+      scheduleDevice: "",
+      action: "",
+      categoryId: "",
+      deviceIds: [],
+      confidence: "",
+      reason: "",
+      wouldApply: "no",
+      ...overrides
+    };
+  }
+
+  async function runDailyworkMatchDryRun() {
+    const technician = await detectDailyworkTechnicianDryRun();
+    const technicianId = String(technician?.technicianId || "").trim();
+    if (!technician?.ok || !technicianId) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician?.source || "unavailable",
+        reason: technician?.reason || "technician_detection_failed"
+      });
+    }
+
+    let schedule;
+    try {
+      schedule = await sendRecycleRemoteConfigDebugMessage(DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE, { includeItems: true });
+    } catch (error) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician.source || "",
+        scheduleRowStatus: "invalid",
+        reason: `schedule_fetch_failed: ${String(error?.message || error || "unknown")}`
+      });
+    }
+
+    if (!schedule?.ok) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician.source || "",
+        scheduleSource: schedule?.source || "",
+        scheduleGeneratedAt: schedule?.generatedAt || "",
+        scheduleRowStatus: "invalid",
+        reason: schedule?.error || "schedule_fetch_failed"
+      });
+    }
+
+    const items = Array.isArray(schedule.items) ? schedule.items : [];
+    if (!items.length) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician.source || "",
+        scheduleSource: schedule.source || "",
+        scheduleGeneratedAt: schedule.generatedAt || "",
+        scheduleRowStatus: "invalid",
+        reason: "schedule_items_unavailable"
+      });
+    }
+
+    const matches = items.filter(item => String(item?.user || "").trim() === technicianId);
+    if (!matches.length) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician.source || "",
+        scheduleSource: schedule.source || "",
+        scheduleGeneratedAt: schedule.generatedAt || "",
+        scheduleRowStatus: "not_found",
+        reason: "dailywork_row_not_found_for_technician"
+      });
+    }
+    if (matches.length > 1) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician.source || "",
+        scheduleSource: schedule.source || "",
+        scheduleGeneratedAt: schedule.generatedAt || "",
+        scheduleRowStatus: "multiple",
+        reason: "multiple_dailywork_rows_for_technician"
+      });
+    }
+
+    const item = matches[0];
+    const scheduleDevice = String(item?.device || "").trim();
+    if (!scheduleDevice) {
+      return createDailyworkMatchDryRunResult({
+        technicianId,
+        technicianSource: technician.source || "",
+        scheduleSource: schedule.source || "",
+        scheduleGeneratedAt: schedule.generatedAt || "",
+        scheduleRowStatus: "invalid",
+        scheduleNames: String(item?.names || "").trim(),
+        reason: "dailywork_device_missing"
+      });
+    }
+
+    const selection = resolveDailyworkDeviceSelection(scheduleDevice);
+    const wouldApply = selection.action === "category" || selection.action === "category_device";
+    return createDailyworkMatchDryRunResult({
+      ok: selection.action === "noop" || wouldApply,
+      technicianId,
+      technicianSource: technician.source || "",
+      scheduleSource: schedule.source || "",
+      scheduleGeneratedAt: schedule.generatedAt || "",
+      scheduleRowStatus: "found",
+      scheduleNames: String(item?.names || "").trim(),
+      scheduleDevice,
+      action: selection.action,
+      categoryId: selection.categoryId,
+      deviceIds: Array.isArray(selection.deviceIds) ? selection.deviceIds : [],
+      confidence: selection.confidence,
+      reason: selection.reason,
+      wouldApply: wouldApply ? "yes" : "no"
+    });
+  }
+
   function buildRecycleHistoryUrlForDateRange(now = new Date()) {
     const templatePath = discoverRecycleHistoryTemplateFromDom();
     if (!templatePath) return "";
@@ -6904,6 +7026,90 @@
     });
 
     controls.appendChild(dailyworkTechnicianWrap);
+
+    const dailyworkMatchWrap = document.createElement("div");
+    dailyworkMatchWrap.style.flex = "1 1 100%";
+    dailyworkMatchWrap.style.display = "flex";
+    dailyworkMatchWrap.style.flexWrap = "wrap";
+    dailyworkMatchWrap.style.gap = "5px";
+    dailyworkMatchWrap.style.alignItems = "center";
+    dailyworkMatchWrap.style.marginTop = "2px";
+
+    const dailyworkMatchBtn = document.createElement("button");
+    dailyworkMatchBtn.type = "button";
+    dailyworkMatchBtn.textContent = "Dailywork match dry-run";
+    dailyworkMatchBtn.style.padding = "2px 6px";
+    dailyworkMatchBtn.style.border = "1px solid #c9c9c9";
+    dailyworkMatchBtn.style.borderRadius = "999px";
+    dailyworkMatchBtn.style.background = "#fff";
+    dailyworkMatchBtn.style.color = "#444";
+    dailyworkMatchBtn.style.fontSize = "10px";
+    dailyworkMatchBtn.style.lineHeight = "1.25";
+    dailyworkMatchBtn.style.cursor = "pointer";
+    dailyworkMatchBtn.style.boxShadow = "none";
+    dailyworkMatchWrap.appendChild(dailyworkMatchBtn);
+
+    const dailyworkMatchOutput = document.createElement("div");
+    dailyworkMatchOutput.style.flex = "1 1 100%";
+    dailyworkMatchOutput.style.display = "none";
+    dailyworkMatchOutput.style.boxSizing = "border-box";
+    dailyworkMatchOutput.style.padding = "5px 6px";
+    dailyworkMatchOutput.style.border = "1px solid #ececec";
+    dailyworkMatchOutput.style.borderRadius = "4px";
+    dailyworkMatchOutput.style.background = "#fff";
+    dailyworkMatchOutput.style.color = "#555";
+    dailyworkMatchOutput.style.fontSize = "10px";
+    dailyworkMatchOutput.style.lineHeight = "1.35";
+    dailyworkMatchOutput.style.whiteSpace = "pre-wrap";
+    dailyworkMatchOutput.style.overflowWrap = "anywhere";
+    dailyworkMatchWrap.appendChild(dailyworkMatchOutput);
+
+    dailyworkMatchBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkMatchOutput.textContent = "Dailywork match dry-run: running...";
+      dailyworkMatchOutput.style.display = "block";
+      try {
+        const result = await runDailyworkMatchDryRun();
+        dailyworkMatchOutput.textContent = [
+          `ok: ${result?.ok === true ? "true" : "false"}`,
+          `technicianId: ${result?.technicianId || ""}`,
+          `technician source: ${result?.technicianSource || ""}`,
+          `schedule source: ${result?.scheduleSource || ""}`,
+          `schedule generatedAt: ${result?.scheduleGeneratedAt || ""}`,
+          `schedule row status: ${result?.scheduleRowStatus || ""}`,
+          `schedule names: ${result?.scheduleNames || ""}`,
+          `schedule device: ${result?.scheduleDevice || ""}`,
+          `resolved action: ${result?.action || ""}`,
+          `categoryId: ${result?.categoryId || ""}`,
+          `deviceIds: ${Array.isArray(result?.deviceIds) ? result.deviceIds.join(", ") : ""}`,
+          `confidence: ${result?.confidence || ""}`,
+          `reason: ${result?.reason || ""}`,
+          `wouldApply: ${result?.wouldApply === "yes" ? "yes" : "no"}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      } catch (error) {
+        dailyworkMatchOutput.textContent = [
+          "ok: false",
+          "technicianId: ",
+          "technician source: ",
+          "schedule source: ",
+          "schedule generatedAt: ",
+          "schedule row status: invalid",
+          "schedule names: ",
+          "schedule device: ",
+          "resolved action: ",
+          "categoryId: ",
+          "deviceIds: ",
+          "confidence: ",
+          `reason: ${String(error?.message || error || "Dailywork match dry-run failed")}`,
+          "wouldApply: no",
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      }
+    });
+
+    controls.appendChild(dailyworkMatchWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);
