@@ -3847,6 +3847,17 @@
   const RECYCLE_HISTORY_TECHNICIAN_PATH_RE = /\/sap-recycle-devices-by-technician\/(\d+)\/(\d+)\/?$/;
   const RECYCLE_WAREHOUSE_CELLS_PATH_RE = /^(.*\/sap-warehouse-cells-recycle\/(\d+))\/?$/;
   const RECYCLE_WAREHOUSE_CELLS_LIST_ID = "_recycleWarehouseCellsList";
+  const RECYCLE_ENTRY_CATEGORY_IDS = new Set([
+    "android_iptv",
+    "xplore_zapper",
+    "dth_kaon_nagra",
+    "austrian",
+    "netbox",
+    "routers",
+    "gpon",
+    "cam_modules",
+    "modems"
+  ]);
   const RECYCLE_HISTORY_DAYS_BACK = 3;
   const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
   const RECYCLE_HISTORY_TO_PARAM = "RecycleDevicesByTechnician.To";
@@ -4230,6 +4241,102 @@
       reason: selection.reason,
       wouldApply: wouldApply ? "yes" : "no"
     });
+  }
+
+  function readDailyworkAutoPlanCurrentSelectionState() {
+    const currentWorkday = localDateKey();
+    let storedDate = "";
+    let categoryId = "";
+    let legacyCategoryId = "";
+    let dateExpired = false;
+
+    try { storedDate = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DATE_KEY) || "").trim(); } catch (e) {}
+    dateExpired = Boolean(storedDate && storedDate !== currentWorkday);
+    if (!dateExpired) {
+      try { categoryId = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
+      try { legacyCategoryId = String(sessionStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
+    }
+
+    const deviceIds = dateExpired ? [] : readSelectedRecycleDeviceIdsStorage();
+    return {
+      currentCategoryId: categoryId || legacyCategoryId,
+      currentDeviceIds: deviceIds,
+      currentWorkday,
+      currentSelectionDate: storedDate,
+      selectionDateExpired: dateExpired
+    };
+  }
+
+  function createDailyworkAutoSelectPlanDryRun(overrides = {}) {
+    return {
+      ok: false,
+      technicianId: "",
+      scheduleRowStatus: "invalid",
+      scheduleDevice: "",
+      resolvedAction: "",
+      targetCategoryId: "",
+      targetDeviceIds: [],
+      currentCategoryId: "",
+      currentDeviceIds: [],
+      currentWorkday: "",
+      currentSelectionDate: "",
+      wouldApply: "no",
+      blockers: [],
+      reason: "",
+      ...overrides
+    };
+  }
+
+  function buildDailyworkAutoSelectPlanFromMatch(match, currentState) {
+    const blockers = [];
+    const resolvedAction = String(match?.action || "").trim();
+    const targetCategoryId = String(match?.categoryId || "").trim();
+    const targetDeviceIds = Array.isArray(match?.deviceIds) ? match.deviceIds.map(id => String(id || "").trim()).filter(Boolean) : [];
+    const currentCategoryId = String(currentState?.currentCategoryId || "").trim();
+    const currentDeviceIds = Array.isArray(currentState?.currentDeviceIds) ? currentState.currentDeviceIds.map(id => String(id || "").trim()).filter(Boolean) : [];
+    const matchOk = match?.ok === true;
+    const scheduleRowStatus = String(match?.scheduleRowStatus || "invalid").trim() || "invalid";
+
+    if (!matchOk) {
+      if (!match?.technicianId) blockers.push("technician_detection_failed");
+      else if (scheduleRowStatus === "multiple") blockers.push("multiple_dailywork_rows_for_technician");
+      else if (scheduleRowStatus === "not_found") blockers.push("dailywork_row_not_found_for_technician");
+      else blockers.push(match?.reason || "dailywork_match_failed");
+    }
+
+    if (resolvedAction === "noop") blockers.push("resolved_action_noop");
+    else if (resolvedAction !== "category" && resolvedAction !== "category_device") blockers.push("resolved_action_not_applicable");
+
+    if ((resolvedAction === "category" || resolvedAction === "category_device") && (!targetCategoryId || !RECYCLE_ENTRY_CATEGORY_IDS.has(targetCategoryId))) {
+      blockers.push(targetCategoryId ? "target_category_unknown" : "target_category_missing");
+    }
+
+    if (currentCategoryId) blockers.push("current_category_already_selected");
+    if (currentDeviceIds.length) blockers.push("current_devices_already_selected");
+
+    const wouldApply = blockers.length === 0 && (resolvedAction === "category" || resolvedAction === "category_device");
+    return createDailyworkAutoSelectPlanDryRun({
+      ok: matchOk,
+      technicianId: String(match?.technicianId || "").trim(),
+      scheduleRowStatus,
+      scheduleDevice: String(match?.scheduleDevice || "").trim(),
+      resolvedAction,
+      targetCategoryId,
+      targetDeviceIds,
+      currentCategoryId,
+      currentDeviceIds,
+      currentWorkday: String(currentState?.currentWorkday || "").trim(),
+      currentSelectionDate: String(currentState?.currentSelectionDate || "").trim(),
+      wouldApply: wouldApply ? "yes" : "no",
+      blockers,
+      reason: wouldApply ? "auto_select_plan_allowed" : (blockers[0] || match?.reason || "auto_select_plan_blocked")
+    });
+  }
+
+  async function buildDailyworkAutoSelectPlanDryRun() {
+    const match = await runDailyworkMatchDryRun();
+    const currentState = readDailyworkAutoPlanCurrentSelectionState();
+    return buildDailyworkAutoSelectPlanFromMatch(match, currentState);
   }
 
   function buildRecycleHistoryUrlForDateRange(now = new Date()) {
@@ -7110,6 +7217,87 @@
     });
 
     controls.appendChild(dailyworkMatchWrap);
+
+    const dailyworkAutoPlanWrap = document.createElement("div");
+    dailyworkAutoPlanWrap.style.flex = "1 1 100%";
+    dailyworkAutoPlanWrap.style.display = "flex";
+    dailyworkAutoPlanWrap.style.flexWrap = "wrap";
+    dailyworkAutoPlanWrap.style.gap = "5px";
+    dailyworkAutoPlanWrap.style.alignItems = "center";
+    dailyworkAutoPlanWrap.style.marginTop = "2px";
+
+    const dailyworkAutoPlanBtn = document.createElement("button");
+    dailyworkAutoPlanBtn.type = "button";
+    dailyworkAutoPlanBtn.textContent = "Dailywork auto plan dry-run";
+    dailyworkAutoPlanBtn.style.padding = "2px 6px";
+    dailyworkAutoPlanBtn.style.border = "1px solid #c9c9c9";
+    dailyworkAutoPlanBtn.style.borderRadius = "999px";
+    dailyworkAutoPlanBtn.style.background = "#fff";
+    dailyworkAutoPlanBtn.style.color = "#444";
+    dailyworkAutoPlanBtn.style.fontSize = "10px";
+    dailyworkAutoPlanBtn.style.lineHeight = "1.25";
+    dailyworkAutoPlanBtn.style.cursor = "pointer";
+    dailyworkAutoPlanBtn.style.boxShadow = "none";
+    dailyworkAutoPlanWrap.appendChild(dailyworkAutoPlanBtn);
+
+    const dailyworkAutoPlanOutput = document.createElement("div");
+    dailyworkAutoPlanOutput.style.flex = "1 1 100%";
+    dailyworkAutoPlanOutput.style.display = "none";
+    dailyworkAutoPlanOutput.style.boxSizing = "border-box";
+    dailyworkAutoPlanOutput.style.padding = "5px 6px";
+    dailyworkAutoPlanOutput.style.border = "1px solid #ececec";
+    dailyworkAutoPlanOutput.style.borderRadius = "4px";
+    dailyworkAutoPlanOutput.style.background = "#fff";
+    dailyworkAutoPlanOutput.style.color = "#555";
+    dailyworkAutoPlanOutput.style.fontSize = "10px";
+    dailyworkAutoPlanOutput.style.lineHeight = "1.35";
+    dailyworkAutoPlanOutput.style.whiteSpace = "pre-wrap";
+    dailyworkAutoPlanOutput.style.overflowWrap = "anywhere";
+    dailyworkAutoPlanWrap.appendChild(dailyworkAutoPlanOutput);
+
+    dailyworkAutoPlanBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkAutoPlanOutput.textContent = "Dailywork auto plan dry-run: running...";
+      dailyworkAutoPlanOutput.style.display = "block";
+      try {
+        const plan = await buildDailyworkAutoSelectPlanDryRun();
+        dailyworkAutoPlanOutput.textContent = [
+          `ok: ${plan?.ok === true ? "true" : "false"}`,
+          `technicianId: ${plan?.technicianId || ""}`,
+          `schedule row status: ${plan?.scheduleRowStatus || ""}`,
+          `schedule device: ${plan?.scheduleDevice || ""}`,
+          `resolved action: ${plan?.resolvedAction || ""}`,
+          `targetCategoryId: ${plan?.targetCategoryId || ""}`,
+          `targetDeviceIds: ${Array.isArray(plan?.targetDeviceIds) ? plan.targetDeviceIds.join(", ") : ""}`,
+          `currentCategoryId: ${plan?.currentCategoryId || ""}`,
+          `currentDeviceIds: ${Array.isArray(plan?.currentDeviceIds) ? plan.currentDeviceIds.join(", ") : ""}`,
+          `current workday/date: ${plan?.currentWorkday || ""}/${plan?.currentSelectionDate || ""}`,
+          `wouldApply: ${plan?.wouldApply === "yes" ? "yes" : "no"}`,
+          `blockers: ${Array.isArray(plan?.blockers) ? plan.blockers.join(", ") : ""}`,
+          `reason: ${plan?.reason || ""}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      } catch (error) {
+        dailyworkAutoPlanOutput.textContent = [
+          "ok: false",
+          "technicianId: ",
+          "schedule row status: invalid",
+          "schedule device: ",
+          "resolved action: ",
+          "targetCategoryId: ",
+          "targetDeviceIds: ",
+          "currentCategoryId: ",
+          "currentDeviceIds: ",
+          "wouldApply: no",
+          `blockers: ${String(error?.message || error || "dailywork_auto_plan_failed")}`,
+          `reason: ${String(error?.message || error || "Dailywork auto plan dry-run failed")}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      }
+    });
+
+    controls.appendChild(dailyworkAutoPlanWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);
