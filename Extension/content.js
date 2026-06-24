@@ -3844,6 +3844,9 @@
     }
   };
   const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
+  const RECYCLE_HISTORY_TECHNICIAN_PATH_RE = /\/sap-recycle-devices-by-technician\/(\d+)\/(\d+)\/?$/;
+  const RECYCLE_WAREHOUSE_CELLS_PATH_RE = /^(.*\/sap-warehouse-cells-recycle\/(\d+))\/?$/;
+  const RECYCLE_WAREHOUSE_CELLS_LIST_ID = "_recycleWarehouseCellsList";
   const RECYCLE_HISTORY_DAYS_BACK = 3;
   const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
   const RECYCLE_HISTORY_TO_PARAM = "RecycleDevicesByTechnician.To";
@@ -3923,6 +3926,188 @@
       if (clean) return writeRecycleHistoryTemplatePath(clean);
     }
     return readRecycleHistoryTemplatePath();
+  }
+
+  function resolveRecycleSameOriginUrl(rawUrl) {
+    if (!rawUrl) return null;
+    try {
+      const url = new URL(String(rawUrl), window.location.href);
+      if (url.origin !== window.location.origin) return null;
+      return url;
+    } catch (e) {}
+    return null;
+  }
+
+  function parseDailyworkTechnicianFromHistoryUrl(rawUrl, source = "history-link") {
+    const url = resolveRecycleSameOriginUrl(rawUrl);
+    if (!url) return null;
+    const match = url.pathname.match(RECYCLE_HISTORY_TECHNICIAN_PATH_RE);
+    if (!match) return null;
+    return {
+      ok: true,
+      technicianId: match[1],
+      source,
+      warehouseId: match[2],
+      url: `${url.pathname}${url.search || ""}`,
+      reason: "parsed_history_technician_url"
+    };
+  }
+
+  function detectDailyworkTechnicianFromHistoryDom() {
+    const candidates = [];
+    try { candidates.push({ value: window.location.href, source: "history-link" }); } catch (e) {}
+    try {
+      document.querySelectorAll('a[href*="sap-recycle-devices-by-technician"]').forEach(a => {
+        candidates.push({ value: a.getAttribute("href") || a.href || "", source: "history-link" });
+      });
+    } catch (e) {}
+    try {
+      const stored = String(localStorage.getItem(RECYCLE_HISTORY_TEMPLATE_KEY) || "");
+      if (stored) candidates.push({ value: stored, source: "history-template-cache" });
+    } catch (e) {}
+
+    for (const candidate of candidates) {
+      const parsed = parseDailyworkTechnicianFromHistoryUrl(candidate.value, candidate.source);
+      if (parsed) return parsed;
+    }
+    return null;
+  }
+
+  function sanitizeDailyworkCellsUrl(rawUrl) {
+    const url = resolveRecycleSameOriginUrl(rawUrl);
+    if (!url) return null;
+    const match = url.pathname.match(RECYCLE_WAREHOUSE_CELLS_PATH_RE);
+    if (!match) return null;
+    url.search = "";
+    url.hash = "";
+    return {
+      warehouseId: match[2],
+      url: url.href,
+      path: url.pathname
+    };
+  }
+
+  function discoverDailyworkCellsUrlFromDom() {
+    const candidates = [];
+    try { candidates.push(window.location.href); } catch (e) {}
+    try {
+      document.querySelectorAll('a[href*="sap-warehouse-cells-recycle"]').forEach(a => {
+        candidates.push(a.getAttribute("href") || a.href || "");
+      });
+    } catch (e) {}
+    try {
+      document.querySelectorAll(".fa-address-card").forEach(icon => {
+        const link = icon.closest?.("a[href]");
+        if (link) candidates.push(link.getAttribute("href") || link.href || "");
+      });
+    } catch (e) {}
+
+    for (const candidate of candidates) {
+      const clean = sanitizeDailyworkCellsUrl(candidate);
+      if (clean) return clean;
+    }
+    return null;
+  }
+
+  function parseDailyworkTechnicianFromCellsDocument(doc, cellsInfo = {}) {
+    const root = doc?.getElementById?.(RECYCLE_WAREHOUSE_CELLS_LIST_ID);
+    if (!root) {
+      return {
+        ok: false,
+        technicianId: "",
+        source: "unavailable",
+        warehouseId: String(cellsInfo.warehouseId || ""),
+        url: cellsInfo.path || "",
+        reason: "cells_list_not_found"
+      };
+    }
+    const table = root.querySelector("table");
+    if (!table) {
+      return {
+        ok: false,
+        technicianId: "",
+        source: "unavailable",
+        warehouseId: String(cellsInfo.warehouseId || ""),
+        url: cellsInfo.path || "",
+        reason: "cells_table_not_found"
+      };
+    }
+
+    const headerCells = Array.from(table.querySelectorAll("tr th"));
+    const idIdx = headerCells.findIndex(th => String(th.getAttribute("rel") || "").toLowerCase() === "u.id");
+    if (idIdx < 0) {
+      return {
+        ok: false,
+        technicianId: "",
+        source: "unavailable",
+        warehouseId: String(cellsInfo.warehouseId || ""),
+        url: cellsInfo.path || "",
+        reason: "cells_id_column_not_found"
+      };
+    }
+
+    const firstDataRow = Array.from(table.querySelectorAll("tbody tr")).find(tr => tr.querySelectorAll("td").length > 0);
+    const technicianId = String(firstDataRow?.querySelectorAll("td")?.[idIdx]?.textContent || "").trim();
+    if (!technicianId) {
+      return {
+        ok: false,
+        technicianId: "",
+        source: "unavailable",
+        warehouseId: String(cellsInfo.warehouseId || ""),
+        url: cellsInfo.path || "",
+        reason: "cells_first_row_id_empty"
+      };
+    }
+
+    return {
+      ok: true,
+      technicianId,
+      source: "cells-table",
+      warehouseId: String(cellsInfo.warehouseId || ""),
+      url: cellsInfo.path || "",
+      reason: "parsed_first_cells_table_row"
+    };
+  }
+
+  async function detectDailyworkTechnicianDryRun() {
+    const historyResult = detectDailyworkTechnicianFromHistoryDom();
+    if (historyResult) return historyResult;
+
+    const cellsInfo = discoverDailyworkCellsUrlFromDom();
+    if (!cellsInfo) {
+      return {
+        ok: false,
+        technicianId: "",
+        source: "unavailable",
+        warehouseId: "",
+        url: "",
+        reason: "no_history_or_cells_url_available"
+      };
+    }
+
+    try {
+      const currentCells = sanitizeDailyworkCellsUrl(window.location.href);
+      if (currentCells && currentCells.path === cellsInfo.path) {
+        return parseDailyworkTechnicianFromCellsDocument(document, cellsInfo);
+      }
+    } catch (e) {}
+
+    try {
+      const res = await fetch(cellsInfo.url, { credentials: "same-origin", cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      return parseDailyworkTechnicianFromCellsDocument(doc, cellsInfo);
+    } catch (error) {
+      return {
+        ok: false,
+        technicianId: "",
+        source: "unavailable",
+        warehouseId: String(cellsInfo.warehouseId || ""),
+        url: cellsInfo.path || "",
+        reason: `cells_fetch_failed: ${String(error?.message || error || "unknown")}`
+      };
+    }
   }
 
   function buildRecycleHistoryUrlForDateRange(now = new Date()) {
@@ -6651,6 +6836,74 @@
     });
 
     controls.appendChild(dailyworkFetchWrap);
+
+    const dailyworkTechnicianWrap = document.createElement("div");
+    dailyworkTechnicianWrap.style.flex = "1 1 100%";
+    dailyworkTechnicianWrap.style.display = "flex";
+    dailyworkTechnicianWrap.style.flexWrap = "wrap";
+    dailyworkTechnicianWrap.style.gap = "5px";
+    dailyworkTechnicianWrap.style.alignItems = "center";
+    dailyworkTechnicianWrap.style.marginTop = "2px";
+
+    const dailyworkTechnicianBtn = document.createElement("button");
+    dailyworkTechnicianBtn.type = "button";
+    dailyworkTechnicianBtn.textContent = "Dailywork technician dry-run";
+    dailyworkTechnicianBtn.style.padding = "2px 6px";
+    dailyworkTechnicianBtn.style.border = "1px solid #c9c9c9";
+    dailyworkTechnicianBtn.style.borderRadius = "999px";
+    dailyworkTechnicianBtn.style.background = "#fff";
+    dailyworkTechnicianBtn.style.color = "#444";
+    dailyworkTechnicianBtn.style.fontSize = "10px";
+    dailyworkTechnicianBtn.style.lineHeight = "1.25";
+    dailyworkTechnicianBtn.style.cursor = "pointer";
+    dailyworkTechnicianBtn.style.boxShadow = "none";
+    dailyworkTechnicianWrap.appendChild(dailyworkTechnicianBtn);
+
+    const dailyworkTechnicianOutput = document.createElement("div");
+    dailyworkTechnicianOutput.style.flex = "1 1 100%";
+    dailyworkTechnicianOutput.style.display = "none";
+    dailyworkTechnicianOutput.style.boxSizing = "border-box";
+    dailyworkTechnicianOutput.style.padding = "5px 6px";
+    dailyworkTechnicianOutput.style.border = "1px solid #ececec";
+    dailyworkTechnicianOutput.style.borderRadius = "4px";
+    dailyworkTechnicianOutput.style.background = "#fff";
+    dailyworkTechnicianOutput.style.color = "#555";
+    dailyworkTechnicianOutput.style.fontSize = "10px";
+    dailyworkTechnicianOutput.style.lineHeight = "1.35";
+    dailyworkTechnicianOutput.style.whiteSpace = "pre-wrap";
+    dailyworkTechnicianOutput.style.overflowWrap = "anywhere";
+    dailyworkTechnicianWrap.appendChild(dailyworkTechnicianOutput);
+
+    dailyworkTechnicianBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkTechnicianOutput.textContent = "Dailywork technician dry-run: running...";
+      dailyworkTechnicianOutput.style.display = "block";
+      try {
+        const result = await detectDailyworkTechnicianDryRun();
+        dailyworkTechnicianOutput.textContent = [
+          `ok: ${result?.ok === true ? "true" : "false"}`,
+          `technicianId: ${result?.technicianId || ""}`,
+          `source: ${result?.source || "unavailable"}`,
+          `warehouseId: ${result?.warehouseId || ""}`,
+          `url: ${result?.url || ""}`,
+          `reason: ${result?.reason || ""}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      } catch (error) {
+        dailyworkTechnicianOutput.textContent = [
+          "ok: false",
+          "technicianId: ",
+          "source: unavailable",
+          "warehouseId: ",
+          "url: ",
+          `reason: ${String(error?.message || error || "Dailywork technician dry-run failed")}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      }
+    });
+
+    controls.appendChild(dailyworkTechnicianWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);
