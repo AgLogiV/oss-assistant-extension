@@ -2337,6 +2337,141 @@
 
   const RECYCLE_DEVICE_CATALOG = RECYCLE_DEVICE_CATALOG_RAW.map(normalizeRecycleDeviceCatalogEntry);
   const RECYCLE_DEVICE_ID_SET = new Set(RECYCLE_DEVICE_CATALOG.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
+
+  function normalizeDailyworkDeviceName(value) {
+    return String(value || "")
+      .normalize("NFKC")
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function createDailyworkDeviceSelection(action, categoryId, deviceIds, confidence, reason) {
+    return {
+      action,
+      categoryId: String(categoryId || "").trim(),
+      deviceIds: Array.isArray(deviceIds) ? deviceIds.map(id => String(id || "").trim()).filter(Boolean) : [],
+      confidence,
+      reason
+    };
+  }
+
+  const DAILYWORK_DEVICE_NOOP_NAMES = [
+    "Отпуск",
+    "Болничен",
+    "Обучение",
+    "Друго",
+    "Мобилни",
+    "Ремонт на CPE",
+    "Усилватели",
+    "Home office",
+    "ITS",
+    "Склад",
+    "А1 устройства"
+  ];
+
+  const DAILYWORK_DEVICE_CATEGORY_MAPPINGS = [
+    { names: ["NETBOX 4G", "NETBOX 5G"], categoryId: "netbox", reason: "broad_netbox" },
+    { names: ["Advanced ONT", "GPONs Basic", "GPON CPE ZXHN F670L V1.1"], categoryId: "gpon", reason: "broad_gpon" },
+    { names: ["DTV CAM", "DTH CAM"], categoryId: "cam_modules", reason: "broad_cam_modules" },
+    { names: ["D3 Wifi Modems", "D3 Modems"], categoryId: "modems", reason: "broad_modems" },
+    { names: ["DTH STB"], categoryId: "dth_kaon_nagra", reason: "broad_dth" },
+    { names: ["IPTV ZTE"], categoryId: "android_iptv", reason: "broad_iptv" },
+    { names: ["ZTE MF296N+ Antenna"], categoryId: "netbox", reason: "device_not_exact_in_local_catalog" },
+    { names: ["A1 Hybrid"], categoryId: "austrian", reason: "broad_austrian" }
+  ];
+
+  const DAILYWORK_DEVICE_CONCRETE_MAPPINGS = [
+    { names: ["ZTE ZXHN H3601p"], categoryId: "routers", deviceId: "zte_zxhn_h3601p" },
+    { names: ["HD Boxes - KSTB 6106"], categoryId: "xplore_zapper", deviceId: "kaon_kstb6106_zapper" },
+    { names: ["A1 ADB 2220"], categoryId: "austrian", deviceId: "adb_modem_2220" },
+    { names: ["Kaon Xplore 5020"], categoryId: "xplore_zapper", deviceId: "kaon_kstb5020_xploretv" },
+    { names: ["DTH STB Nagra DTS3460"], categoryId: "dth_kaon_nagra", deviceId: "dth_nagra_dts3460" },
+    { names: ["TP-LINK Deco M4, AC1200"], categoryId: "routers", deviceId: "tp_link_deco_m4" },
+    { names: ["Cube ZTE MC 801A 5G"], categoryId: "netbox", deviceId: "cube_zte_801a" },
+    { names: ["GPON CPE ZXHN F6600P V9.0"], categoryId: "gpon", deviceId: "zte_gpon_zxhn_f6600p" },
+    { names: ["Kaon Xplore 5019 - ОТТ"], categoryId: "xplore_zapper", deviceId: "kaon_kstb5019_xploretv" },
+    { names: ["ZTE MF293N+ Antenna"], categoryId: "netbox", deviceId: "zte_mf293n" },
+    { names: ["ZTE MF283U+ext. Antenna"], categoryId: "netbox", deviceId: "zte_mf283u" },
+    { names: ["ZTE MC888A 5G"], categoryId: "netbox", deviceId: "zte_mc888a" },
+    { names: ["TP-Link EX220"], categoryId: "routers", deviceId: "tp_link_ex220" },
+    { names: ["STB SDMC DV9161 (AndroidTV)"], categoryId: "android_iptv", deviceId: "stb_sdmc_dv9161_androidtv" }
+  ];
+
+  function addDailyworkDeviceMappingIndexEntry(index, rawName, entry) {
+    const key = normalizeDailyworkDeviceName(rawName);
+    if (!key || index.has(key)) return;
+    index.set(key, entry);
+  }
+
+  function buildDailyworkDeviceMappingIndex() {
+    const index = new Map();
+    DAILYWORK_DEVICE_NOOP_NAMES.forEach(name => {
+      addDailyworkDeviceMappingIndexEntry(index, name, createDailyworkDeviceSelection("noop", "", [], "unsafe", "safe_noop_device"));
+    });
+    DAILYWORK_DEVICE_CATEGORY_MAPPINGS.forEach(mapping => {
+      const entry = createDailyworkDeviceSelection("category", mapping.categoryId, [], "broad", mapping.reason);
+      mapping.names.forEach(name => addDailyworkDeviceMappingIndexEntry(index, name, entry));
+    });
+    DAILYWORK_DEVICE_CONCRETE_MAPPINGS.forEach(mapping => {
+      const entry = {
+        action: "category_device",
+        categoryId: mapping.categoryId,
+        deviceIds: [mapping.deviceId],
+        confidence: "exact",
+        reason: "exact_device_alias"
+      };
+      mapping.names.forEach(name => addDailyworkDeviceMappingIndexEntry(index, name, entry));
+    });
+    return index;
+  }
+
+  const DAILYWORK_DEVICE_SELECTION_INDEX = buildDailyworkDeviceMappingIndex();
+
+  function isDailyworkConcreteRecycleDeviceMappingSafe(selection) {
+    const categoryId = String(selection?.categoryId || "").trim();
+    const deviceIds = Array.isArray(selection?.deviceIds) ? selection.deviceIds : [];
+    if (selection?.action !== "category_device" || !categoryId || deviceIds.length !== 1) return false;
+    const deviceId = String(deviceIds[0] || "").trim();
+    if (!deviceId || !RECYCLE_DEVICE_ID_SET.has(deviceId)) return false;
+    const matches = RECYCLE_DEVICE_CATALOG.filter(device => (
+      isRecycleDeviceEnabled(device)
+      && device.deviceId === deviceId
+      && device.categoryId === categoryId
+    ));
+    return matches.length === 1;
+  }
+
+  function cloneDailyworkDeviceSelection(selection) {
+    return createDailyworkDeviceSelection(
+      selection?.action,
+      selection?.categoryId,
+      selection?.deviceIds,
+      selection?.confidence,
+      selection?.reason
+    );
+  }
+
+  function resolveDailyworkDeviceSelection(deviceName) {
+    const normalized = normalizeDailyworkDeviceName(deviceName);
+    if (!normalized) return createDailyworkDeviceSelection("noop", "", [], "unsafe", "missing_device_name");
+
+    const mapped = DAILYWORK_DEVICE_SELECTION_INDEX.get(normalized);
+    if (!mapped) return createDailyworkDeviceSelection("noop", "", [], "unsafe", "unmapped_device_name");
+
+    if (mapped.action !== "category_device") return cloneDailyworkDeviceSelection(mapped);
+    if (isDailyworkConcreteRecycleDeviceMappingSafe(mapped)) return cloneDailyworkDeviceSelection(mapped);
+
+    return createDailyworkDeviceSelection(
+      "category",
+      mapped.categoryId,
+      [],
+      "broad",
+      `candidate_device_unavailable:${mapped.deviceIds[0] || ""}`
+    );
+  }
+
   const RECYCLE_REMOTE_VISUAL_OVERLAY_FIELDS = ["displayName", "imagePath", "helpImagePath", "warningText"];
   const RECYCLE_REMOTE_UNKNOWN_DEVICE_BLOCKED_CATEGORY_IDS = ["cam_modules", "modems"];
   const RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY = "remoteAdditionsAuto";
@@ -6370,6 +6505,81 @@
       setRecycleDeviceRequiredGuardEnabled(!isRecycleDeviceRequiredGuardEnabled());
     });
     controls.appendChild(deviceBtn);
+
+    const dailyworkDryRunWrap = document.createElement("div");
+    dailyworkDryRunWrap.style.flex = "1 1 100%";
+    dailyworkDryRunWrap.style.display = "flex";
+    dailyworkDryRunWrap.style.flexWrap = "wrap";
+    dailyworkDryRunWrap.style.gap = "5px";
+    dailyworkDryRunWrap.style.alignItems = "center";
+    dailyworkDryRunWrap.style.marginTop = "2px";
+
+    const dailyworkInput = document.createElement("input");
+    dailyworkInput.type = "text";
+    dailyworkInput.placeholder = "dailywork Device value";
+    dailyworkInput.autocomplete = "off";
+    dailyworkInput.spellcheck = false;
+    dailyworkInput.style.flex = "1 1 170px";
+    dailyworkInput.style.minWidth = "0";
+    dailyworkInput.style.boxSizing = "border-box";
+    dailyworkInput.style.padding = "2px 6px";
+    dailyworkInput.style.border = "1px solid #d7d7d7";
+    dailyworkInput.style.borderRadius = "4px";
+    dailyworkInput.style.background = "#fff";
+    dailyworkInput.style.color = "#444";
+    dailyworkInput.style.fontSize = "10px";
+    dailyworkInput.style.lineHeight = "1.25";
+    dailyworkDryRunWrap.appendChild(dailyworkInput);
+
+    const dailyworkBtn = document.createElement("button");
+    dailyworkBtn.type = "button";
+    dailyworkBtn.textContent = "Dailywork dry-run";
+    dailyworkBtn.style.padding = "2px 6px";
+    dailyworkBtn.style.border = "1px solid #c9c9c9";
+    dailyworkBtn.style.borderRadius = "999px";
+    dailyworkBtn.style.background = "#fff";
+    dailyworkBtn.style.color = "#444";
+    dailyworkBtn.style.fontSize = "10px";
+    dailyworkBtn.style.lineHeight = "1.25";
+    dailyworkBtn.style.cursor = "pointer";
+    dailyworkBtn.style.boxShadow = "none";
+    dailyworkDryRunWrap.appendChild(dailyworkBtn);
+
+    const dailyworkOutput = document.createElement("div");
+    dailyworkOutput.style.flex = "1 1 100%";
+    dailyworkOutput.style.display = "none";
+    dailyworkOutput.style.boxSizing = "border-box";
+    dailyworkOutput.style.padding = "5px 6px";
+    dailyworkOutput.style.border = "1px solid #ececec";
+    dailyworkOutput.style.borderRadius = "4px";
+    dailyworkOutput.style.background = "#fff";
+    dailyworkOutput.style.color = "#555";
+    dailyworkOutput.style.fontSize = "10px";
+    dailyworkOutput.style.lineHeight = "1.35";
+    dailyworkOutput.style.whiteSpace = "pre-wrap";
+    dailyworkOutput.style.overflowWrap = "anywhere";
+    dailyworkDryRunWrap.appendChild(dailyworkOutput);
+
+    dailyworkBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const original = String(dailyworkInput.value || "");
+      const normalized = normalizeDailyworkDeviceName(original);
+      const selection = resolveDailyworkDeviceSelection(original);
+      dailyworkOutput.textContent = [
+        `original: ${original}`,
+        `normalized: ${normalized}`,
+        `action: ${selection.action}`,
+        `categoryId: ${selection.categoryId}`,
+        `deviceIds: ${selection.deviceIds.join(", ")}`,
+        `confidence: ${selection.confidence}`,
+        `reason: ${selection.reason}`,
+        "Diagnostics only. No category/device was selected."
+      ].join("\n");
+      dailyworkOutput.style.display = "block";
+    });
+
+    controls.appendChild(dailyworkDryRunWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);
