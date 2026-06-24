@@ -4339,6 +4339,79 @@
     return buildDailyworkAutoSelectPlanFromMatch(match, currentState);
   }
 
+  function createDailyworkDebugForceApplyResult(overrides = {}) {
+    return {
+      ok: false,
+      forced: "no",
+      applied: "no",
+      targetCategoryId: "",
+      targetDeviceIds: [],
+      reason: "",
+      blockers: [],
+      renderedPanels: 0,
+      ...overrides
+    };
+  }
+
+  function getDailyworkForceApplyTargetFromMatch(match) {
+    const blockers = [];
+    const action = String(match?.action || "").trim();
+    const categoryId = String(match?.categoryId || "").trim();
+    const deviceIds = Array.isArray(match?.deviceIds) ? match.deviceIds.map(id => String(id || "").trim()).filter(Boolean) : [];
+
+    if (!match?.ok) blockers.push(match?.reason || "dailywork_match_failed");
+    if (String(match?.scheduleRowStatus || "") === "not_found") blockers.push("dailywork_row_not_found_for_technician");
+    if (String(match?.scheduleRowStatus || "") === "multiple") blockers.push("multiple_dailywork_rows_for_technician");
+    if (!match?.technicianId) blockers.push("technician_detection_failed");
+    if (action === "noop") blockers.push("resolved_action_noop");
+    else if (action !== "category" && action !== "category_device") blockers.push("resolved_action_not_applicable");
+    if (!categoryId) blockers.push("target_category_missing");
+    else if (!RECYCLE_ENTRY_CATEGORY_IDS.has(categoryId)) blockers.push("target_category_unknown");
+
+    if (action === "category_device") {
+      if (!deviceIds.length) blockers.push("target_devices_missing");
+      deviceIds.forEach(deviceId => {
+        const device = RECYCLE_DEVICE_CATALOG.find(entry => String(entry?.deviceId || "").trim() === deviceId);
+        if (!device) blockers.push(`target_device_unknown:${deviceId}`);
+        else if (String(device.categoryId || "").trim() !== categoryId) blockers.push(`target_device_category_mismatch:${deviceId}`);
+      });
+    }
+
+    return { action, categoryId, deviceIds, blockers: Array.from(new Set(blockers)) };
+  }
+
+  async function runDailyworkDebugForceApply(panel) {
+    const match = await runDailyworkMatchDryRun();
+    const target = getDailyworkForceApplyTargetFromMatch(match);
+    if (target.blockers.length) {
+      return createDailyworkDebugForceApplyResult({
+        ok: false,
+        forced: "no",
+        applied: "no",
+        targetCategoryId: target.categoryId,
+        targetDeviceIds: target.deviceIds,
+        blockers: target.blockers,
+        reason: target.blockers[0] || "dailywork_force_apply_skipped"
+      });
+    }
+
+    writeSelectedRecycleEntryCategory(target.categoryId);
+    if (target.action === "category_device") writeSelectedRecycleDeviceIdsStorage(target.deviceIds);
+    else writeSelectedRecycleDeviceIdsStorage([]);
+
+    const renderedPanels = refreshRecycleEntryCategoryPanel(panel) ? 1 : refreshRecycleRemoteVisualOverlayPanels();
+    return createDailyworkDebugForceApplyResult({
+      ok: true,
+      forced: "yes",
+      applied: "yes",
+      targetCategoryId: target.categoryId,
+      targetDeviceIds: target.action === "category_device" ? target.deviceIds : [],
+      blockers: [],
+      reason: target.action === "category_device" ? "manual_debug_force_applied_category_device" : "manual_debug_force_applied_category",
+      renderedPanels
+    });
+  }
+
   function buildRecycleHistoryUrlForDateRange(now = new Date()) {
     const templatePath = discoverRecycleHistoryTemplateFromDom();
     if (!templatePath) return "";
@@ -7298,6 +7371,77 @@
     });
 
     controls.appendChild(dailyworkAutoPlanWrap);
+
+    const dailyworkForceApplyWrap = document.createElement("div");
+    dailyworkForceApplyWrap.style.flex = "1 1 100%";
+    dailyworkForceApplyWrap.style.display = "flex";
+    dailyworkForceApplyWrap.style.flexWrap = "wrap";
+    dailyworkForceApplyWrap.style.gap = "5px";
+    dailyworkForceApplyWrap.style.alignItems = "center";
+    dailyworkForceApplyWrap.style.marginTop = "2px";
+
+    const dailyworkForceApplyBtn = document.createElement("button");
+    dailyworkForceApplyBtn.type = "button";
+    dailyworkForceApplyBtn.textContent = "Dailywork debug force apply";
+    dailyworkForceApplyBtn.style.padding = "2px 6px";
+    dailyworkForceApplyBtn.style.border = "1px solid #c9c9c9";
+    dailyworkForceApplyBtn.style.borderRadius = "999px";
+    dailyworkForceApplyBtn.style.background = "#fff";
+    dailyworkForceApplyBtn.style.color = "#444";
+    dailyworkForceApplyBtn.style.fontSize = "10px";
+    dailyworkForceApplyBtn.style.lineHeight = "1.25";
+    dailyworkForceApplyBtn.style.cursor = "pointer";
+    dailyworkForceApplyBtn.style.boxShadow = "none";
+    dailyworkForceApplyWrap.appendChild(dailyworkForceApplyBtn);
+
+    const dailyworkForceApplyOutput = document.createElement("div");
+    dailyworkForceApplyOutput.style.flex = "1 1 100%";
+    dailyworkForceApplyOutput.style.display = "none";
+    dailyworkForceApplyOutput.style.boxSizing = "border-box";
+    dailyworkForceApplyOutput.style.padding = "5px 6px";
+    dailyworkForceApplyOutput.style.border = "1px solid #ececec";
+    dailyworkForceApplyOutput.style.borderRadius = "4px";
+    dailyworkForceApplyOutput.style.background = "#fff";
+    dailyworkForceApplyOutput.style.color = "#555";
+    dailyworkForceApplyOutput.style.fontSize = "10px";
+    dailyworkForceApplyOutput.style.lineHeight = "1.35";
+    dailyworkForceApplyOutput.style.whiteSpace = "pre-wrap";
+    dailyworkForceApplyOutput.style.overflowWrap = "anywhere";
+    dailyworkForceApplyWrap.appendChild(dailyworkForceApplyOutput);
+
+    dailyworkForceApplyBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkForceApplyOutput.textContent = "Dailywork debug force apply: running...";
+      dailyworkForceApplyOutput.style.display = "block";
+      try {
+        const result = await runDailyworkDebugForceApply(panel);
+        dailyworkForceApplyOutput.textContent = [
+          `ok: ${result?.ok === true ? "true" : "false"}`,
+          `forced: ${result?.forced === "yes" ? "yes" : "no"}`,
+          `applied: ${result?.applied === "yes" ? "yes" : "no"}`,
+          `targetCategoryId: ${result?.targetCategoryId || ""}`,
+          `targetDeviceIds: ${Array.isArray(result?.targetDeviceIds) ? result.targetDeviceIds.join(", ") : ""}`,
+          `reason: ${result?.reason || ""}`,
+          `blockers: ${Array.isArray(result?.blockers) ? result.blockers.join(", ") : ""}`,
+          `renderedPanels: ${Number(result?.renderedPanels || 0)}`,
+          "Manual debug force action. No OSS navigation or Continue click was performed."
+        ].join("\n");
+      } catch (error) {
+        dailyworkForceApplyOutput.textContent = [
+          "ok: false",
+          "forced: no",
+          "applied: no",
+          "targetCategoryId: ",
+          "targetDeviceIds: ",
+          `reason: ${String(error?.message || error || "Dailywork debug force apply failed")}`,
+          `blockers: ${String(error?.message || error || "dailywork_debug_force_apply_failed")}`,
+          "Manual debug force action. No OSS navigation or Continue click was performed."
+        ].join("\n");
+      }
+    });
+
+    controls.appendChild(dailyworkForceApplyWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);
