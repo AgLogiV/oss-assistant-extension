@@ -18,7 +18,8 @@
     "https://oss.mobiltel.bg/*",
     "https://srvvm-webtst-0.mobiltel.bg/*",
     "https://oss-assistant.onrender.com/*",
-    "https://oss-assistant.github.io/*"
+    "https://oss-assistant.github.io/*",
+    "https://raw.githubusercontent.com/AgLogiV/oss-assistant-extension/main/config/recycle-device-catalog.fixture.json"
   ],
   "web_accessible_resources": [
     {

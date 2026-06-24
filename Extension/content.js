@@ -2342,6 +2342,10 @@
   const RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY = "remoteAdditionsAuto";
   const RECYCLE_REMOTE_AUTO_MATERIAL_CAPABILITY = "remoteMaterialAuto";
   const RECYCLE_REMOTE_AUTO_MATERIAL_MODELS_CAPABILITY = "remoteMaterialModelsAuto";
+  const RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS = [
+    "thfvnext.bing.com",
+    "tse2.mm.bing.net"
+  ];
   const RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY = "wifi_oss_recycle_remote_auto_session_state_v1";
   const RECYCLE_REMOTE_DEBUG_SESSION_STATE_KEY = "wifi_oss_recycle_remote_debug_session_state_v1";
   let recycleRemoteVisualOverlayByDeviceId = new Map();
@@ -2441,16 +2445,41 @@
   }
 
   function isRecycleRemoteSafeId(value) {
-    return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(String(value || ""));
+    return /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(String(value || ""));
+  }
+
+  function isRecycleApprovedHttpsImageUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return false;
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch (e) {
+      return false;
+    }
+    return parsed.protocol === "https:"
+      && !parsed.username
+      && !parsed.password
+      && RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS.includes(parsed.hostname);
   }
 
   function isRecycleRemoteAddedAssetPathSafe(value) {
     const pathValue = String(value || "").trim();
     if (!pathValue) return true;
+    if (isRecycleApprovedHttpsImageUrl(pathValue)) return true;
     if (!pathValue.startsWith("images/")) return false;
     if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) return false;
     if (pathValue.includes("\\") || pathValue.includes("..")) return false;
     return /\.(?:webp|png|jpe?g)$/i.test(pathValue);
+  }
+
+  function resolveRecycleImageUrl(imagePath) {
+    const path = String(imagePath || "").trim();
+    if (!path) return "";
+    if (isRecycleApprovedHttpsImageUrl(path)) return path;
+    return (typeof chrome !== "undefined" && chrome.runtime?.getURL)
+      ? chrome.runtime.getURL(path)
+      : path;
   }
 
   function isRecycleRemoteAddedDevice(device) {
@@ -4385,11 +4414,7 @@
   }
 
   function resolveRecycleSerialHelpImageUrl(imagePath) {
-    const path = String(imagePath || "");
-    if (!path) return "";
-    return (typeof chrome !== "undefined" && chrome.runtime?.getURL)
-      ? chrome.runtime.getURL(path)
-      : path;
+    return resolveRecycleImageUrl(imagePath);
   }
 
   function setRecycleSerialHelpButtonVisible(ui, visible) {
@@ -5242,6 +5267,14 @@
     };
   }
 
+  function shouldDeferRecycleSelectedDevicePrune() {
+    const autoResult = String(recycleRemoteAutoApplyState?.result || "").trim();
+    const autoBlockReason = String(recycleRemoteAutoApplyState?.blockReason || "").trim();
+    return Boolean(recycleRemoteAutoApplyInFlight)
+      || autoResult === "not_checked"
+      || autoBlockReason === "stale LKG";
+  }
+
   function getRecycleRemoteAutoCapabilityBlockReason(response) {
     const compatibility = response?.contractCompatibility;
     if (!compatibility || typeof compatibility !== "object") return "contract missing";
@@ -5250,8 +5283,16 @@
     const supported = Array.isArray(compatibility.supportedCapabilities) ? compatibility.supportedCapabilities : [];
     if (!supported.includes(RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY)) return "no auto capability";
     if (response?.hasLastKnownGood === false) return "no LKG";
-    if (response?.isStale === true) return "stale LKG";
+    if (response?.isStale === true && !isRecycleRemoteUsingStaleLastKnownGood(response)) return "stale LKG";
     return "";
+  }
+
+  function isRecycleRemoteUsingStaleLastKnownGood(response) {
+    const statusResult = String(response?.status?.result || "").trim();
+    return response?.normalRefreshEnabled === true
+      && response?.hasLastKnownGood === true
+      && response?.isStale === true
+      && statusResult === "fetch_failed";
   }
 
   function getRecycleRemoteAutoMaterialCapabilityBlockReason(response) {
@@ -5449,12 +5490,12 @@
   function scheduleRecycleRemoteAutomaticEligibleDevices() {
     setTimeout(async () => {
       try {
+        await sendRecycleRemoteConfigDebugMessage(RECYCLE_REMOTE_CONFIG_DEBUG_MESSAGE_TYPES.maybeRefresh);
         const result = await applyRecycleRemoteAutomaticEligibleDevices();
-        if (result?.autoAddedCount || recycleRemoteAutoDevicesByDeviceId.size) {
-          refreshRecycleRemoteVisualOverlayPanels();
-        }
+        refreshRecycleRemoteVisualOverlayPanels();
       } catch (error) {
         clearRecycleRemoteAutoDeviceOverlay(String(error?.message || error || "auto failed"));
+        refreshRecycleRemoteVisualOverlayPanels();
       }
     }, 0);
   }
@@ -5840,9 +5881,14 @@
     const lastError = String(status.lastError || response?.error || "").trim();
     const parts = [action, result].filter(Boolean);
     const sourceLabel = String(response?.activeSourceLabel || response?.activeSourceId || "").trim();
+    const usingStaleLkg = isRecycleRemoteUsingStaleLastKnownGood(response);
     if (sourceLabel) parts.push(`source ${sourceLabel}`);
     if (typeof response?.autoRefreshEnabled === "boolean") parts.push(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`);
-    if (typeof response?.isStale === "boolean") parts.push(response.isStale ? "stale" : "fresh");
+    if (response?.normalRefreshEnabled === true) {
+      const ttlHours = Math.max(1, Math.round(Number(response?.ttlMs || 0) / (60 * 60 * 1000)));
+      parts.push(`normal refresh ${ttlHours}h`);
+    }
+    if (typeof response?.isStale === "boolean") parts.push(response.isStale ? (usingStaleLkg ? "stale using LKG" : "stale") : "fresh");
     if (revision) parts.push(`rev ${revision}`);
     appendRecycleRemoteContractStatus(parts, response);
     if (typeof response?.appliedCount === "number") parts.push(`applied ${response.appliedCount}`);
@@ -6079,7 +6125,12 @@
         }
       }
       if (typeof response.autoRefreshEnabled === "boolean") addSummaryChip(`auto ${response.autoRefreshEnabled ? "ON" : "OFF"}`, response.autoRefreshEnabled ? "warn" : "info");
-      if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? "stale" : "fresh", response.isStale ? "warn" : "ok");
+      if (response.normalRefreshEnabled === true) {
+        const ttlHours = Math.max(1, Math.round(Number(response.ttlMs || 0) / (60 * 60 * 1000)));
+        addSummaryChip(`normal refresh ${ttlHours}h`, "info");
+      }
+      const usingStaleLkg = isRecycleRemoteUsingStaleLastKnownGood(response);
+      if (typeof response.isStale === "boolean") addSummaryChip(response.isStale ? (usingStaleLkg ? "stale using LKG" : "stale") : "fresh", response.isStale ? "warn" : "ok");
       if (response.hasLastKnownGood === true) addSummaryChip("LKG yes", "ok");
       if (response.hasLastKnownGood === false) addSummaryChip("LKG no", "warn");
       if (response.blockReason) addSummaryChip(`blocked: ${String(response.blockReason).trim()}`, "warn");
@@ -6668,23 +6719,17 @@
 
     const resolveCategoryImageUrl = (c) => {
       const imgPath = c.imagePath ? String(c.imagePath) : deviceImageForModel(c.hintModelName);
-      return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
-        ? chrome.runtime.getURL(imgPath)
-        : "";
+      return resolveRecycleImageUrl(imgPath);
     };
 
     const resolveDeviceImageUrl = (device) => {
       const imgPath = getRecycleDeviceImagePath(device);
-      return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
-        ? chrome.runtime.getURL(imgPath)
-        : "";
+      return resolveRecycleImageUrl(imgPath);
     };
 
     const resolveDeviceFallbackImageUrl = (device) => {
       const imgPath = getRecycleDeviceFallbackImagePath(device);
-      return imgPath && (typeof chrome !== "undefined" && chrome.runtime?.getURL)
-        ? chrome.runtime.getURL(imgPath)
-        : "";
+      return resolveRecycleImageUrl(imgPath);
     };
 
     const applyRecycleDeviceSelectedState = (card, isSelected) => {
@@ -7077,9 +7122,11 @@
       const devices = getRecycleDevicesByCategory(activeCategory.id);
       if (devices.length) {
         const activeDeviceIds = new Set(devices.map(device => String(device?.deviceId || "").trim()).filter(Boolean));
+        const deferUnknownSelectedDevicePrune = shouldDeferRecycleSelectedDevicePrune();
         let changed = false;
         selectedRecycleDeviceIds.forEach(id => {
           if (!activeDeviceIds.has(id)) {
+            if (deferUnknownSelectedDevicePrune && isRecycleRemoteSafeId(id)) return;
             selectedRecycleDeviceIds.delete(id);
             changed = true;
           }
