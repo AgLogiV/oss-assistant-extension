@@ -20,6 +20,7 @@
   const RECYCLE_REMOTE_CONFIG_PREVIEW_DIFF_ACTION = "previewDiff";
   const RECYCLE_REMOTE_CONFIG_RESOLVED_PLAN_ACTION = "resolvedPlan";
   const RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION = "applyEligibleDevices";
+  const DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE = "dailywork.fetchSchedule";
 
   function sendRecycleRemoteConfigDebugMessage(type, payload) {
     return new Promise((resolve, reject) => {
@@ -6580,6 +6581,76 @@
     });
 
     controls.appendChild(dailyworkDryRunWrap);
+
+    const dailyworkFetchWrap = document.createElement("div");
+    dailyworkFetchWrap.style.flex = "1 1 100%";
+    dailyworkFetchWrap.style.display = "flex";
+    dailyworkFetchWrap.style.flexWrap = "wrap";
+    dailyworkFetchWrap.style.gap = "5px";
+    dailyworkFetchWrap.style.alignItems = "center";
+    dailyworkFetchWrap.style.marginTop = "2px";
+
+    const dailyworkFetchBtn = document.createElement("button");
+    dailyworkFetchBtn.type = "button";
+    dailyworkFetchBtn.textContent = "Dailywork fetch/check";
+    dailyworkFetchBtn.style.padding = "2px 6px";
+    dailyworkFetchBtn.style.border = "1px solid #c9c9c9";
+    dailyworkFetchBtn.style.borderRadius = "999px";
+    dailyworkFetchBtn.style.background = "#fff";
+    dailyworkFetchBtn.style.color = "#444";
+    dailyworkFetchBtn.style.fontSize = "10px";
+    dailyworkFetchBtn.style.lineHeight = "1.25";
+    dailyworkFetchBtn.style.cursor = "pointer";
+    dailyworkFetchBtn.style.boxShadow = "none";
+    dailyworkFetchWrap.appendChild(dailyworkFetchBtn);
+
+    const dailyworkFetchOutput = document.createElement("div");
+    dailyworkFetchOutput.style.flex = "1 1 100%";
+    dailyworkFetchOutput.style.display = "none";
+    dailyworkFetchOutput.style.boxSizing = "border-box";
+    dailyworkFetchOutput.style.padding = "5px 6px";
+    dailyworkFetchOutput.style.border = "1px solid #ececec";
+    dailyworkFetchOutput.style.borderRadius = "4px";
+    dailyworkFetchOutput.style.background = "#fff";
+    dailyworkFetchOutput.style.color = "#555";
+    dailyworkFetchOutput.style.fontSize = "10px";
+    dailyworkFetchOutput.style.lineHeight = "1.35";
+    dailyworkFetchOutput.style.whiteSpace = "pre-wrap";
+    dailyworkFetchOutput.style.overflowWrap = "anywhere";
+    dailyworkFetchWrap.appendChild(dailyworkFetchOutput);
+
+    dailyworkFetchBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkFetchOutput.textContent = "Dailywork fetch/check: running...";
+      dailyworkFetchOutput.style.display = "block";
+      try {
+        const response = await sendRecycleRemoteConfigDebugMessage(DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE);
+        const warnings = Array.isArray(response?.warnings) && response.warnings.length
+          ? response.warnings.join("; ")
+          : "";
+        dailyworkFetchOutput.textContent = [
+          `ok: ${response?.ok === true ? "true" : "false"}`,
+          `source: ${response?.source || ""}`,
+          `generatedAt: ${response?.generatedAt || ""}`,
+          `dayOfWeek: ${response?.dayOfWeek || ""}`,
+          `items: ${Number(response?.validItemCount || 0)}/${Number(response?.itemCount || 0)} valid, ${Number(response?.invalidItemCount || 0)} invalid`,
+          `unique users/devices: ${Number(response?.uniqueUserCount || 0)}/${Number(response?.uniqueDeviceCount || 0)}`,
+          `fetchedAt: ${response?.fetchedAt || ""}`,
+          `warnings: ${warnings}`,
+          `error: ${response?.error || ""}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      } catch (error) {
+        dailyworkFetchOutput.textContent = [
+          `ok: false`,
+          `error: ${String(error?.message || error || "Dailywork fetch/check failed")}`,
+          "Diagnostics only. No category/device was selected."
+        ].join("\n");
+      }
+    });
+
+    controls.appendChild(dailyworkFetchWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);

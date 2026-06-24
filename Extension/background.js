@@ -7,6 +7,13 @@ const RECYCLE_REMOTE_CONFIG_EXTERNAL_SIMPLE_SOURCE_ID = "external_simple";
 const RECYCLE_REMOTE_CONFIG_TIMEOUT_MS = 15000;
 const RECYCLE_REMOTE_CONFIG_MAX_BYTES = 1024 * 1024;
 const RECYCLE_REMOTE_CONFIG_AUTO_REFRESH_TTL_MS = 6 * 60 * 60 * 1000;
+const DAILYWORK_SCHEDULE_URL = "https://raw.githubusercontent.com/AgLogiV/oss-assistant-extension/main/config/dailywork.json";
+const DAILYWORK_FETCH_TIMEOUT_MS = 15000;
+const DAILYWORK_MAX_BYTES = 256 * 1024;
+const DAILYWORK_CACHE_KEYS = {
+  lkg: "wifi_oss_dailywork_lkg_v1",
+  meta: "wifi_oss_dailywork_meta_v1"
+};
 const RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS = [
   "thfvnext.bing.com",
   "tse2.mm.bing.net"
@@ -606,6 +613,193 @@ function recycleRemoteChromeRemove(keys) {
       resolve();
     });
   });
+}
+
+function dailyworkTrim(value) {
+  return String(value || "").trim();
+}
+
+function dailyworkNowIso() {
+  return new Date().toISOString();
+}
+
+function dailyworkNormalizeItem(item, rawIndex) {
+  const user = dailyworkTrim(item?.User ?? item?.user);
+  const names = dailyworkTrim(item?.Names ?? item?.names);
+  const device = dailyworkTrim(item?.Device ?? item?.device);
+  const reasons = [];
+  if (!user) reasons.push("missing user");
+  if (!device) reasons.push("missing device");
+  if (reasons.length) return { ok: false, rawIndex, reasons };
+  return {
+    ok: true,
+    item: {
+      user,
+      names,
+      device,
+      rawIndex
+    }
+  };
+}
+
+function dailyworkBuildValidatedPayload(raw, context = {}) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, error: "Dailywork JSON must be an object" };
+  }
+  if (!Array.isArray(raw.items)) {
+    return { ok: false, error: "Dailywork JSON must contain an items array" };
+  }
+
+  const items = [];
+  let invalidItemCount = 0;
+  raw.items.forEach((entry, index) => {
+    const normalized = dailyworkNormalizeItem(entry, index);
+    if (normalized.ok) items.push(normalized.item);
+    else invalidItemCount += 1;
+  });
+
+  if (!items.length) {
+    return { ok: false, error: "Dailywork JSON has no valid items" };
+  }
+
+  return {
+    ok: true,
+    payload: {
+      version: 1,
+      sourceUrl: DAILYWORK_SCHEDULE_URL,
+      generatedAt: dailyworkTrim(raw.generatedAt || raw.GeneratedAt),
+      dayOfWeek: dailyworkTrim(raw.dayOfWeek || raw.DayOfWeek),
+      fetchedAt: dailyworkTrim(context.fetchedAt) || dailyworkNowIso(),
+      itemCount: raw.items.length,
+      validItemCount: items.length,
+      invalidItemCount,
+      items
+    }
+  };
+}
+
+function dailyworkBuildCompactResponse(payload, options = {}) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const uniqueUsers = new Set();
+  const uniqueDevices = new Set();
+  items.forEach(item => {
+    const user = dailyworkTrim(item?.user);
+    const device = dailyworkTrim(item?.device);
+    if (user) uniqueUsers.add(user);
+    if (device) uniqueDevices.add(device);
+  });
+
+  return {
+    ok: options.ok !== false,
+    source: options.source || "remote",
+    generatedAt: dailyworkTrim(payload?.generatedAt),
+    dayOfWeek: dailyworkTrim(payload?.dayOfWeek),
+    itemCount: Number(payload?.itemCount || items.length || 0),
+    validItemCount: Number(payload?.validItemCount || items.length || 0),
+    invalidItemCount: Number(payload?.invalidItemCount || 0),
+    uniqueUserCount: uniqueUsers.size,
+    uniqueDeviceCount: uniqueDevices.size,
+    fetchedAt: dailyworkTrim(payload?.fetchedAt || options.fetchedAt),
+    warnings: Array.isArray(options.warnings) ? options.warnings.map(dailyworkTrim).filter(Boolean) : [],
+    error: dailyworkTrim(options.error)
+  };
+}
+
+function dailyworkValidateCachedPayload(payload) {
+  if (!payload || payload.version !== 1 || !Array.isArray(payload.items)) return null;
+  const rebuilt = dailyworkBuildValidatedPayload({ ...payload, items: payload.items }, { fetchedAt: payload.fetchedAt });
+  if (!rebuilt.ok) return null;
+  return {
+    ...rebuilt.payload,
+    generatedAt: dailyworkTrim(payload.generatedAt),
+    dayOfWeek: dailyworkTrim(payload.dayOfWeek),
+    fetchedAt: dailyworkTrim(payload.fetchedAt),
+    itemCount: Number(payload.itemCount || rebuilt.payload.itemCount || 0),
+    validItemCount: Number(payload.validItemCount || rebuilt.payload.validItemCount || 0),
+    invalidItemCount: Number(payload.invalidItemCount || 0)
+  };
+}
+
+async function dailyworkReadLastKnownGood() {
+  const keys = DAILYWORK_CACHE_KEYS;
+  const stored = await recycleRemoteChromeGet([keys.lkg, keys.meta]);
+  return {
+    payload: dailyworkValidateCachedPayload(stored[keys.lkg]),
+    meta: stored[keys.meta] || null
+  };
+}
+
+async function dailyworkFetchScheduleFresh() {
+  const fetchedAt = dailyworkNowIso();
+  const response = await recycleRemoteFetchWithTimeout(
+    DAILYWORK_SCHEDULE_URL,
+    { cache: "no-store", headers: { Accept: "application/json" } },
+    DAILYWORK_FETCH_TIMEOUT_MS
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const { text, byteLength } = await recycleRemoteReadTextWithLimit(response, DAILYWORK_MAX_BYTES);
+  let parsed;
+  try {
+    parsed = JSON.parse(text.replace(/^\uFEFF/, ""));
+  } catch (error) {
+    throw new Error("Invalid dailywork JSON");
+  }
+
+  const validation = dailyworkBuildValidatedPayload(parsed, { fetchedAt });
+  if (!validation.ok) throw new Error(validation.error || "Dailywork validation failed");
+
+  const payload = validation.payload;
+  const meta = {
+    sourceUrl: DAILYWORK_SCHEDULE_URL,
+    fetchedAt,
+    byteLength,
+    itemCount: payload.itemCount,
+    validItemCount: payload.validItemCount,
+    invalidItemCount: payload.invalidItemCount
+  };
+  await recycleRemoteChromeSet({
+    [DAILYWORK_CACHE_KEYS.lkg]: payload,
+    [DAILYWORK_CACHE_KEYS.meta]: meta
+  });
+  return dailyworkBuildCompactResponse(payload, { source: "remote", fetchedAt, warnings: [] });
+}
+
+let dailyworkFetchInFlight = null;
+async function dailyworkFetchSchedule() {
+  if (dailyworkFetchInFlight) return dailyworkFetchInFlight;
+  dailyworkFetchInFlight = (async () => {
+    try {
+      return await dailyworkFetchScheduleFresh();
+    } catch (error) {
+      const fallback = await dailyworkReadLastKnownGood().catch(() => ({ payload: null, meta: null }));
+      const errorMessage = error?.name === "AbortError" ? "Request timed out" : String(error?.message || error || "Dailywork fetch failed");
+      if (fallback.payload) {
+        return dailyworkBuildCompactResponse(fallback.payload, {
+          source: "cache",
+          fetchedAt: fallback.payload.fetchedAt || fallback.meta?.fetchedAt,
+          warnings: [`remote fetch failed: ${errorMessage}`]
+        });
+      }
+      return {
+        ok: false,
+        source: "remote",
+        generatedAt: "",
+        dayOfWeek: "",
+        itemCount: 0,
+        validItemCount: 0,
+        invalidItemCount: 0,
+        uniqueUserCount: 0,
+        uniqueDeviceCount: 0,
+        fetchedAt: "",
+        warnings: [],
+        error: errorMessage
+      };
+    } finally {
+      dailyworkFetchInFlight = null;
+    }
+  })();
+  return dailyworkFetchInFlight;
 }
 
 function recycleRemoteAddIssue(issues, code, message) {
@@ -1973,6 +2167,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
       if (!msg || typeof msg !== "object") return respondOnce({ ok: false, error: "Bad message" });
+
+      if (msg.type === "dailywork.fetchSchedule") {
+        return respondOnce(await dailyworkFetchSchedule());
+      }
 
       if (msg.type === "recycleConfig.refreshRemote") {
         return respondOnce(await recycleRemoteRefresh());
