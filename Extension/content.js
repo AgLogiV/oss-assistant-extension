@@ -3783,6 +3783,8 @@
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
+  const DAILYWORK_SCHEDULE_BUTTON_ID = "wifi-oss-dailywork-schedule-btn";
+  const DAILYWORK_SCHEDULE_PANEL_ID = "wifi-oss-dailywork-schedule-panel";
   const RECYCLE_STATE_ROOT_ID = "_wflowRecycleState";
   const RECYCLE_STATE_SERIAL_INPUT_ID = "_wflowRecycleState_SerialNo";
   const RECYCLE_STATE_MAC_INPUT_ID = "_wflowRecycleState_Mac";
@@ -4947,6 +4949,11 @@
   let recycleSerialHelpPreviewUi = null;
   let recycleSerialHelpPreviewTimer = 0;
   let recycleSerialHelpPreviewCloseTimer = 0;
+  let dailyworkScheduleUi = null;
+  let dailyworkScheduleRows = [];
+  let dailyworkScheduleMeta = null;
+  let dailyworkScheduleLoadPromise = null;
+  let dailyworkSchedulePanelCloseTimer = 0;
   const recycleInlineAlertAnimations = new WeakMap();
 
   function stopRecycleInlineAlertAnimation(el) {
@@ -5620,6 +5627,460 @@
     const ui = recycleSerialHelpUi;
     if (!ui) return;
     setRecycleSerialHelpPanelOpen(false, { keepButton: false });
+  }
+
+  function normalizeDailyworkSchedulePanelItems(items) {
+    return (Array.isArray(items) ? items : [])
+      .map(item => ({
+        user: String(item?.user || "").trim(),
+        names: String(item?.names || "").trim(),
+        device: String(item?.device || "").trim(),
+        rawIndex: Number.isFinite(Number(item?.rawIndex)) ? Number(item.rawIndex) : null
+      }))
+      .filter(item => item.user && item.device);
+  }
+
+  function clearDailyworkScheduleNode(node) {
+    if (!node) return;
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function getDailyworkScheduleDeviceSummaryLines(rows, limit = 10) {
+    const counts = new Map();
+    rows.forEach(item => {
+      const device = String(item?.device || "").trim();
+      if (device) counts.set(device, (counts.get(device) || 0) + 1);
+    });
+    const top = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, limit);
+    const lines = top.map(([device, count]) => `${device}: ${count}`);
+    const remaining = Math.max(0, counts.size - top.length);
+    if (remaining > 0) lines.push(`... ${remaining} more device(s)`);
+    if (!lines.length) lines.push("(none)");
+    return lines;
+  }
+
+  function getDailyworkScheduleTargetText(selection) {
+    const deviceIds = Array.isArray(selection?.deviceIds) ? selection.deviceIds.filter(Boolean) : [];
+    return [
+      selection?.categoryId || "",
+      deviceIds.length ? deviceIds.join(", ") : ""
+    ].filter(Boolean).join(" / ");
+  }
+
+  async function loadDailyworkSchedulePanelRows() {
+    if (dailyworkScheduleRows.length && dailyworkScheduleMeta?.ok) {
+      return { ok: true, response: dailyworkScheduleMeta, rows: dailyworkScheduleRows };
+    }
+    if (dailyworkScheduleLoadPromise) return dailyworkScheduleLoadPromise;
+
+    dailyworkScheduleLoadPromise = (async () => {
+      const response = await sendRecycleRemoteConfigDebugMessage(DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE, { includeItems: true });
+      dailyworkScheduleMeta = {
+        ok: Boolean(response?.ok),
+        source: String(response?.source || ""),
+        generatedAt: String(response?.generatedAt || ""),
+        dayOfWeek: String(response?.dayOfWeek || ""),
+        itemCount: Number(response?.itemCount || 0),
+        validItemCount: Number(response?.validItemCount || 0),
+        invalidItemCount: Number(response?.invalidItemCount || 0),
+        uniqueUserCount: Number(response?.uniqueUserCount || 0),
+        uniqueDeviceCount: Number(response?.uniqueDeviceCount || 0),
+        fetchedAt: String(response?.fetchedAt || ""),
+        warnings: Array.isArray(response?.warnings) ? response.warnings.slice(0, 5).map(String) : [],
+        error: String(response?.error || "")
+      };
+
+      if (!response?.ok) {
+        dailyworkScheduleRows = [];
+        throw new Error(response?.error || "Dailywork schedule fetch failed");
+      }
+
+      dailyworkScheduleRows = normalizeDailyworkSchedulePanelItems(response.items);
+      return { ok: true, response: dailyworkScheduleMeta, rows: dailyworkScheduleRows };
+    })().finally(() => {
+      dailyworkScheduleLoadPromise = null;
+    });
+
+    return dailyworkScheduleLoadPromise;
+  }
+
+  function ensureDailyworkScheduleUi() {
+    if (dailyworkScheduleUi && document.body?.contains(dailyworkScheduleUi.panel)) {
+      return dailyworkScheduleUi;
+    }
+    const parent = document.body || document.documentElement;
+    if (!parent) return null;
+
+    const button = document.createElement("button");
+    button.id = DAILYWORK_SCHEDULE_BUTTON_ID;
+    button.type = "button";
+    button.title = "Покажи дневното разписание";
+    button.setAttribute("aria-label", "Покажи дневното разписание");
+    button.style.position = "fixed";
+    button.style.top = "210px";
+    button.style.right = "18px";
+    button.style.zIndex = "2147482999";
+    button.style.width = "48px";
+    button.style.height = "48px";
+    button.style.boxSizing = "border-box";
+    button.style.padding = "0";
+    button.style.border = "1px solid #236b5a";
+    button.style.borderRadius = "6px";
+    button.style.background = "#d7f3ea";
+    button.style.color = "#12483b";
+    button.style.boxShadow = "0 3px 10px rgba(18, 72, 59, 0.18)";
+    button.style.cursor = "pointer";
+    button.style.display = "none";
+    button.style.alignItems = "center";
+    button.style.justifyContent = "center";
+    button.style.fontSize = "13px";
+    button.style.fontWeight = "900";
+    button.style.lineHeight = "1";
+    button.style.letterSpacing = "0";
+    button.style.opacity = "0";
+    button.style.transform = "translateX(14px)";
+    button.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), box-shadow 160ms ease";
+    button.textContent = "ДР";
+
+    const panel = document.createElement("aside");
+    panel.id = DAILYWORK_SCHEDULE_PANEL_ID;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Дневно разписание");
+    panel.setAttribute("aria-hidden", "true");
+    panel.style.position = "fixed";
+    panel.style.top = "96px";
+    panel.style.right = "16px";
+    panel.style.bottom = "40px";
+    panel.style.zIndex = "2147483002";
+    panel.style.width = "min(760px, calc(100vw - 32px))";
+    panel.style.boxSizing = "border-box";
+    panel.style.display = "none";
+    panel.style.flexDirection = "column";
+    panel.style.padding = "12px";
+    panel.style.border = "1px solid #b9d9cf";
+    panel.style.borderRadius = "8px";
+    panel.style.background = "#f8fbfa";
+    panel.style.boxShadow = "0 12px 30px rgba(15, 23, 42, 0.18)";
+    panel.style.opacity = "0";
+    panel.style.transform = "translateX(110%)";
+    panel.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "opacity 220ms ease, transform 220ms cubic-bezier(0.2, 0, 0.2, 1)";
+
+    const header = document.createElement("div");
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.justifyContent = "space-between";
+    header.style.gap = "8px";
+    header.style.flex = "0 0 auto";
+    header.style.marginBottom = "10px";
+    header.style.paddingBottom = "10px";
+    header.style.borderBottom = "1px solid #dce8e4";
+
+    const heading = document.createElement("div");
+    heading.textContent = "Дневно разписание";
+    heading.style.color = "#1f3f37";
+    heading.style.fontSize = "16px";
+    heading.style.fontWeight = "900";
+    heading.style.lineHeight = "1.2";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "x";
+    closeBtn.setAttribute("aria-label", "Затвори дневното разписание");
+    closeBtn.style.flex = "0 0 auto";
+    closeBtn.style.width = "28px";
+    closeBtn.style.height = "28px";
+    closeBtn.style.padding = "0";
+    closeBtn.style.border = "1px solid #b9c7c3";
+    closeBtn.style.borderRadius = "6px";
+    closeBtn.style.background = "#ffffff";
+    closeBtn.style.color = "#38534b";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.fontSize = "16px";
+    closeBtn.style.fontWeight = "900";
+    closeBtn.style.lineHeight = "1";
+
+    const status = document.createElement("div");
+    status.style.flex = "0 0 auto";
+    status.style.marginBottom = "8px";
+    status.style.padding = "6px 8px";
+    status.style.border = "1px solid #dce8e4";
+    status.style.borderRadius = "6px";
+    status.style.background = "#ffffff";
+    status.style.color = "#40534e";
+    status.style.fontSize = "11px";
+    status.style.lineHeight = "1.35";
+    status.style.whiteSpace = "pre-wrap";
+
+    const summary = document.createElement("div");
+    summary.style.flex = "0 0 auto";
+    summary.style.marginBottom = "8px";
+    summary.style.padding = "6px 8px";
+    summary.style.border = "1px solid #dce8e4";
+    summary.style.borderRadius = "6px";
+    summary.style.background = "#ffffff";
+    summary.style.color = "#40534e";
+    summary.style.fontSize = "11px";
+    summary.style.lineHeight = "1.35";
+    summary.style.whiteSpace = "pre-wrap";
+
+    const technicianNote = document.createElement("div");
+    technicianNote.style.flex = "0 0 auto";
+    technicianNote.style.marginBottom = "8px";
+    technicianNote.style.color = "#52625e";
+    technicianNote.style.fontSize = "11px";
+    technicianNote.style.lineHeight = "1.35";
+
+    const tableWrap = document.createElement("div");
+    tableWrap.style.flex = "1 1 auto";
+    tableWrap.style.minHeight = "0";
+    tableWrap.style.overflow = "auto";
+    tableWrap.style.border = "1px solid #dce8e4";
+    tableWrap.style.borderRadius = "6px";
+    tableWrap.style.background = "#ffffff";
+
+    header.appendChild(heading);
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+    panel.appendChild(status);
+    panel.appendChild(summary);
+    panel.appendChild(technicianNote);
+    panel.appendChild(tableWrap);
+    parent.appendChild(button);
+    parent.appendChild(panel);
+
+    dailyworkScheduleUi = { button, panel, closeBtn, status, summary, technicianNote, tableWrap };
+
+    button.addEventListener("mouseenter", () => {
+      button.style.boxShadow = "0 5px 14px rgba(18, 72, 59, 0.26)";
+    });
+    button.addEventListener("mouseleave", () => {
+      button.style.boxShadow = "0 3px 10px rgba(18, 72, 59, 0.18)";
+    });
+    button.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await setDailyworkSchedulePanelOpen(panel.dataset.wifiOssDailyworkScheduleOpen !== "1");
+    });
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDailyworkSchedulePanelOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && panel.dataset.wifiOssDailyworkScheduleOpen === "1") {
+        setDailyworkSchedulePanelOpen(false);
+      }
+    }, true);
+
+    return dailyworkScheduleUi;
+  }
+
+  function setDailyworkScheduleButtonVisible(visible) {
+    const ui = ensureDailyworkScheduleUi();
+    if (!ui) return;
+    ui.button.style.display = visible ? "flex" : "none";
+    ui.button.setAttribute("aria-hidden", visible ? "false" : "true");
+    if (isRecycleReducedMotionPreferred()) {
+      ui.button.style.opacity = visible ? "1" : "0";
+      ui.button.style.transform = "none";
+      return;
+    }
+    requestAnimationFrame(() => {
+      ui.button.style.opacity = visible ? "1" : "0";
+      ui.button.style.transform = visible ? "translateX(0)" : "translateX(14px)";
+    });
+  }
+
+  function renderDailyworkSchedulePanelTable(ui, rows, currentTechnicianId) {
+    clearDailyworkScheduleNode(ui.tableWrap);
+    const table = document.createElement("table");
+    table.style.width = "100%";
+    table.style.borderCollapse = "collapse";
+    table.style.tableLayout = "fixed";
+    table.style.fontSize = "11px";
+    table.style.lineHeight = "1.35";
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["User", "Име", "Устройство", "Action", "Target"].forEach(label => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      th.style.position = "sticky";
+      th.style.top = "0";
+      th.style.zIndex = "1";
+      th.style.padding = "5px 6px";
+      th.style.borderBottom = "1px solid #cbdcd6";
+      th.style.background = "#eef6f3";
+      th.style.color = "#23463e";
+      th.style.textAlign = "left";
+      th.style.fontWeight = "800";
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach(item => {
+      const selection = resolveDailyworkDeviceSelection(item.device);
+      const isCurrent = Boolean(currentTechnicianId && String(item.user || "").trim() === currentTechnicianId);
+      const row = document.createElement("tr");
+      if (isCurrent) {
+        row.style.background = "#e8f6eb";
+        row.style.outline = "1px solid #79bf89";
+      }
+
+      [
+        String(item.user || ""),
+        String(item.names || ""),
+        String(item.device || ""),
+        String(selection?.action || ""),
+        getDailyworkScheduleTargetText(selection)
+      ].forEach((value, index) => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        td.style.padding = "5px 6px";
+        td.style.borderBottom = "1px solid #eef3f1";
+        td.style.verticalAlign = "top";
+        td.style.overflowWrap = "anywhere";
+        if (index === 0 && isCurrent) {
+          const badge = document.createElement("span");
+          badge.textContent = " текущ";
+          badge.style.color = "#2f6f3e";
+          badge.style.fontWeight = "900";
+          td.appendChild(badge);
+        }
+        row.appendChild(td);
+      });
+
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    ui.tableWrap.appendChild(table);
+  }
+
+  async function renderDailyworkSchedulePanel(ui) {
+    ui.status.textContent = "Зареждам дневното разписание...";
+    ui.summary.textContent = "";
+    ui.technicianNote.textContent = "";
+    clearDailyworkScheduleNode(ui.tableWrap);
+
+    let result = null;
+    try {
+      result = await loadDailyworkSchedulePanelRows();
+    } catch (error) {
+      const meta = dailyworkScheduleMeta || {};
+      ui.status.textContent = [
+        "ok: false",
+        `source: ${meta.source || ""}`,
+        `generatedAt: ${meta.generatedAt || ""}`,
+        `error: ${String(error?.message || meta.error || "Dailywork schedule fetch failed")}`
+      ].join("\n");
+      ui.summary.textContent = "No schedule rows rendered.";
+      return;
+    }
+
+    const rows = result.rows || [];
+    const meta = result.response || {};
+    ui.status.textContent = [
+      `source: ${meta.source || ""}`,
+      `generatedAt: ${meta.generatedAt || ""}`,
+      `total items: ${Number(meta.itemCount || rows.length)}`,
+      `valid loaded items: ${rows.length}`,
+      `invalid items: ${Number(meta.invalidItemCount || 0)}`,
+      `unique users/devices: ${Number(meta.uniqueUserCount || 0)}/${Number(meta.uniqueDeviceCount || 0)}`
+    ].join("\n");
+    ui.summary.textContent = [
+      "device summary:",
+      ...getDailyworkScheduleDeviceSummaryLines(rows, 10)
+    ].join("\n");
+
+    let technicianResult = null;
+    try {
+      technicianResult = await detectDailyworkTechnicianDryRun();
+    } catch (error) {
+      technicianResult = { ok: false, reason: String(error?.message || error || "technician_detection_failed") };
+    }
+
+    const currentTechnicianId = technicianResult?.ok && technicianResult?.technicianId
+      ? String(technicianResult.technicianId).trim()
+      : "";
+    const hasCurrentRow = Boolean(currentTechnicianId && rows.some(item => String(item.user || "").trim() === currentTechnicianId));
+    if (!currentTechnicianId) {
+      ui.technicianNote.textContent = "Текущият техник не може да бъде разпознат.";
+      ui.technicianNote.style.color = "#8a6d3b";
+    } else if (!hasCurrentRow) {
+      ui.technicianNote.textContent = "Текущият техник не е намерен в зареденото разписание.";
+      ui.technicianNote.style.color = "#8a6d3b";
+    } else {
+      ui.technicianNote.textContent = `Текущ техник: ${currentTechnicianId}`;
+      ui.technicianNote.style.color = "#2f6f3e";
+    }
+
+    renderDailyworkSchedulePanelTable(ui, rows, currentTechnicianId);
+  }
+
+  async function setDailyworkSchedulePanelOpen(open) {
+    const ui = ensureDailyworkScheduleUi();
+    if (!ui) return;
+    if (dailyworkSchedulePanelCloseTimer) {
+      clearTimeout(dailyworkSchedulePanelCloseTimer);
+      dailyworkSchedulePanelCloseTimer = 0;
+    }
+
+    if (open) {
+      ui.panel.dataset.wifiOssDailyworkScheduleOpen = "1";
+      ui.panel.style.display = "flex";
+      ui.panel.setAttribute("aria-hidden", "false");
+      ui.button.setAttribute("aria-pressed", "true");
+      if (isRecycleReducedMotionPreferred()) {
+        ui.panel.style.opacity = "1";
+        ui.panel.style.transform = "none";
+      } else {
+        ui.panel.style.opacity = "0";
+        ui.panel.style.transform = "translateX(110%)";
+        requestAnimationFrame(() => {
+          if (ui.panel.dataset.wifiOssDailyworkScheduleOpen === "1") {
+            ui.panel.style.opacity = "1";
+            ui.panel.style.transform = "translateX(0)";
+          }
+        });
+      }
+      await renderDailyworkSchedulePanel(ui);
+      return;
+    }
+
+    ui.panel.dataset.wifiOssDailyworkScheduleOpen = "";
+    ui.panel.setAttribute("aria-hidden", "true");
+    ui.button.setAttribute("aria-pressed", "false");
+
+    if (isRecycleReducedMotionPreferred()) {
+      ui.panel.style.display = "none";
+      ui.panel.style.opacity = "0";
+      ui.panel.style.transform = "translateX(110%)";
+      return;
+    }
+
+    ui.panel.style.opacity = "0";
+    ui.panel.style.transform = "translateX(110%)";
+    dailyworkSchedulePanelCloseTimer = setTimeout(() => {
+      if (ui.panel.dataset.wifiOssDailyworkScheduleOpen !== "1") {
+        ui.panel.style.display = "none";
+      }
+    }, 230);
+  }
+
+  function hideDailyworkScheduleUi() {
+    const ui = dailyworkScheduleUi;
+    if (!ui) return;
+    setDailyworkSchedulePanelOpen(false);
+    ui.button.style.display = "none";
+    ui.button.setAttribute("aria-hidden", "true");
   }
 
   function hasRecycleSerialCyrillic(value) {
@@ -8764,6 +9225,9 @@
     installRecycleEntryStorageSync();
     const tryInject = () => {
       try { discoverRecycleHistoryTemplateFromDom(); } catch (e) {}
+      const hasRecycleEntryRoot = Boolean(document.getElementById(RECYCLE_ENTRY_ROOT_ID));
+      if (hasRecycleEntryRoot) setDailyworkScheduleButtonVisible(true);
+      else hideDailyworkScheduleUi();
       const injected = injectRecycleEntryCategoryPanel();
       if (!document.getElementById(RECYCLE_ENTRY_ROOT_ID)) hideRecycleSerialHelp();
       return injected;
