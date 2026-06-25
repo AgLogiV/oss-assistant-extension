@@ -4339,6 +4339,49 @@
     return buildDailyworkAutoSelectPlanFromMatch(match, currentState);
   }
 
+  function buildDailyworkMatchResultFromScheduleItem(item) {
+    const user = String(item?.user || "").trim();
+    const names = String(item?.names || "").trim();
+    const device = String(item?.device || "").trim();
+    if (!item || !user || !device) {
+      return {
+        ok: false,
+        technicianId: user,
+        technicianSource: "selected-user",
+        scheduleSource: "loaded-schedule",
+        scheduleGeneratedAt: "",
+        scheduleRowStatus: "invalid",
+        scheduleNames: names,
+        scheduleDevice: device,
+        action: "",
+        categoryId: "",
+        deviceIds: [],
+        confidence: "unsafe",
+        reason: !user ? "selected_user_missing" : "selected_device_missing",
+        wouldApply: "no"
+      };
+    }
+
+    const selection = resolveDailyworkDeviceSelection(device);
+    const wouldApply = selection.action === "category" || selection.action === "category_device";
+    return {
+      ok: selection.action === "noop" || wouldApply,
+      technicianId: user,
+      technicianSource: "selected-user",
+      scheduleSource: "loaded-schedule",
+      scheduleGeneratedAt: "",
+      scheduleRowStatus: "found",
+      scheduleNames: names,
+      scheduleDevice: device,
+      action: selection.action,
+      categoryId: selection.categoryId,
+      deviceIds: Array.isArray(selection.deviceIds) ? selection.deviceIds : [],
+      confidence: selection.confidence,
+      reason: selection.reason,
+      wouldApply: wouldApply ? "yes" : "no"
+    };
+  }
+
   function createDailyworkDebugForceApplyResult(overrides = {}) {
     return {
       ok: false,
@@ -4382,6 +4425,10 @@
 
   async function runDailyworkDebugForceApply(panel) {
     const match = await runDailyworkMatchDryRun();
+    return applyDailyworkDebugForceTarget(panel, match);
+  }
+
+  function applyDailyworkDebugForceTarget(panel, match) {
     const target = getDailyworkForceApplyTargetFromMatch(match);
     if (target.blockers.length) {
       return createDailyworkDebugForceApplyResult({
@@ -7442,6 +7489,199 @@
     });
 
     controls.appendChild(dailyworkForceApplyWrap);
+
+    const dailyworkSelectedUserWrap = document.createElement("div");
+    dailyworkSelectedUserWrap.style.flex = "1 1 100%";
+    dailyworkSelectedUserWrap.style.display = "flex";
+    dailyworkSelectedUserWrap.style.flexWrap = "wrap";
+    dailyworkSelectedUserWrap.style.gap = "5px";
+    dailyworkSelectedUserWrap.style.alignItems = "center";
+    dailyworkSelectedUserWrap.style.marginTop = "2px";
+
+    let dailyworkSelectedUserItems = [];
+
+    const dailyworkLoadUsersBtn = document.createElement("button");
+    dailyworkLoadUsersBtn.type = "button";
+    dailyworkLoadUsersBtn.textContent = "Dailywork load users";
+    dailyworkLoadUsersBtn.style.padding = "2px 6px";
+    dailyworkLoadUsersBtn.style.border = "1px solid #c9c9c9";
+    dailyworkLoadUsersBtn.style.borderRadius = "999px";
+    dailyworkLoadUsersBtn.style.background = "#fff";
+    dailyworkLoadUsersBtn.style.color = "#444";
+    dailyworkLoadUsersBtn.style.fontSize = "10px";
+    dailyworkLoadUsersBtn.style.lineHeight = "1.25";
+    dailyworkLoadUsersBtn.style.cursor = "pointer";
+    dailyworkLoadUsersBtn.style.boxShadow = "none";
+    dailyworkSelectedUserWrap.appendChild(dailyworkLoadUsersBtn);
+
+    const dailyworkSelectedUserSelect = document.createElement("select");
+    dailyworkSelectedUserSelect.style.flex = "1 1 100%";
+    dailyworkSelectedUserSelect.style.minWidth = "0";
+    dailyworkSelectedUserSelect.style.boxSizing = "border-box";
+    dailyworkSelectedUserSelect.style.padding = "2px 6px";
+    dailyworkSelectedUserSelect.style.border = "1px solid #d7d7d7";
+    dailyworkSelectedUserSelect.style.borderRadius = "4px";
+    dailyworkSelectedUserSelect.style.background = "#fff";
+    dailyworkSelectedUserSelect.style.color = "#444";
+    dailyworkSelectedUserSelect.style.fontSize = "10px";
+    dailyworkSelectedUserSelect.style.lineHeight = "1.25";
+    dailyworkSelectedUserSelect.disabled = true;
+    const dailyworkEmptyOption = document.createElement("option");
+    dailyworkEmptyOption.value = "";
+    dailyworkEmptyOption.textContent = "Load dailywork users first";
+    dailyworkSelectedUserSelect.appendChild(dailyworkEmptyOption);
+    dailyworkSelectedUserWrap.appendChild(dailyworkSelectedUserSelect);
+
+    const dailyworkSelectedDryRunBtn = document.createElement("button");
+    dailyworkSelectedDryRunBtn.type = "button";
+    dailyworkSelectedDryRunBtn.textContent = "Dailywork selected user dry-run";
+    dailyworkSelectedDryRunBtn.style.padding = "2px 6px";
+    dailyworkSelectedDryRunBtn.style.border = "1px solid #c9c9c9";
+    dailyworkSelectedDryRunBtn.style.borderRadius = "999px";
+    dailyworkSelectedDryRunBtn.style.background = "#fff";
+    dailyworkSelectedDryRunBtn.style.color = "#444";
+    dailyworkSelectedDryRunBtn.style.fontSize = "10px";
+    dailyworkSelectedDryRunBtn.style.lineHeight = "1.25";
+    dailyworkSelectedDryRunBtn.style.cursor = "pointer";
+    dailyworkSelectedDryRunBtn.style.boxShadow = "none";
+    dailyworkSelectedDryRunBtn.disabled = true;
+    dailyworkSelectedUserWrap.appendChild(dailyworkSelectedDryRunBtn);
+
+    const dailyworkSelectedForceBtn = document.createElement("button");
+    dailyworkSelectedForceBtn.type = "button";
+    dailyworkSelectedForceBtn.textContent = "Dailywork selected user force apply";
+    dailyworkSelectedForceBtn.style.padding = "2px 6px";
+    dailyworkSelectedForceBtn.style.border = "1px solid #c9c9c9";
+    dailyworkSelectedForceBtn.style.borderRadius = "999px";
+    dailyworkSelectedForceBtn.style.background = "#fff";
+    dailyworkSelectedForceBtn.style.color = "#444";
+    dailyworkSelectedForceBtn.style.fontSize = "10px";
+    dailyworkSelectedForceBtn.style.lineHeight = "1.25";
+    dailyworkSelectedForceBtn.style.cursor = "pointer";
+    dailyworkSelectedForceBtn.style.boxShadow = "none";
+    dailyworkSelectedForceBtn.disabled = true;
+    dailyworkSelectedUserWrap.appendChild(dailyworkSelectedForceBtn);
+
+    const dailyworkSelectedUserOutput = document.createElement("div");
+    dailyworkSelectedUserOutput.style.flex = "1 1 100%";
+    dailyworkSelectedUserOutput.style.display = "none";
+    dailyworkSelectedUserOutput.style.boxSizing = "border-box";
+    dailyworkSelectedUserOutput.style.padding = "5px 6px";
+    dailyworkSelectedUserOutput.style.border = "1px solid #ececec";
+    dailyworkSelectedUserOutput.style.borderRadius = "4px";
+    dailyworkSelectedUserOutput.style.background = "#fff";
+    dailyworkSelectedUserOutput.style.color = "#555";
+    dailyworkSelectedUserOutput.style.fontSize = "10px";
+    dailyworkSelectedUserOutput.style.lineHeight = "1.35";
+    dailyworkSelectedUserOutput.style.whiteSpace = "pre-wrap";
+    dailyworkSelectedUserOutput.style.overflowWrap = "anywhere";
+    dailyworkSelectedUserWrap.appendChild(dailyworkSelectedUserOutput);
+
+    const getDailyworkSelectedUserItem = () => {
+      const idx = Number(dailyworkSelectedUserSelect.value);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= dailyworkSelectedUserItems.length) return null;
+      return dailyworkSelectedUserItems[idx] || null;
+    };
+
+    const renderDailyworkSelectedUserOptions = () => {
+      dailyworkSelectedUserSelect.textContent = "";
+      if (!dailyworkSelectedUserItems.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No dailywork users loaded";
+        dailyworkSelectedUserSelect.appendChild(option);
+        dailyworkSelectedUserSelect.disabled = true;
+        dailyworkSelectedDryRunBtn.disabled = true;
+        dailyworkSelectedForceBtn.disabled = true;
+        return;
+      }
+
+      dailyworkSelectedUserItems.forEach((item, index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = `${item.user} - ${item.names || "(no name)"} - ${item.device}`;
+        dailyworkSelectedUserSelect.appendChild(option);
+      });
+      dailyworkSelectedUserSelect.disabled = false;
+      dailyworkSelectedDryRunBtn.disabled = false;
+      dailyworkSelectedForceBtn.disabled = false;
+    };
+
+    dailyworkLoadUsersBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkSelectedUserOutput.textContent = "Dailywork load users: running...";
+      dailyworkSelectedUserOutput.style.display = "block";
+      try {
+        const response = await sendRecycleRemoteConfigDebugMessage(DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE, { includeItems: true });
+        if (!response?.ok) throw new Error(response?.error || "Dailywork fetch failed");
+        const loadedItems = Array.isArray(response.items) ? response.items : [];
+        dailyworkSelectedUserItems = loadedItems
+          .map(item => ({
+            user: String(item?.user || "").trim(),
+            names: String(item?.names || "").trim(),
+            device: String(item?.device || "").trim(),
+            rawIndex: Number.isFinite(Number(item?.rawIndex)) ? Number(item.rawIndex) : null
+          }))
+          .filter(item => item.user && item.device);
+        renderDailyworkSelectedUserOptions();
+        dailyworkSelectedUserOutput.textContent = [
+          `source: ${response.source || ""}`,
+          `generatedAt: ${response.generatedAt || ""}`,
+          `items: ${dailyworkSelectedUserItems.length}/${Number(response.validItemCount || response.itemCount || dailyworkSelectedUserItems.length)} loaded`,
+          "Loaded users are kept in memory only."
+        ].join("\n");
+      } catch (error) {
+        dailyworkSelectedUserItems = [];
+        renderDailyworkSelectedUserOptions();
+        dailyworkSelectedUserOutput.textContent = [
+          "ok: false",
+          `error: ${String(error?.message || error || "Dailywork load users failed")}`,
+          "Loaded users are kept in memory only."
+        ].join("\n");
+      }
+    });
+
+    dailyworkSelectedDryRunBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = getDailyworkSelectedUserItem();
+      const result = buildDailyworkMatchResultFromScheduleItem(item);
+      dailyworkSelectedUserOutput.textContent = [
+        `selected user: ${result.technicianId || ""}`,
+        `selected names: ${result.scheduleNames || ""}`,
+        `selected device: ${result.scheduleDevice || ""}`,
+        `resolved action: ${result.action || ""}`,
+        `categoryId: ${result.categoryId || ""}`,
+        `deviceIds: ${Array.isArray(result.deviceIds) ? result.deviceIds.join(", ") : ""}`,
+        `confidence: ${result.confidence || ""}`,
+        `reason: ${result.reason || ""}`,
+        `wouldApply: ${result.wouldApply === "yes" ? "yes" : "no"}`,
+        "Diagnostics only. No category/device was selected."
+      ].join("\n");
+      dailyworkSelectedUserOutput.style.display = "block";
+    });
+
+    dailyworkSelectedForceBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const item = getDailyworkSelectedUserItem();
+      const match = buildDailyworkMatchResultFromScheduleItem(item);
+      const result = applyDailyworkDebugForceTarget(panel, match);
+      dailyworkSelectedUserOutput.textContent = [
+        `forced: ${result?.forced === "yes" ? "yes" : "no"}`,
+        `applied: ${result?.applied === "yes" ? "yes" : "no"}`,
+        `targetCategoryId: ${result?.targetCategoryId || ""}`,
+        `targetDeviceIds: ${Array.isArray(result?.targetDeviceIds) ? result.targetDeviceIds.join(", ") : ""}`,
+        `reason: ${result?.reason || ""}`,
+        `blockers: ${Array.isArray(result?.blockers) ? result.blockers.join(", ") : ""}`,
+        `renderedPanels: ${Number(result?.renderedPanels || 0)}`,
+        "Manual debug/demo action. No OSS navigation or Continue click was performed."
+      ].join("\n");
+      dailyworkSelectedUserOutput.style.display = "block";
+    });
+
+    controls.appendChild(dailyworkSelectedUserWrap);
 
     details.appendChild(controls);
     wrap.appendChild(details);
