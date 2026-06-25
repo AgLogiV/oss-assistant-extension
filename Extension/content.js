@@ -7583,6 +7583,50 @@
       return dailyworkSelectedUserItems[idx] || null;
     };
 
+    const buildDailyworkSelectedUserSourceSummary = (response) => {
+      const deviceCounts = new Map();
+      const userIds = new Set();
+      dailyworkSelectedUserItems.forEach(item => {
+        const user = String(item?.user || "").trim();
+        const device = String(item?.device || "").trim();
+        if (user) userIds.add(user);
+        if (device) deviceCounts.set(device, (deviceCounts.get(device) || 0) + 1);
+      });
+
+      const topDevices = Array.from(deviceCounts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 10);
+      const remainingDeviceCount = Math.max(0, deviceCounts.size - topDevices.length);
+      const lines = [
+        `source: ${response?.source || ""}`,
+        `generatedAt: ${response?.generatedAt || ""}`,
+        `total items: ${Number(response?.itemCount || 0)}`,
+        `valid loaded items: ${dailyworkSelectedUserItems.length}`,
+        `unique users: ${Number(response?.uniqueUserCount || userIds.size)}`,
+        `unique devices: ${Number(response?.uniqueDeviceCount || deviceCounts.size)}`,
+        "top device counts:"
+      ];
+
+      if (topDevices.length) {
+        topDevices.forEach(([device, count]) => {
+          lines.push(`${device}: ${count}`);
+        });
+      } else {
+        lines.push("(none)");
+      }
+
+      if (remainingDeviceCount > 0) {
+        lines.push(`... ${remainingDeviceCount} more device(s)`);
+      }
+
+      if (deviceCounts.size === 1 && dailyworkSelectedUserItems.length > 0) {
+        lines.push(`Note: all loaded rows have the same device: ${topDevices[0][0]}`);
+      }
+
+      lines.push("Loaded users are kept in memory only.");
+      return lines;
+    };
+
     const renderDailyworkSelectedUserOptions = () => {
       dailyworkSelectedUserSelect.textContent = "";
       if (!dailyworkSelectedUserItems.length) {
@@ -7625,12 +7669,7 @@
           }))
           .filter(item => item.user && item.device);
         renderDailyworkSelectedUserOptions();
-        dailyworkSelectedUserOutput.textContent = [
-          `source: ${response.source || ""}`,
-          `generatedAt: ${response.generatedAt || ""}`,
-          `items: ${dailyworkSelectedUserItems.length}/${Number(response.validItemCount || response.itemCount || dailyworkSelectedUserItems.length)} loaded`,
-          "Loaded users are kept in memory only."
-        ].join("\n");
+        dailyworkSelectedUserOutput.textContent = buildDailyworkSelectedUserSourceSummary(response).join("\n");
       } catch (error) {
         dailyworkSelectedUserItems = [];
         renderDailyworkSelectedUserOptions();
