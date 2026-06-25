@@ -7562,6 +7562,20 @@
     dailyworkSelectedForceBtn.disabled = true;
     dailyworkSelectedUserWrap.appendChild(dailyworkSelectedForceBtn);
 
+    const dailyworkShowScheduleBtn = document.createElement("button");
+    dailyworkShowScheduleBtn.type = "button";
+    dailyworkShowScheduleBtn.textContent = "Dailywork show schedule";
+    dailyworkShowScheduleBtn.style.padding = "2px 6px";
+    dailyworkShowScheduleBtn.style.border = "1px solid #c9c9c9";
+    dailyworkShowScheduleBtn.style.borderRadius = "999px";
+    dailyworkShowScheduleBtn.style.background = "#fff";
+    dailyworkShowScheduleBtn.style.color = "#444";
+    dailyworkShowScheduleBtn.style.fontSize = "10px";
+    dailyworkShowScheduleBtn.style.lineHeight = "1.25";
+    dailyworkShowScheduleBtn.style.cursor = "pointer";
+    dailyworkShowScheduleBtn.style.boxShadow = "none";
+    dailyworkSelectedUserWrap.appendChild(dailyworkShowScheduleBtn);
+
     const dailyworkSelectedUserOutput = document.createElement("div");
     dailyworkSelectedUserOutput.style.flex = "1 1 100%";
     dailyworkSelectedUserOutput.style.display = "none";
@@ -7576,6 +7590,23 @@
     dailyworkSelectedUserOutput.style.whiteSpace = "pre-wrap";
     dailyworkSelectedUserOutput.style.overflowWrap = "anywhere";
     dailyworkSelectedUserWrap.appendChild(dailyworkSelectedUserOutput);
+
+    const dailyworkScheduleViewer = document.createElement("div");
+    dailyworkScheduleViewer.style.flex = "1 1 100%";
+    dailyworkScheduleViewer.style.display = "none";
+    dailyworkScheduleViewer.style.boxSizing = "border-box";
+    dailyworkScheduleViewer.style.maxHeight = "260px";
+    dailyworkScheduleViewer.style.overflow = "auto";
+    dailyworkScheduleViewer.style.padding = "5px 6px";
+    dailyworkScheduleViewer.style.border = "1px solid #e5e5e5";
+    dailyworkScheduleViewer.style.borderRadius = "4px";
+    dailyworkScheduleViewer.style.background = "#fff";
+    dailyworkScheduleViewer.style.color = "#444";
+    dailyworkScheduleViewer.style.fontSize = "10px";
+    dailyworkScheduleViewer.style.lineHeight = "1.35";
+    dailyworkSelectedUserWrap.appendChild(dailyworkScheduleViewer);
+
+    let dailyworkScheduleViewerVisible = false;
 
     const getDailyworkSelectedUserItem = () => {
       const idx = Number(dailyworkSelectedUserSelect.value);
@@ -7627,6 +7658,106 @@
       return lines;
     };
 
+    const renderDailyworkScheduleViewer = async () => {
+      dailyworkScheduleViewer.textContent = "";
+
+      if (!dailyworkSelectedUserItems.length) {
+        dailyworkScheduleViewer.textContent = "Load users first";
+        dailyworkScheduleViewer.style.display = "block";
+        return;
+      }
+
+      let technicianResult = null;
+      try {
+        technicianResult = await detectDailyworkTechnicianDryRun();
+      } catch (error) {
+        technicianResult = {
+          ok: false,
+          reason: String(error?.message || error || "technician_detection_failed")
+        };
+      }
+
+      const currentTechnicianId = technicianResult?.ok && technicianResult?.technicianId
+        ? String(technicianResult.technicianId).trim()
+        : "";
+
+      const note = document.createElement("div");
+      note.style.marginBottom = "4px";
+      note.style.color = currentTechnicianId ? "#2f6f3e" : "#8a6d3b";
+      note.textContent = currentTechnicianId
+        ? `current technician: ${currentTechnicianId}`
+        : "current technician unavailable";
+      dailyworkScheduleViewer.appendChild(note);
+
+      const table = document.createElement("table");
+      table.style.width = "100%";
+      table.style.borderCollapse = "collapse";
+      table.style.tableLayout = "fixed";
+
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      ["User", "Name", "Device", "Action", "Target"].forEach(label => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        th.style.textAlign = "left";
+        th.style.padding = "3px 4px";
+        th.style.borderBottom = "1px solid #e0e0e0";
+        th.style.position = "sticky";
+        th.style.top = "0";
+        th.style.background = "#f8f8f8";
+        th.style.fontWeight = "600";
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      dailyworkSelectedUserItems.forEach(item => {
+        const selection = resolveDailyworkDeviceSelection(item.device);
+        const deviceIds = Array.isArray(selection?.deviceIds) ? selection.deviceIds.filter(Boolean) : [];
+        const target = [
+          selection?.categoryId || "",
+          deviceIds.length ? deviceIds.join(", ") : ""
+        ].filter(Boolean).join(" / ");
+        const isCurrent = currentTechnicianId && String(item.user || "").trim() === currentTechnicianId;
+        const row = document.createElement("tr");
+        if (isCurrent) {
+          row.style.background = "#eef8f0";
+          row.style.outline = "1px solid #8fcf9d";
+        }
+
+        const cells = [
+          String(item.user || ""),
+          String(item.names || ""),
+          String(item.device || ""),
+          String(selection?.action || ""),
+          target
+        ];
+
+        cells.forEach((value, index) => {
+          const td = document.createElement("td");
+          td.style.padding = "3px 4px";
+          td.style.borderBottom = "1px solid #f0f0f0";
+          td.style.verticalAlign = "top";
+          td.style.overflowWrap = "anywhere";
+          td.textContent = value;
+          if (index === 0 && isCurrent) {
+            const badge = document.createElement("span");
+            badge.textContent = " current";
+            badge.style.color = "#2f6f3e";
+            badge.style.fontWeight = "600";
+            td.appendChild(badge);
+          }
+          row.appendChild(td);
+        });
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      dailyworkScheduleViewer.appendChild(table);
+      dailyworkScheduleViewer.style.display = "block";
+    };
+
     const renderDailyworkSelectedUserOptions = () => {
       dailyworkSelectedUserSelect.textContent = "";
       if (!dailyworkSelectedUserItems.length) {
@@ -7670,9 +7801,14 @@
           .filter(item => item.user && item.device);
         renderDailyworkSelectedUserOptions();
         dailyworkSelectedUserOutput.textContent = buildDailyworkSelectedUserSourceSummary(response).join("\n");
+        if (dailyworkScheduleViewerVisible) await renderDailyworkScheduleViewer();
       } catch (error) {
         dailyworkSelectedUserItems = [];
         renderDailyworkSelectedUserOptions();
+        if (dailyworkScheduleViewerVisible) {
+          dailyworkScheduleViewer.textContent = "Load users first";
+          dailyworkScheduleViewer.style.display = "block";
+        }
         dailyworkSelectedUserOutput.textContent = [
           "ok: false",
           `error: ${String(error?.message || error || "Dailywork load users failed")}`,
@@ -7699,6 +7835,22 @@
         "Diagnostics only. No category/device was selected."
       ].join("\n");
       dailyworkSelectedUserOutput.style.display = "block";
+    });
+
+    dailyworkShowScheduleBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dailyworkScheduleViewerVisible = !dailyworkScheduleViewerVisible;
+      dailyworkShowScheduleBtn.textContent = dailyworkScheduleViewerVisible
+        ? "Dailywork hide schedule"
+        : "Dailywork show schedule";
+      if (!dailyworkScheduleViewerVisible) {
+        dailyworkScheduleViewer.style.display = "none";
+        return;
+      }
+      dailyworkScheduleViewer.textContent = "Dailywork schedule: rendering...";
+      dailyworkScheduleViewer.style.display = "block";
+      await renderDailyworkScheduleViewer();
     });
 
     dailyworkSelectedForceBtn.addEventListener("click", async (e) => {
