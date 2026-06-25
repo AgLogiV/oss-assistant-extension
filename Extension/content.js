@@ -555,6 +555,7 @@
       clearRecycleEntrySelectionStorage();
       const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
       const panel = root ? root.querySelector(".wifi-oss-recycle-category-panel") : null;
+      if (root || panel) markDailyworkAutoSuppressedForWorkday();
       if (panel) {
         panel.dataset.wifiOssRecycleSelected = "";
         if (!refreshRecycleEntryCategoryPanel(panel)) {
@@ -3780,10 +3781,14 @@
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY = "wifi_oss_recycle_entry_material_snapshot";
   const RECYCLE_HISTORY_TEMPLATE_KEY = "wifi_oss_recycle_history_url_template";
+  const DAILYWORK_AUTO_APPLIED_DATE_KEY = "wifi_oss_dailywork_auto_applied_date_v1";
+  const DAILYWORK_AUTO_SUPPRESSED_DATE_KEY = "wifi_oss_dailywork_auto_suppressed_date_v1";
+  const DAILYWORK_MANUAL_USER_OVERRIDE_KEY = "wifi_oss_dailywork_manual_user_override_v1";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
   const RECYCLE_SERIAL_HELP_PANEL_ID = "wifi-oss-recycle-serial-help-panel";
   const DAILYWORK_SCHEDULE_BUTTON_ID = "wifi-oss-dailywork-schedule-btn";
+  const DAILYWORK_APPLY_BUTTON_ID = "wifi-oss-dailywork-apply-btn";
   const DAILYWORK_SCHEDULE_PANEL_ID = "wifi-oss-dailywork-schedule-panel";
   const RECYCLE_STATE_ROOT_ID = "_wflowRecycleState";
   const RECYCLE_STATE_SERIAL_INPUT_ID = "_wflowRecycleState_SerialNo";
@@ -4250,9 +4255,13 @@
     let storedDate = "";
     let categoryId = "";
     let legacyCategoryId = "";
+    let autoAppliedDate = "";
+    let autoSuppressedDate = "";
     let dateExpired = false;
 
     try { storedDate = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_DATE_KEY) || "").trim(); } catch (e) {}
+    try { autoAppliedDate = String(localStorage.getItem(DAILYWORK_AUTO_APPLIED_DATE_KEY) || "").trim(); } catch (e) {}
+    try { autoSuppressedDate = String(localStorage.getItem(DAILYWORK_AUTO_SUPPRESSED_DATE_KEY) || "").trim(); } catch (e) {}
     dateExpired = Boolean(storedDate && storedDate !== currentWorkday);
     if (!dateExpired) {
       try { categoryId = String(localStorage.getItem(RECYCLE_ENTRY_SELECTED_KEY) || "").trim(); } catch (e) {}
@@ -4265,8 +4274,18 @@
       currentDeviceIds: deviceIds,
       currentWorkday,
       currentSelectionDate: storedDate,
-      selectionDateExpired: dateExpired
+      selectionDateExpired: dateExpired,
+      autoAppliedDate,
+      autoSuppressedDate
     };
+  }
+
+  function markDailyworkAutoAppliedForWorkday(workday = localDateKey()) {
+    try { localStorage.setItem(DAILYWORK_AUTO_APPLIED_DATE_KEY, String(workday || localDateKey())); } catch (e) {}
+  }
+
+  function markDailyworkAutoSuppressedForWorkday(workday = localDateKey()) {
+    try { localStorage.setItem(DAILYWORK_AUTO_SUPPRESSED_DATE_KEY, String(workday || localDateKey())); } catch (e) {}
   }
 
   function createDailyworkAutoSelectPlanDryRun(overrides = {}) {
@@ -4282,6 +4301,8 @@
       currentDeviceIds: [],
       currentWorkday: "",
       currentSelectionDate: "",
+      autoAppliedDate: "",
+      autoSuppressedDate: "",
       wouldApply: "no",
       blockers: [],
       reason: "",
@@ -4296,8 +4317,12 @@
     const targetDeviceIds = Array.isArray(match?.deviceIds) ? match.deviceIds.map(id => String(id || "").trim()).filter(Boolean) : [];
     const currentCategoryId = String(currentState?.currentCategoryId || "").trim();
     const currentDeviceIds = Array.isArray(currentState?.currentDeviceIds) ? currentState.currentDeviceIds.map(id => String(id || "").trim()).filter(Boolean) : [];
+    const currentWorkday = String(currentState?.currentWorkday || "").trim();
+    const autoAppliedDate = String(currentState?.autoAppliedDate || "").trim();
+    const autoSuppressedDate = String(currentState?.autoSuppressedDate || "").trim();
     const matchOk = match?.ok === true;
     const scheduleRowStatus = String(match?.scheduleRowStatus || "invalid").trim() || "invalid";
+    const target = getDailyworkForceApplyTargetFromMatch(match);
 
     if (!matchOk) {
       if (!match?.technicianId) blockers.push("technician_detection_failed");
@@ -4313,10 +4338,17 @@
       blockers.push(targetCategoryId ? "target_category_unknown" : "target_category_missing");
     }
 
+    target.blockers.forEach(blocker => {
+      if (String(blocker || "").startsWith("target_device")) blockers.push(blocker);
+    });
+
     if (currentCategoryId) blockers.push("current_category_already_selected");
     if (currentDeviceIds.length) blockers.push("current_devices_already_selected");
+    if (currentWorkday && autoSuppressedDate === currentWorkday) blockers.push("dailywork_auto_suppressed_for_workday");
+    if (currentWorkday && autoAppliedDate === currentWorkday) blockers.push("dailywork_auto_already_applied_for_workday");
 
-    const wouldApply = blockers.length === 0 && (resolvedAction === "category" || resolvedAction === "category_device");
+    const uniqueBlockers = Array.from(new Set(blockers));
+    const wouldApply = uniqueBlockers.length === 0 && (resolvedAction === "category" || resolvedAction === "category_device");
     return createDailyworkAutoSelectPlanDryRun({
       ok: matchOk,
       technicianId: String(match?.technicianId || "").trim(),
@@ -4327,11 +4359,13 @@
       targetDeviceIds,
       currentCategoryId,
       currentDeviceIds,
-      currentWorkday: String(currentState?.currentWorkday || "").trim(),
+      currentWorkday,
       currentSelectionDate: String(currentState?.currentSelectionDate || "").trim(),
+      autoAppliedDate,
+      autoSuppressedDate,
       wouldApply: wouldApply ? "yes" : "no",
-      blockers,
-      reason: wouldApply ? "auto_select_plan_allowed" : (blockers[0] || match?.reason || "auto_select_plan_blocked")
+      blockers: uniqueBlockers,
+      reason: wouldApply ? "auto_select_plan_allowed" : (uniqueBlockers[0] || match?.reason || "auto_select_plan_blocked")
     });
   }
 
@@ -4459,6 +4493,51 @@
       reason: target.action === "category_device" ? "manual_debug_force_applied_category_device" : "manual_debug_force_applied_category",
       renderedPanels
     });
+  }
+
+  async function runDailyworkProductionAutoSelect(panel) {
+    if (!panel || dailyworkProductionAutoSelectPromise) return null;
+
+    dailyworkProductionAutoSelectPromise = (async () => {
+      const plan = await buildDailyworkAutoSelectPlanDryRun();
+      if (plan?.wouldApply !== "yes") return { applied: false, plan };
+
+      const currentState = readDailyworkAutoPlanCurrentSelectionState();
+      const currentWorkday = String(currentState.currentWorkday || localDateKey()).trim();
+      const lateBlockers = [];
+      if (String(currentState.currentCategoryId || "").trim()) lateBlockers.push("current_category_already_selected");
+      if (Array.isArray(currentState.currentDeviceIds) && currentState.currentDeviceIds.length) lateBlockers.push("current_devices_already_selected");
+      if (currentWorkday && String(currentState.autoSuppressedDate || "").trim() === currentWorkday) lateBlockers.push("dailywork_auto_suppressed_for_workday");
+      if (currentWorkday && String(currentState.autoAppliedDate || "").trim() === currentWorkday) lateBlockers.push("dailywork_auto_already_applied_for_workday");
+      if (lateBlockers.length) {
+        return {
+          applied: false,
+          plan: {
+            ...plan,
+            wouldApply: "no",
+            blockers: Array.from(new Set([...(Array.isArray(plan.blockers) ? plan.blockers : []), ...lateBlockers])),
+            reason: lateBlockers[0]
+          }
+        };
+      }
+
+      writeSelectedRecycleEntryCategory(plan.targetCategoryId);
+      if (plan.resolvedAction === "category_device") writeSelectedRecycleDeviceIdsStorage(plan.targetDeviceIds);
+      else writeSelectedRecycleDeviceIdsStorage([]);
+      markDailyworkAutoAppliedForWorkday(currentWorkday);
+      const renderedPanels = refreshRecycleEntryCategoryPanel(panel) ? 1 : refreshRecycleRemoteVisualOverlayPanels();
+      return { applied: true, plan, renderedPanels };
+    })().catch(error => ({
+      applied: false,
+      plan: createDailyworkAutoSelectPlanDryRun({
+        reason: String(error?.message || error || "dailywork_production_auto_select_failed"),
+        blockers: ["dailywork_production_auto_select_failed"]
+      })
+    })).finally(() => {
+      dailyworkProductionAutoSelectPromise = null;
+    });
+
+    return dailyworkProductionAutoSelectPromise;
   }
 
   function buildRecycleHistoryUrlForDateRange(now = new Date()) {
@@ -4954,6 +5033,7 @@
   let dailyworkScheduleMeta = null;
   let dailyworkScheduleLoadPromise = null;
   let dailyworkSchedulePanelCloseTimer = 0;
+  let dailyworkProductionAutoSelectPromise = null;
   const recycleInlineAlertAnimations = new WeakMap();
 
   function stopRecycleInlineAlertAnimation(el) {
@@ -5669,6 +5749,147 @@
     ].filter(Boolean).join(" / ");
   }
 
+  function readDailyworkManualUserOverride() {
+    try { return String(localStorage.getItem(DAILYWORK_MANUAL_USER_OVERRIDE_KEY) || "").trim(); } catch (e) {}
+    return "";
+  }
+
+  function writeDailyworkManualUserOverride(userId) {
+    const value = String(userId || "").trim();
+    try {
+      if (value) localStorage.setItem(DAILYWORK_MANUAL_USER_OVERRIDE_KEY, value);
+      else localStorage.removeItem(DAILYWORK_MANUAL_USER_OVERRIDE_KEY);
+    } catch (e) {}
+  }
+
+  function findDailyworkScheduleRowsByUser(rows, userId) {
+    const targetUser = String(userId || "").trim();
+    if (!targetUser) return [];
+    return (Array.isArray(rows) ? rows : []).filter(item => String(item?.user || "").trim() === targetUser);
+  }
+
+  function createDailyworkManualApplyResult(overrides = {}) {
+    return {
+      ok: false,
+      applied: "no",
+      sourceUser: "",
+      user: "",
+      names: "",
+      device: "",
+      targetCategoryId: "",
+      targetDeviceIds: [],
+      reason: "",
+      blockers: [],
+      renderedPanels: 0,
+      ...overrides
+    };
+  }
+
+  function renderDailyworkManualApplyResult(ui, result) {
+    if (!ui?.manualResult) return;
+    ui.manualResult.textContent = [
+      `manual apply: ${result?.applied === "yes" ? "yes" : "no"}`,
+      `source user: ${result?.sourceUser || ""}`,
+      `user: ${result?.user || ""}`,
+      `names: ${result?.names || ""}`,
+      `device: ${result?.device || ""}`,
+      `targetCategoryId: ${result?.targetCategoryId || ""}`,
+      `targetDeviceIds: ${Array.isArray(result?.targetDeviceIds) ? result.targetDeviceIds.join(", ") : ""}`,
+      `reason: ${result?.reason || ""}`,
+      `blockers: ${Array.isArray(result?.blockers) ? result.blockers.join(", ") : ""}`,
+      "Manual action. No OSS navigation or Continue click was performed."
+    ].join("\n");
+    ui.manualResult.style.display = "block";
+  }
+
+  function applyDailyworkManualScheduleItem(panel, item, sourceUser) {
+    const match = buildDailyworkMatchResultFromScheduleItem(item);
+    const target = getDailyworkForceApplyTargetFromMatch(match);
+    if (target.blockers.length) {
+      return createDailyworkManualApplyResult({
+        ok: false,
+        applied: "no",
+        sourceUser,
+        user: String(item?.user || "").trim(),
+        names: String(item?.names || "").trim(),
+        device: String(item?.device || "").trim(),
+        targetCategoryId: target.categoryId,
+        targetDeviceIds: target.deviceIds,
+        reason: target.blockers[0] || "dailywork_manual_apply_skipped",
+        blockers: target.blockers
+      });
+    }
+
+    writeSelectedRecycleEntryCategory(target.categoryId);
+    if (target.action === "category_device") writeSelectedRecycleDeviceIdsStorage(target.deviceIds);
+    else writeSelectedRecycleDeviceIdsStorage([]);
+    const renderedPanels = refreshRecycleEntryCategoryPanel(panel) ? 1 : refreshRecycleRemoteVisualOverlayPanels();
+    return createDailyworkManualApplyResult({
+      ok: true,
+      applied: "yes",
+      sourceUser,
+      user: String(item?.user || "").trim(),
+      names: String(item?.names || "").trim(),
+      device: String(item?.device || "").trim(),
+      targetCategoryId: target.categoryId,
+      targetDeviceIds: target.action === "category_device" ? target.deviceIds : [],
+      reason: target.action === "category_device" ? "manual_apply_category_device" : "manual_apply_category",
+      blockers: [],
+      renderedPanels
+    });
+  }
+
+  async function runDailyworkManualApply(panel, ui) {
+    let rows = [];
+    try {
+      const loaded = await loadDailyworkSchedulePanelRows();
+      rows = Array.isArray(loaded?.rows) ? loaded.rows : [];
+    } catch (error) {
+      return createDailyworkManualApplyResult({
+        reason: String(error?.message || error || "dailywork_schedule_fetch_failed"),
+        blockers: ["dailywork_schedule_fetch_failed"]
+      });
+    }
+
+    let technician = null;
+    try { technician = await detectDailyworkTechnicianDryRun(); } catch (e) {}
+    const technicianId = technician?.ok ? String(technician?.technicianId || "").trim() : "";
+    const currentMatches = findDailyworkScheduleRowsByUser(rows, technicianId);
+    if (currentMatches.length === 1) {
+      return applyDailyworkManualScheduleItem(panel, currentMatches[0], "current technician");
+    }
+    if (currentMatches.length > 1) {
+      return createDailyworkManualApplyResult({
+        sourceUser: "current technician",
+        user: technicianId,
+        reason: "multiple_dailywork_rows_for_current_technician",
+        blockers: ["multiple_dailywork_rows_for_current_technician"]
+      });
+    }
+
+    const fallbackUser = readDailyworkManualUserOverride();
+    if (!fallbackUser) {
+      return createDailyworkManualApplyResult({
+        sourceUser: technicianId ? "current technician" : "",
+        user: technicianId,
+        reason: technicianId ? "current_technician_row_not_found" : "current_technician_unavailable",
+        blockers: [technicianId ? "current_technician_row_not_found" : "current_technician_unavailable", "saved_fallback_user_missing"]
+      });
+    }
+
+    const fallbackMatches = findDailyworkScheduleRowsByUser(rows, fallbackUser);
+    if (fallbackMatches.length !== 1) {
+      return createDailyworkManualApplyResult({
+        sourceUser: "saved fallback",
+        user: fallbackUser,
+        reason: fallbackMatches.length > 1 ? "multiple_dailywork_rows_for_saved_fallback" : "saved_fallback_row_not_found",
+        blockers: [fallbackMatches.length > 1 ? "multiple_dailywork_rows_for_saved_fallback" : "saved_fallback_row_not_found"]
+      });
+    }
+
+    return applyDailyworkManualScheduleItem(panel, fallbackMatches[0], "saved fallback");
+  }
+
   async function loadDailyworkSchedulePanelRows() {
     if (dailyworkScheduleRows.length && dailyworkScheduleMeta?.ok) {
       return { ok: true, response: dailyworkScheduleMeta, rows: dailyworkScheduleRows };
@@ -5745,6 +5966,41 @@
       ? "none"
       : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), box-shadow 160ms ease";
     button.textContent = "ДР";
+
+    const applyButton = document.createElement("button");
+    applyButton.id = DAILYWORK_APPLY_BUTTON_ID;
+    applyButton.type = "button";
+    applyButton.title = "Приложи дневното разписание";
+    applyButton.setAttribute("aria-label", "Приложи дневното разписание");
+    applyButton.style.position = "fixed";
+    applyButton.style.top = "266px";
+    applyButton.style.right = "18px";
+    applyButton.style.zIndex = "2147482999";
+    applyButton.style.width = "48px";
+    applyButton.style.height = "48px";
+    applyButton.style.boxSizing = "border-box";
+    applyButton.style.padding = "0 12px";
+    applyButton.style.border = "1px solid #7a2d1a";
+    applyButton.style.borderRadius = "6px";
+    applyButton.style.background = "#ffe3d6";
+    applyButton.style.color = "#6b2413";
+    applyButton.style.boxShadow = "0 3px 10px rgba(107, 36, 19, 0.18)";
+    applyButton.style.cursor = "pointer";
+    applyButton.style.display = "none";
+    applyButton.style.alignItems = "center";
+    applyButton.style.justifyContent = "center";
+    applyButton.style.fontSize = "12px";
+    applyButton.style.fontWeight = "900";
+    applyButton.style.lineHeight = "1.1";
+    applyButton.style.letterSpacing = "0";
+    applyButton.style.whiteSpace = "nowrap";
+    applyButton.style.overflow = "hidden";
+    applyButton.style.opacity = "0";
+    applyButton.style.transform = "translateX(14px)";
+    applyButton.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), width 160ms ease, box-shadow 160ms ease";
+    applyButton.textContent = "OK";
 
     const panel = document.createElement("aside");
     panel.id = DAILYWORK_SCHEDULE_PANEL_ID;
@@ -5836,6 +6092,67 @@
     technicianNote.style.fontSize = "11px";
     technicianNote.style.lineHeight = "1.35";
 
+    const manualArea = document.createElement("div");
+    manualArea.style.flex = "0 0 auto";
+    manualArea.style.display = "flex";
+    manualArea.style.flexWrap = "wrap";
+    manualArea.style.alignItems = "center";
+    manualArea.style.gap = "6px";
+    manualArea.style.marginBottom = "8px";
+    manualArea.style.padding = "6px 8px";
+    manualArea.style.border = "1px solid #dce8e4";
+    manualArea.style.borderRadius = "6px";
+    manualArea.style.background = "#ffffff";
+
+    const manualSelect = document.createElement("select");
+    manualSelect.style.flex = "1 1 300px";
+    manualSelect.style.minWidth = "0";
+    manualSelect.style.boxSizing = "border-box";
+    manualSelect.style.padding = "4px 6px";
+    manualSelect.style.border = "1px solid #cbdcd6";
+    manualSelect.style.borderRadius = "4px";
+    manualSelect.style.background = "#fff";
+    manualSelect.style.color = "#33443f";
+    manualSelect.style.fontSize = "11px";
+    manualSelect.disabled = true;
+
+    const manualSaveBtn = document.createElement("button");
+    manualSaveBtn.type = "button";
+    manualSaveBtn.textContent = "Запази избрания техник";
+    manualSaveBtn.style.flex = "0 0 auto";
+    manualSaveBtn.style.padding = "4px 8px";
+    manualSaveBtn.style.border = "1px solid #b9c7c3";
+    manualSaveBtn.style.borderRadius = "4px";
+    manualSaveBtn.style.background = "#f8fbfa";
+    manualSaveBtn.style.color = "#23463e";
+    manualSaveBtn.style.cursor = "pointer";
+    manualSaveBtn.style.fontSize = "11px";
+    manualSaveBtn.style.fontWeight = "800";
+    manualSaveBtn.disabled = true;
+
+    const manualStatus = document.createElement("div");
+    manualStatus.style.flex = "1 1 100%";
+    manualStatus.style.color = "#52625e";
+    manualStatus.style.fontSize = "11px";
+    manualStatus.style.lineHeight = "1.35";
+
+    const manualResult = document.createElement("div");
+    manualResult.style.flex = "1 1 100%";
+    manualResult.style.display = "none";
+    manualResult.style.marginTop = "2px";
+    manualResult.style.paddingTop = "6px";
+    manualResult.style.borderTop = "1px solid #eef3f1";
+    manualResult.style.color = "#40534e";
+    manualResult.style.fontSize = "11px";
+    manualResult.style.lineHeight = "1.35";
+    manualResult.style.whiteSpace = "pre-wrap";
+    manualResult.style.overflowWrap = "anywhere";
+
+    manualArea.appendChild(manualSelect);
+    manualArea.appendChild(manualSaveBtn);
+    manualArea.appendChild(manualStatus);
+    manualArea.appendChild(manualResult);
+
     const tableWrap = document.createElement("div");
     tableWrap.style.flex = "1 1 auto";
     tableWrap.style.minHeight = "0";
@@ -5850,11 +6167,13 @@
     panel.appendChild(status);
     panel.appendChild(summary);
     panel.appendChild(technicianNote);
+    panel.appendChild(manualArea);
     panel.appendChild(tableWrap);
     parent.appendChild(button);
+    parent.appendChild(applyButton);
     parent.appendChild(panel);
 
-    dailyworkScheduleUi = { button, panel, closeBtn, status, summary, technicianNote, tableWrap };
+    dailyworkScheduleUi = { button, applyButton, panel, closeBtn, status, summary, technicianNote, manualSelect, manualSaveBtn, manualStatus, manualResult, tableWrap };
 
     button.addEventListener("mouseenter", () => {
       button.style.boxShadow = "0 5px 14px rgba(18, 72, 59, 0.26)";
@@ -5862,15 +6181,55 @@
     button.addEventListener("mouseleave", () => {
       button.style.boxShadow = "0 3px 10px rgba(18, 72, 59, 0.18)";
     });
+    applyButton.addEventListener("mouseenter", () => {
+      applyButton.style.width = "210px";
+      applyButton.textContent = "Приложи дневното разписание";
+      applyButton.style.boxShadow = "0 5px 14px rgba(107, 36, 19, 0.26)";
+    });
+    applyButton.addEventListener("mouseleave", () => {
+      applyButton.style.width = "48px";
+      applyButton.textContent = "OK";
+      applyButton.style.boxShadow = "0 3px 10px rgba(107, 36, 19, 0.18)";
+    });
+    applyButton.addEventListener("focus", () => {
+      applyButton.style.width = "210px";
+      applyButton.textContent = "Приложи дневното разписание";
+    });
+    applyButton.addEventListener("blur", () => {
+      applyButton.style.width = "48px";
+      applyButton.textContent = "OK";
+    });
     button.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
       await setDailyworkSchedulePanelOpen(panel.dataset.wifiOssDailyworkScheduleOpen !== "1");
     });
+    applyButton.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const panelIsOpen = panel.dataset.wifiOssDailyworkScheduleOpen === "1";
+      if (panelIsOpen && dailyworkScheduleUi?.manualResult) {
+        dailyworkScheduleUi.manualResult.textContent = "manual apply: running...";
+        dailyworkScheduleUi.manualResult.style.display = "block";
+      }
+      const result = await runDailyworkManualApply(document.querySelector(`.${RECYCLE_ENTRY_PANEL_CLASS}`), dailyworkScheduleUi);
+      if (panelIsOpen) {
+        renderDailyworkManualApplyResult(dailyworkScheduleUi, result);
+        await renderDailyworkSchedulePanel(dailyworkScheduleUi);
+        renderDailyworkManualApplyResult(dailyworkScheduleUi, result);
+      }
+    });
     closeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       setDailyworkSchedulePanelOpen(false);
+    });
+    manualSaveBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const selectedUser = String(manualSelect.value || "").trim();
+      writeDailyworkManualUserOverride(selectedUser);
+      await renderDailyworkSchedulePanel(dailyworkScheduleUi);
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && panel.dataset.wifiOssDailyworkScheduleOpen === "1") {
@@ -5885,20 +6244,64 @@
     const ui = ensureDailyworkScheduleUi();
     if (!ui) return;
     ui.button.style.display = visible ? "flex" : "none";
+    if (ui.applyButton) ui.applyButton.style.display = visible ? "flex" : "none";
     ui.button.setAttribute("aria-hidden", visible ? "false" : "true");
+    ui.applyButton?.setAttribute("aria-hidden", visible ? "false" : "true");
     if (isRecycleReducedMotionPreferred()) {
       ui.button.style.opacity = visible ? "1" : "0";
       ui.button.style.transform = "none";
+      if (ui.applyButton) {
+        ui.applyButton.style.opacity = visible ? "1" : "0";
+        ui.applyButton.style.transform = "none";
+      }
       return;
     }
     requestAnimationFrame(() => {
       ui.button.style.opacity = visible ? "1" : "0";
       ui.button.style.transform = visible ? "translateX(0)" : "translateX(14px)";
+      if (ui.applyButton) {
+        ui.applyButton.style.opacity = visible ? "1" : "0";
+        ui.applyButton.style.transform = visible ? "translateX(0)" : "translateX(14px)";
+      }
     });
+  }
+
+  function renderDailyworkManualSelectionControls(ui, rows) {
+    if (!ui?.manualSelect || !ui?.manualSaveBtn || !ui?.manualStatus) return;
+    const savedUser = readDailyworkManualUserOverride();
+    const items = Array.isArray(rows) ? rows : [];
+    ui.manualSelect.textContent = "";
+    if (!items.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No dailywork users loaded";
+      ui.manualSelect.appendChild(option);
+      ui.manualSelect.disabled = true;
+      ui.manualSaveBtn.disabled = true;
+      ui.manualStatus.textContent = savedUser
+        ? `saved fallback user: ${savedUser} (schedule not loaded)`
+        : "saved fallback user: none";
+      return;
+    }
+
+    items.forEach(item => {
+      const option = document.createElement("option");
+      option.value = String(item.user || "").trim();
+      option.textContent = `${item.user} - ${item.names || "(no name)"} - ${item.device}`;
+      ui.manualSelect.appendChild(option);
+    });
+    ui.manualSelect.disabled = false;
+    ui.manualSaveBtn.disabled = false;
+    const savedExists = Boolean(savedUser && items.some(item => String(item.user || "").trim() === savedUser));
+    if (savedExists) ui.manualSelect.value = savedUser;
+    ui.manualStatus.textContent = savedUser
+      ? `saved fallback user: ${savedUser}${savedExists ? "" : " (not in loaded schedule)"}`
+      : "saved fallback user: none";
   }
 
   function renderDailyworkSchedulePanelTable(ui, rows, currentTechnicianId) {
     clearDailyworkScheduleNode(ui.tableWrap);
+    const savedFallbackUser = readDailyworkManualUserOverride();
     const table = document.createElement("table");
     table.style.width = "100%";
     table.style.borderCollapse = "collapse";
@@ -5929,10 +6332,14 @@
     rows.forEach(item => {
       const selection = resolveDailyworkDeviceSelection(item.device);
       const isCurrent = Boolean(currentTechnicianId && String(item.user || "").trim() === currentTechnicianId);
+      const isSavedFallback = Boolean(savedFallbackUser && String(item.user || "").trim() === savedFallbackUser);
       const row = document.createElement("tr");
       if (isCurrent) {
         row.style.background = "#e8f6eb";
         row.style.outline = "1px solid #79bf89";
+      } else if (isSavedFallback) {
+        row.style.background = "#fff4ea";
+        row.style.outline = "1px solid #e6a46b";
       }
 
       [
@@ -5948,13 +6355,19 @@
         td.style.borderBottom = "1px solid #eef3f1";
         td.style.verticalAlign = "top";
         td.style.overflowWrap = "anywhere";
-        if (index === 0 && isCurrent) {
-          const badge = document.createElement("span");
-          badge.textContent = " текущ";
-          badge.style.color = "#2f6f3e";
-          badge.style.fontWeight = "900";
-          td.appendChild(badge);
-        }
+          if (index === 0 && isCurrent) {
+            const badge = document.createElement("span");
+            badge.textContent = " текущ";
+            badge.style.color = "#2f6f3e";
+            badge.style.fontWeight = "900";
+            td.appendChild(badge);
+          } else if (index === 0 && isSavedFallback) {
+            const badge = document.createElement("span");
+            badge.textContent = " fallback";
+            badge.style.color = "#9a4a12";
+            badge.style.fontWeight = "900";
+            td.appendChild(badge);
+          }
         row.appendChild(td);
       });
 
@@ -5982,6 +6395,7 @@
         `error: ${String(error?.message || meta.error || "Dailywork schedule fetch failed")}`
       ].join("\n");
       ui.summary.textContent = "No schedule rows rendered.";
+      renderDailyworkManualSelectionControls(ui, []);
       return;
     }
 
@@ -5999,6 +6413,7 @@
       "device summary:",
       ...getDailyworkScheduleDeviceSummaryLines(rows, 10)
     ].join("\n");
+    renderDailyworkManualSelectionControls(ui, rows);
 
     let technicianResult = null;
     try {
@@ -6025,7 +6440,7 @@
     renderDailyworkSchedulePanelTable(ui, rows, currentTechnicianId);
   }
 
-  async function setDailyworkSchedulePanelOpen(open) {
+  async function setDailyworkSchedulePanelOpen(open, options = {}) {
     const ui = ensureDailyworkScheduleUi();
     if (!ui) return;
     if (dailyworkSchedulePanelCloseTimer) {
@@ -6051,7 +6466,7 @@
           }
         });
       }
-      await renderDailyworkSchedulePanel(ui);
+      if (!options.skipRender) await renderDailyworkSchedulePanel(ui);
       return;
     }
 
@@ -6081,6 +6496,10 @@
     setDailyworkSchedulePanelOpen(false);
     ui.button.style.display = "none";
     ui.button.setAttribute("aria-hidden", "true");
+    if (ui.applyButton) {
+      ui.applyButton.style.display = "none";
+      ui.applyButton.setAttribute("aria-hidden", "true");
+    }
   }
 
   function hasRecycleSerialCyrillic(value) {
@@ -9113,6 +9532,7 @@
     if (debugGuardsTray) panel.appendChild(debugGuardsTray);
     fieldset.appendChild(panel);
     renderCategories();
+    setTimeout(() => { try { runDailyworkProductionAutoSelect(panel); } catch (e) {} }, 0);
     scheduleRecycleRemoteAutomaticEligibleDevices();
     try { preloadRecycleHistoryCache({ force: true }); } catch (e) {}
 
