@@ -6061,9 +6061,14 @@
     closeBtn.style.fontWeight = "900";
     closeBtn.style.lineHeight = "1";
 
+    const headerActions = document.createElement("div");
+    headerActions.style.display = "flex";
+    headerActions.style.alignItems = "center";
+    headerActions.style.gap = "6px";
+    headerActions.style.flex = "0 0 auto";
+
     const status = document.createElement("div");
-    status.style.flex = "0 0 auto";
-    status.style.marginBottom = "8px";
+    status.style.marginTop = "6px";
     status.style.padding = "6px 8px";
     status.style.border = "1px solid #dce8e4";
     status.style.borderRadius = "6px";
@@ -6074,8 +6079,7 @@
     status.style.whiteSpace = "pre-wrap";
 
     const summary = document.createElement("div");
-    summary.style.flex = "0 0 auto";
-    summary.style.marginBottom = "8px";
+    summary.style.marginTop = "6px";
     summary.style.padding = "6px 8px";
     summary.style.border = "1px solid #dce8e4";
     summary.style.borderRadius = "6px";
@@ -6087,10 +6091,10 @@
 
     const technicianNote = document.createElement("div");
     technicianNote.style.flex = "0 0 auto";
-    technicianNote.style.marginBottom = "8px";
+    technicianNote.style.marginBottom = "4px";
     technicianNote.style.color = "#52625e";
-    technicianNote.style.fontSize = "11px";
-    technicianNote.style.lineHeight = "1.35";
+    technicianNote.style.fontSize = "10px";
+    technicianNote.style.lineHeight = "1.25";
 
     const manualArea = document.createElement("div");
     manualArea.style.flex = "0 0 auto";
@@ -6153,8 +6157,28 @@
     manualArea.appendChild(manualStatus);
     manualArea.appendChild(manualResult);
 
+    const infoDetails = document.createElement("details");
+    infoDetails.style.flex = "0 0 auto";
+    infoDetails.style.padding = "0";
+    infoDetails.style.border = "1px solid #dce8e4";
+    infoDetails.style.borderRadius = "6px";
+    infoDetails.style.background = "#ffffff";
+    infoDetails.style.color = "#40534e";
+    infoDetails.style.fontSize = "11px";
+    infoDetails.style.lineHeight = "1.35";
+
+    const infoSummary = document.createElement("summary");
+    infoSummary.textContent = "Инфо";
+    infoSummary.style.cursor = "pointer";
+    infoSummary.style.padding = "5px 8px";
+    infoSummary.style.fontWeight = "800";
+    infoSummary.style.color = "#23463e";
+    infoDetails.appendChild(infoSummary);
+    infoDetails.appendChild(status);
+    infoDetails.appendChild(summary);
+
     const tableWrap = document.createElement("div");
-    tableWrap.style.flex = "1 1 auto";
+    tableWrap.style.flex = "1 1 0";
     tableWrap.style.minHeight = "0";
     tableWrap.style.overflow = "auto";
     tableWrap.style.border = "1px solid #dce8e4";
@@ -6162,18 +6186,18 @@
     tableWrap.style.background = "#ffffff";
 
     header.appendChild(heading);
-    header.appendChild(closeBtn);
+    headerActions.appendChild(infoDetails);
+    headerActions.appendChild(closeBtn);
+    header.appendChild(headerActions);
     panel.appendChild(header);
-    panel.appendChild(status);
-    panel.appendChild(summary);
-    panel.appendChild(technicianNote);
     panel.appendChild(manualArea);
+    panel.appendChild(technicianNote);
     panel.appendChild(tableWrap);
     parent.appendChild(button);
     parent.appendChild(applyButton);
     parent.appendChild(panel);
 
-    dailyworkScheduleUi = { button, applyButton, panel, closeBtn, status, summary, technicianNote, manualSelect, manualSaveBtn, manualStatus, manualResult, tableWrap };
+    dailyworkScheduleUi = { button, applyButton, panel, closeBtn, status, summary, infoDetails, technicianNote, manualSelect, manualSaveBtn, manualStatus, manualResult, tableWrap };
 
     button.addEventListener("mouseenter", () => {
       button.style.boxShadow = "0 5px 14px rgba(18, 72, 59, 0.26)";
@@ -6427,10 +6451,10 @@
       : "";
     const hasCurrentRow = Boolean(currentTechnicianId && rows.some(item => String(item.user || "").trim() === currentTechnicianId));
     if (!currentTechnicianId) {
-      ui.technicianNote.textContent = "Текущият техник не може да бъде разпознат.";
+      ui.technicianNote.textContent = "Текущ техник: неразпознат";
       ui.technicianNote.style.color = "#8a6d3b";
     } else if (!hasCurrentRow) {
-      ui.technicianNote.textContent = "Текущият техник не е намерен в зареденото разписание.";
+      ui.technicianNote.textContent = "Текущ техник: не е намерен";
       ui.technicianNote.style.color = "#8a6d3b";
     } else {
       ui.technicianNote.textContent = `Текущ техник: ${currentTechnicianId}`;
