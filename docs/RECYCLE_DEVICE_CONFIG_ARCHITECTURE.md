@@ -91,6 +91,20 @@ These values are runtime state and should not be treated as device/catalog confi
 
 State keys are about the current user/session/workday. They are not a source of truth for categories, devices, SAP/material IDs, help images, or validation profiles.
 
+### Dailywork schedule source is separate
+
+The Dailywork schedule integration is current runtime behavior, but it is not part of the recycle device catalog config source. `background.js` fetches the fixed raw GitHub `config/dailywork.json` schedule through `dailywork.fetchSchedule`, validates rows into `{ user, names, device }`, caches a last-known-good copy in `chrome.storage.local`, and returns normalized items only to approved Dailywork callers.
+
+Dailywork `Device` values are mapped by explicit local resolver rules in `Extension/content.js` to existing local recycle `categoryId` and, only when exact and unambiguous, existing local `deviceId` values. The schedule cannot define new devices, categories, SAP/material IDs, validation profiles, images, selectors, regexes, or executable behavior.
+
+Dailywork state keys are operator/workday state, not config:
+
+- `wifi_oss_dailywork_auto_applied_date_v1`
+- `wifi_oss_dailywork_auto_suppressed_date_v1`
+- `wifi_oss_dailywork_manual_user_override_v1`
+- `wifi_oss_dailywork_lkg_v1`
+- `wifi_oss_dailywork_meta_v1`
+
 ## 2. Source of Truth Policy
 
 ### Short term

@@ -74,6 +74,14 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Open the same recycle step in two OSS tabs/windows. Select a category in one tab and confirm the other tab updates to the same category.
 - In a mapped category with device cards, select one or more device cards and confirm the selected cards are shared across tabs/windows.
 - Change the category and confirm selected device cards are cleared.
+- For Dailywork production auto-selection, start from a clean same-day recycle state and a schedule row for the current logged-in technician. Expected: `SD STB` selects category `dth_kaon_nagra`, `TP-Link EX220` selects `routers` plus `tp_link_ex220`, `NETBOX 4G` selects category `netbox`, and `Друго`/`Отпуск`/`Болничен` do not auto-select.
+- Confirm Dailywork production auto-selection does not overwrite an already selected manual category or selected devices.
+- Confirm the same-day Dailywork applied marker blocks repeat production apply on reload/navigation after a successful production apply.
+- Press Reset after a Dailywork production selection. Expected: category/devices clear, `wifi_oss_dailywork_auto_suppressed_date_v1` is set for the current workday, and production auto-selection does not immediately reapply.
+- After Reset, click the explicit floating manual Dailywork apply button. Expected: manual apply still works because it is an operator action and ignores the production suppress marker.
+- When the current technician has no schedule row, confirm production Dailywork auto-selection is a no-op. Save a fallback user in the floating `ДР` panel, then click `wifi-oss-dailywork-apply-btn`; expected: fallback is used only on that explicit manual click.
+- If the schedule contains multiple rows for the same `User`, confirm production and manual matching skip with no category/device apply.
+- Open the floating `ДР` panel and confirm it shows the schedule table, compact current technician status, saved fallback controls, and collapsed `Инфо` metadata/device summary. Confirm panel open/close and the barcode help floating button coexist visually.
 - For each category, test at least one valid and one invalid serial:
   - `android_iptv`
   - `xplore_zapper`

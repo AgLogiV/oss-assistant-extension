@@ -103,6 +103,16 @@ State rules:
 - Reset should clear visible selection, validation messages, help menu state, and safe pending recycle context;
 - shared state is intentionally scoped to OSS tabs/windows for the same browser origin.
 
+Implemented Dailywork state note:
+
+- production Dailywork auto-selection is a safe initializer for recycle category/device state, not a catalog source of truth;
+- it runs only on the recycle entry page after the category panel render and daily reset opportunity;
+- it uses only the current logged-in technician row from the validated Dailywork schedule and never uses the saved fallback user automatically;
+- it applies only explicit resolver results for `category` or `category_device`, and it skips when manual category/device state already exists;
+- Reset writes a same-day suppression marker so production auto-selection does not immediately reapply;
+- the floating `ДР` panel and `wifi-oss-dailywork-apply-btn` are manual/debug surfaces. Manual apply tries the current technician first and uses the saved fallback user only if the current technician row is missing and the operator clicks the button;
+- the saved fallback user key stores only the Dailywork `user` ID, not schedule rows, names, devices, or raw JSON.
+
 ## 4. Future multi-select behavior
 
 After a category is selected, the right-side card area should represent concrete devices in that category. The user should be able to select one or more devices.

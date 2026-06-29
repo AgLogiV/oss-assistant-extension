@@ -336,11 +336,19 @@ Recycle entry storage:
 - `wifi_oss_recycle_entry_category` in `localStorage`
 - `wifi_oss_recycle_entry_category_date` in `localStorage`
 - `wifi_oss_recycle_entry_selected_devices` in `localStorage`, JSON array of selected `deviceId` strings
+- `wifi_oss_dailywork_auto_applied_date_v1` in `localStorage`, local workday marker after a successful production Dailywork auto-selection
+- `wifi_oss_dailywork_auto_suppressed_date_v1` in `localStorage`, local workday marker set by Reset so production Dailywork auto-selection does not immediately reapply
+- `wifi_oss_dailywork_manual_user_override_v1` in `localStorage`, manual Dailywork fallback user ID only; it does not store schedule rows, names, or devices
 - `wifi_oss_recycle_entry_last_serial` in `sessionStorage`
 - `wifi_oss_recycle_entry_pending_material` in `sessionStorage`
 - `wifi_oss_recycle_entry_material_snapshot` in `sessionStorage`, per-flow category/device/material/serial/date context for the next SAP/material step
 
 The selected category and selected devices are shared across OSS tabs/windows for the same browser origin. `sessionStorage` remains for transient recycle flow state such as the last valid serial, pending material context, and the per-flow material snapshot. Clipboard SSID/password autofill has its own storage and is not part of this recycle selection flow.
+
+Background Dailywork cache:
+
+- `wifi_oss_dailywork_lkg_v1` in `chrome.storage.local`, validated last-known-good normalized schedule payload
+- `wifi_oss_dailywork_meta_v1` in `chrome.storage.local`, compact fetch/cache metadata
 
 ### Daily Reset Logic
 
@@ -356,8 +364,23 @@ During `injectRecycleEntryCategoryPanel`:
   - removes `wifi_oss_recycle_entry_selected_devices` from `localStorage`
   - removes the legacy `wifi_oss_recycle_entry_category` from `sessionStorage`
 - Reads the selected category and selected devices from shared `localStorage`.
+- Gives the production Dailywork auto-selection hook a clean post-reset opportunity to select only when the safe plan allows it.
 
 Risk/TBD: this reset happens when the panel injects/renders. If an OSS tab stays open across midnight without reload/navigation/reinjection, the already-rendered panel may keep its old `panel.dataset.wifiOssRecycleSelected`.
+
+### Dailywork Schedule Auto-Selection
+
+Dailywork schedule support is separate from the external recycle catalog runtime. The remote schedule is fetched through the fixed `dailywork.fetchSchedule` background message from the raw GitHub `config/dailywork.json` source, validated into normalized rows, and cached as a last-known-good payload. It is not loaded through the recycle catalog remote-config overlay and does not define catalog devices, material IDs, validation rules, images, selectors, or JavaScript.
+
+Production auto-selection runs only on the recycle entry page after the initial category panel render and daily reset opportunity. It detects the current logged-in OSS technician, finds exactly one matching Dailywork `User`, resolves that row's `Device` through the explicit local schedule-device mapping, and applies only safe `category` or `category_device` plans. It skips on no row, multiple rows, `noop` devices such as absence/admin work, invalid categories/devices, existing manual category/device selection, or same-day suppress markers. Production auto-selection never uses the saved fallback user automatically and never clicks OSS category/device DOM elements, navigates OSS, clicks Continue, edits serial input, or writes material snapshots.
+
+Reset clears the current recycle category/device selection and writes `wifi_oss_dailywork_auto_suppressed_date_v1` for the current local workday. This prevents production Dailywork auto-selection from immediately reapplying after an operator intentionally resets the selection. Manual Dailywork apply remains available after Reset because it is an explicit operator action.
+
+Manual/demo Dailywork tools:
+
+- Floating `ДР` schedule panel shows the loaded schedule table, current technician status, a collapsed `Инфо` metadata/device summary, and saved fallback technician controls.
+- Floating `wifi-oss-dailywork-apply-btn` performs manual apply only when clicked. It tries the current technician first, then uses the saved fallback user only if the current technician row is not found.
+- The fallback key `wifi_oss_dailywork_manual_user_override_v1` stores only the selected `user` ID. The current schedule row is always re-read from the loaded/fetched schedule before manual apply.
 
 ### Reset Button
 
@@ -690,9 +713,14 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_category` - `localStorage`, selected recycle category shared across OSS tabs/windows.
 - `wifi_oss_recycle_entry_category_date` - `localStorage`, selected category date.
 - `wifi_oss_recycle_entry_selected_devices` - `localStorage`, JSON array of selected recycle `deviceId` values shared across OSS tabs/windows.
+- `wifi_oss_dailywork_auto_applied_date_v1` - `localStorage`, local workday marker for a successful production Dailywork auto-selection.
+- `wifi_oss_dailywork_auto_suppressed_date_v1` - `localStorage`, local workday marker that blocks production Dailywork auto-selection after Reset.
+- `wifi_oss_dailywork_manual_user_override_v1` - `localStorage`, selected fallback Dailywork user ID for explicit manual apply only.
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
 - `wifi_oss_recycle_entry_material_snapshot` - `sessionStorage`, per-flow category/device/material/serial/date snapshot used for SAP/material button ordering and controlled auto-fill.
+- `wifi_oss_dailywork_lkg_v1` - `chrome.storage.local`, background-owned Dailywork last-known-good normalized schedule cache.
+- `wifi_oss_dailywork_meta_v1` - `chrome.storage.local`, background-owned Dailywork fetch/cache metadata.
 - `wifi_oss_recycle_remote_auto_session_state_v1` - `sessionStorage`, minimal same-tab projection for auto-accepted remote devices/material so `swap-material` navigation can rehydrate.
 - `wifi_oss_recycle_remote_debug_session_state_v1` - `sessionStorage`, minimal same-tab debug projection for remote-added devices/material enablement; cleared by Remote config debug `Clear`.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
