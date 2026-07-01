@@ -14,10 +14,6 @@ const DAILYWORK_CACHE_KEYS = {
   lkg: "wifi_oss_dailywork_lkg_v1",
   meta: "wifi_oss_dailywork_meta_v1"
 };
-const RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS = [
-  "thfvnext.bing.com",
-  "tse2.mm.bing.net"
-];
 
 const RECYCLE_REMOTE_RUNTIME_CONTRACT = {
   extensionVersion: "1.0.1",
@@ -324,7 +320,7 @@ function recycleRemoteIsExtensionRelativeImagePath(value) {
 function recycleRemoteNormalizeExternalImagePath(value) {
   const pathValue = recycleRemoteTrim(value);
   if (!pathValue) return "";
-  if (recycleRemoteIsApprovedHttpsImageUrl(pathValue)) return pathValue;
+  if (recycleRemoteIsSafeHttpsImageUrl(pathValue)) return pathValue;
   if (recycleRemoteIsExtensionRelativeImagePath(pathValue)) return pathValue;
   return "";
 }
@@ -844,7 +840,7 @@ function recycleRemoteIsSafeProfileId(value) {
   return /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$/.test(String(value || ""));
 }
 
-function recycleRemoteIsApprovedHttpsImageUrl(value) {
+function recycleRemoteIsSafeHttpsImageUrl(value) {
   const raw = recycleRemoteTrim(value);
   if (!raw) return false;
   let parsed;
@@ -856,13 +852,13 @@ function recycleRemoteIsApprovedHttpsImageUrl(value) {
   return parsed.protocol === "https:"
     && !parsed.username
     && !parsed.password
-    && RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS.includes(parsed.hostname);
+    && Boolean(parsed.hostname);
 }
 
 function recycleRemoteValidateAssetPath(pathValue, fieldName, label, issues) {
   const value = recycleRemoteTrim(pathValue);
   if (!value) return "";
-  if (recycleRemoteIsApprovedHttpsImageUrl(value)) return value;
+  if (recycleRemoteIsSafeHttpsImageUrl(value)) return value;
   if (!value.startsWith("images/")) {
     recycleRemoteAddIssue(issues, "asset.invalidPrefix", `${label}.${fieldName} must start with images/: ${value}`);
   }
@@ -1301,7 +1297,7 @@ function recycleRemoteBuildPreviewSet(values) {
 function recycleRemoteGetPreviewAssetPathIssue(value, fieldName) {
   const pathValue = recycleRemoteTrim(value);
   if (!pathValue) return "";
-  if (recycleRemoteIsApprovedHttpsImageUrl(pathValue)) return "";
+  if (recycleRemoteIsSafeHttpsImageUrl(pathValue)) return "";
   if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) {
     return `${fieldName} absolute/remote`;
   }
