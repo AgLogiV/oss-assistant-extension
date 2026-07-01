@@ -5933,12 +5933,25 @@
     }
     const parent = document.body || document.documentElement;
     if (!parent) return null;
+    const scheduleButtonExpandedLabel = "Дневно разписание";
+    const applyButtonExpandedLabel = "Приложи дневното разписание";
+    const scheduleButtonCompactIcon = `
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" focusable="false" style="display:block;pointer-events:none;">
+        <rect x="4" y="5" width="16" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"></rect>
+        <path d="M8 3v4M16 3v4M4 10h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        <path d="M8 14h2M12 14h2M16 14h1M8 17h2M12 17h2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>`;
+    const applyButtonCompactIcon = `
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" focusable="false" style="display:block;pointer-events:none;">
+        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle>
+        <path d="M8 12.5l2.7 2.7L16.5 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>`;
 
     const button = document.createElement("button");
     button.id = DAILYWORK_SCHEDULE_BUTTON_ID;
     button.type = "button";
-    button.title = "Покажи дневното разписание";
-    button.setAttribute("aria-label", "Покажи дневното разписание");
+    button.title = scheduleButtonExpandedLabel;
+    button.setAttribute("aria-label", scheduleButtonExpandedLabel);
     button.style.position = "fixed";
     button.style.top = "210px";
     button.style.right = "18px";
@@ -5946,7 +5959,7 @@
     button.style.width = "48px";
     button.style.height = "48px";
     button.style.boxSizing = "border-box";
-    button.style.padding = "0";
+    button.style.padding = "0 12px";
     button.style.border = "1px solid #236b5a";
     button.style.borderRadius = "6px";
     button.style.background = "#d7f3ea";
@@ -5956,22 +5969,24 @@
     button.style.display = "none";
     button.style.alignItems = "center";
     button.style.justifyContent = "center";
-    button.style.fontSize = "13px";
+    button.style.fontSize = "12px";
     button.style.fontWeight = "900";
     button.style.lineHeight = "1";
     button.style.letterSpacing = "0";
+    button.style.whiteSpace = "nowrap";
+    button.style.overflow = "hidden";
     button.style.opacity = "0";
     button.style.transform = "translateX(14px)";
     button.style.transition = isRecycleReducedMotionPreferred()
       ? "none"
-      : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), box-shadow 160ms ease";
-    button.textContent = "ДР";
+      : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), width 160ms ease, box-shadow 160ms ease";
+    button.innerHTML = scheduleButtonCompactIcon;
 
     const applyButton = document.createElement("button");
     applyButton.id = DAILYWORK_APPLY_BUTTON_ID;
     applyButton.type = "button";
-    applyButton.title = "Приложи дневното разписание";
-    applyButton.setAttribute("aria-label", "Приложи дневното разписание");
+    applyButton.title = applyButtonExpandedLabel;
+    applyButton.setAttribute("aria-label", applyButtonExpandedLabel);
     applyButton.style.position = "fixed";
     applyButton.style.top = "266px";
     applyButton.style.right = "18px";
@@ -6000,7 +6015,7 @@
     applyButton.style.transition = isRecycleReducedMotionPreferred()
       ? "none"
       : "opacity 180ms ease, transform 180ms cubic-bezier(0.2, 0, 0.2, 1), width 160ms ease, box-shadow 160ms ease";
-    applyButton.textContent = "OK";
+    applyButton.innerHTML = applyButtonCompactIcon;
 
     const panel = document.createElement("aside");
     panel.id = DAILYWORK_SCHEDULE_PANEL_ID;
@@ -6199,29 +6214,50 @@
 
     dailyworkScheduleUi = { button, applyButton, panel, closeBtn, status, summary, infoDetails, technicianNote, manualSelect, manualSaveBtn, manualStatus, manualResult, tableWrap };
 
-    button.addEventListener("mouseenter", () => {
+    const expandScheduleButton = () => {
+      button.style.width = "170px";
+      button.textContent = scheduleButtonExpandedLabel;
       button.style.boxShadow = "0 5px 14px rgba(18, 72, 59, 0.26)";
+    };
+    const collapseScheduleButton = () => {
+      button.style.width = "48px";
+      button.innerHTML = scheduleButtonCompactIcon;
+      button.style.boxShadow = "0 3px 10px rgba(18, 72, 59, 0.18)";
+    };
+    const expandApplyButton = () => {
+      applyButton.style.width = "210px";
+      applyButton.textContent = applyButtonExpandedLabel;
+      applyButton.style.boxShadow = "0 5px 14px rgba(107, 36, 19, 0.26)";
+    };
+    const collapseApplyButton = () => {
+      applyButton.style.width = "48px";
+      applyButton.innerHTML = applyButtonCompactIcon;
+      applyButton.style.boxShadow = "0 3px 10px rgba(107, 36, 19, 0.18)";
+    };
+
+    button.addEventListener("mouseenter", () => {
+      expandScheduleButton();
     });
     button.addEventListener("mouseleave", () => {
-      button.style.boxShadow = "0 3px 10px rgba(18, 72, 59, 0.18)";
+      collapseScheduleButton();
+    });
+    button.addEventListener("focus", () => {
+      expandScheduleButton();
+    });
+    button.addEventListener("blur", () => {
+      collapseScheduleButton();
     });
     applyButton.addEventListener("mouseenter", () => {
-      applyButton.style.width = "210px";
-      applyButton.textContent = "Приложи дневното разписание";
-      applyButton.style.boxShadow = "0 5px 14px rgba(107, 36, 19, 0.26)";
+      expandApplyButton();
     });
     applyButton.addEventListener("mouseleave", () => {
-      applyButton.style.width = "48px";
-      applyButton.textContent = "OK";
-      applyButton.style.boxShadow = "0 3px 10px rgba(107, 36, 19, 0.18)";
+      collapseApplyButton();
     });
     applyButton.addEventListener("focus", () => {
-      applyButton.style.width = "210px";
-      applyButton.textContent = "Приложи дневното разписание";
+      expandApplyButton();
     });
     applyButton.addEventListener("blur", () => {
-      applyButton.style.width = "48px";
-      applyButton.textContent = "OK";
+      collapseApplyButton();
     });
     button.addEventListener("click", async (e) => {
       e.preventDefault();
