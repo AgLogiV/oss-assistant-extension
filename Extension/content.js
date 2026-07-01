@@ -2479,10 +2479,6 @@
   const RECYCLE_REMOTE_AUTO_ADDITIONS_CAPABILITY = "remoteAdditionsAuto";
   const RECYCLE_REMOTE_AUTO_MATERIAL_CAPABILITY = "remoteMaterialAuto";
   const RECYCLE_REMOTE_AUTO_MATERIAL_MODELS_CAPABILITY = "remoteMaterialModelsAuto";
-  const RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS = [
-    "thfvnext.bing.com",
-    "tse2.mm.bing.net"
-  ];
   const RECYCLE_REMOTE_AUTO_SESSION_STATE_KEY = "wifi_oss_recycle_remote_auto_session_state_v1";
   const RECYCLE_REMOTE_DEBUG_SESSION_STATE_KEY = "wifi_oss_recycle_remote_debug_session_state_v1";
   let recycleRemoteVisualOverlayByDeviceId = new Map();
@@ -2585,7 +2581,7 @@
     return /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(String(value || ""));
   }
 
-  function isRecycleApprovedHttpsImageUrl(value) {
+  function isRecycleSafeHttpsImageUrl(value) {
     const raw = String(value || "").trim();
     if (!raw) return false;
     let parsed;
@@ -2597,13 +2593,13 @@
     return parsed.protocol === "https:"
       && !parsed.username
       && !parsed.password
-      && RECYCLE_REMOTE_APPROVED_HTTPS_IMAGE_HOSTS.includes(parsed.hostname);
+      && Boolean(parsed.hostname);
   }
 
   function isRecycleRemoteAddedAssetPathSafe(value) {
     const pathValue = String(value || "").trim();
     if (!pathValue) return true;
-    if (isRecycleApprovedHttpsImageUrl(pathValue)) return true;
+    if (isRecycleSafeHttpsImageUrl(pathValue)) return true;
     if (!pathValue.startsWith("images/")) return false;
     if (/^(?:[A-Za-z]:|[\\/])/i.test(pathValue) || /(?:file:\/\/|https?:\/\/)/i.test(pathValue)) return false;
     if (pathValue.includes("\\") || pathValue.includes("..")) return false;
@@ -2613,7 +2609,7 @@
   function resolveRecycleImageUrl(imagePath) {
     const path = String(imagePath || "").trim();
     if (!path) return "";
-    if (isRecycleApprovedHttpsImageUrl(path)) return path;
+    if (isRecycleSafeHttpsImageUrl(path)) return path;
     return (typeof chrome !== "undefined" && chrome.runtime?.getURL)
       ? chrome.runtime.getURL(path)
       : path;
