@@ -6225,12 +6225,14 @@
       button.style.boxShadow = "0 3px 10px rgba(18, 72, 59, 0.18)";
     };
     const expandApplyButton = () => {
-      applyButton.style.width = "210px";
+      applyButton.style.width = "238px";
+      applyButton.style.padding = "0 18px";
       applyButton.textContent = applyButtonExpandedLabel;
       applyButton.style.boxShadow = "0 5px 14px rgba(107, 36, 19, 0.26)";
     };
     const collapseApplyButton = () => {
       applyButton.style.width = "48px";
+      applyButton.style.padding = "0 12px";
       applyButton.innerHTML = applyButtonCompactIcon;
       applyButton.style.boxShadow = "0 3px 10px rgba(107, 36, 19, 0.18)";
     };
