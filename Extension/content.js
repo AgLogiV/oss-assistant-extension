@@ -3878,6 +3878,8 @@
     lastAttemptAt: "",
     lastSuccessAt: "",
     rowCount: 0,
+    items: [],
+    todayCounts: { date: "", recycled: 0, scrap: 0, total: 0 },
     url: "",
     error: ""
   };
@@ -3921,9 +3923,13 @@
   function getRecycleHistoryCompactStatusText() {
     const status = String(recycleHistoryCache.status || "idle");
     const rows = Number(recycleHistoryCache.rowCount || 0);
+    const todayCounts = recycleHistoryCache.todayCounts || {};
+    const recycled = Number(todayCounts.recycled || 0);
+    const scrap = Number(todayCounts.scrap || 0);
+    const todayText = `today recycled ${recycled} | scrap ${scrap}`;
     const checkedAt = formatRecycleHistoryStatusTime(recycleHistoryCache.lastSuccessAt);
-    if (status === "loaded") return `history OK | rows ${rows}${checkedAt ? ` | checked ${checkedAt}` : ""}`;
-    if (status === "empty") return `history OK | rows 0 | no records${checkedAt ? ` | checked ${checkedAt}` : ""}`;
+    if (status === "loaded") return `history OK | rows ${rows} | ${todayText}${checkedAt ? ` | checked ${checkedAt}` : ""}`;
+    if (status === "empty") return `history OK | rows 0 | ${todayText} | no records${checkedAt ? ` | checked ${checkedAt}` : ""}`;
     if (status === "loading") return "history loading";
     if (status === "missing-url") return "history unavailable | missing-url";
     if (status === "fetch-failed") return "history failed | fetch-failed";
@@ -4624,8 +4630,9 @@
   }
 
   function findRecycleHistoryColumnIndex(headerCells, relName, textMatchers, fallbackIdx) {
-    const rel = String(relName || "").toLowerCase();
-    let idx = headerCells.findIndex(th => (th.getAttribute("rel") || "").toLowerCase() === rel);
+    const relNames = Array.isArray(relName) ? relName : [relName];
+    const rels = relNames.map(name => String(name || "").toLowerCase()).filter(Boolean);
+    let idx = headerCells.findIndex(th => rels.includes((th.getAttribute("rel") || "").toLowerCase()));
     if (idx < 0) {
       idx = headerCells.findIndex(th => {
         const text = (th.textContent || "").trim().toLowerCase();
@@ -4643,6 +4650,24 @@
     return "";
   }
 
+  function normalizeRecycleHistoryDateText(raw) {
+    const text = String(raw || "").replace(/\s+/g, " ").trim();
+    const m = text.match(/\b(\d{2}\.\d{2}\.\d{4})\b/);
+    return m ? m[1] : "";
+  }
+
+  function buildRecycleHistoryTodayCounts(items, today = formatRecycleHistoryDate(new Date())) {
+    const counts = { date: today, recycled: 0, scrap: 0, total: 0 };
+    Array.from(items || []).forEach(item => {
+      if (String(item?.recycleDate || "") !== today) return;
+      if (item?.success === "yes") counts.recycled += 1;
+      else if (item?.success === "no") counts.scrap += 1;
+      else return;
+      counts.total += 1;
+    });
+    return counts;
+  }
+
   function parseRecycleHistoryItemsFromDocument(doc) {
     const root = doc?.getElementById?.(RECYCLE_LIST_ID);
     if (!root) return [];
@@ -4650,6 +4675,7 @@
     if (!table) return [];
 
     const headerCells = Array.from(table.querySelectorAll("tr th"));
+    const dateIdx = findRecycleHistoryColumnIndex(headerCells, ["RecycledOn", "RecycleDate", "RecyclingDate", "DateRecycled"], ["\u0434\u0430\u0442\u0430 \u043d\u0430 \u0440\u0435\u0446\u0438\u043a\u043b\u0438\u0440\u0430\u043d\u0435", /recycl.*date/], 2);
     const serialIdx = findRecycleHistoryColumnIndex(headerCells, "SerialNumber", ["сериен номер", /serial/], 4);
     const sapIdx = findRecycleHistoryColumnIndex(headerCells, "SapId", ["sapid", "sap id"], 5);
     const successIdx = findRecycleHistoryColumnIndex(headerCells, "IsSuccess", ["успешно рециклиран"], 6);
@@ -4661,10 +4687,12 @@
       const serial = (tds[serialIdx]?.textContent || "").trim();
       const serialKey = normalizeRecycleHistorySerial(serial);
       if (!serialKey) continue;
+      const recycleDateText = (tds[dateIdx]?.textContent || "").trim();
+      const recycleDate = normalizeRecycleHistoryDateText(recycleDateText);
       const sapId = (tds[sapIdx]?.textContent || "").trim();
       const successText = (tds[successIdx]?.textContent || "").trim();
       const success = normalizeRecycleHistorySuccess(successText);
-      items.push({ serial, serialKey, sapId, successText, success });
+      items.push({ serial, serialKey, recycleDateText, recycleDate, sapId, successText, success });
     }
     return items;
   }
@@ -4685,6 +4713,8 @@
     if (!url) {
       recycleHistoryCache.loaded = false;
       recycleHistoryCache.lookup = new Map();
+      recycleHistoryCache.items = [];
+      recycleHistoryCache.todayCounts = buildRecycleHistoryTodayCounts([]);
       setRecycleHistoryCacheStatus("missing-url", {
         url: "",
         error: "History URL/template is unavailable",
@@ -4723,6 +4753,8 @@
         }
         const items = parseRecycleHistoryItemsFromDocument(doc);
         recycleHistoryCache.lookup = buildRecycleHistoryLookup(items);
+        recycleHistoryCache.items = items;
+        recycleHistoryCache.todayCounts = buildRecycleHistoryTodayCounts(items);
         recycleHistoryCache.loaded = true;
         const finishedAt = new Date().toISOString();
         setRecycleHistoryCacheStatus(items.length ? "loaded" : "empty", {
@@ -4731,10 +4763,12 @@
           rowCount: items.length,
           lastSuccessAt: finishedAt
         });
-        try { console.info("[recycleHistory] loaded", { url, rows: items.length, status: recycleHistoryCache.status, startedAt, finishedAt }); } catch (e) {}
+        try { console.info("[recycleHistory] loaded", { url, rows: items.length, status: recycleHistoryCache.status, today: recycleHistoryCache.todayCounts, startedAt, finishedAt }); } catch (e) {}
         return true;
       } catch (e) {
         recycleHistoryCache.lookup = new Map();
+        recycleHistoryCache.items = [];
+        recycleHistoryCache.todayCounts = buildRecycleHistoryTodayCounts([]);
         recycleHistoryCache.loaded = false;
         const status = e?.recycleHistoryStatus || "fetch-failed";
         setRecycleHistoryCacheStatus(recycleHistoryCache.lastSuccessAt ? "stale" : status, {
