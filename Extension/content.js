@@ -3772,6 +3772,7 @@
   const RECYCLE_ENTRY_DEVICE_REQUIRED_EXCLUDED_CATEGORY_IDS = new Set(["cam_modules", "modems"]);
   const RECYCLE_DEBUG_GUARDS_TRAY_ATTR = "data-wifi-oss-recycle-debug-guards-tray";
   const RECYCLE_DEBUG_GUARDS_STATUS_ATTR = "data-wifi-oss-recycle-debug-guards-status";
+  const RECYCLE_HISTORY_STATUS_COMPACT_ATTR = "data-wifi-oss-recycle-history-status-compact";
   const RECYCLE_DEVICE_REQUIRED_TOGGLE_ATTR = "data-wifi-oss-recycle-device-required-toggle";
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
@@ -3809,13 +3810,17 @@
   function updateRecycleDebugGuardsToggles(root = document) {
     const materialEnabled = isMaterialAutoContinueEnabled();
     const deviceRequiredEnabled = isRecycleDeviceRequiredGuardEnabled();
-    const statusText = `material ${materialEnabled ? "ON" : "OFF"} | device required ${deviceRequiredEnabled ? "ON" : "OFF"}`;
+    const historyStatusText = getRecycleHistoryCompactStatusText();
+    const statusText = `material ${materialEnabled ? "ON" : "OFF"} | device required ${deviceRequiredEnabled ? "ON" : "OFF"} | ${historyStatusText}`;
     const trays = [];
     if (root?.matches?.(`[${RECYCLE_DEBUG_GUARDS_TRAY_ATTR}]`)) trays.push(root);
     root?.querySelectorAll?.(`[${RECYCLE_DEBUG_GUARDS_TRAY_ATTR}]`).forEach(tray => trays.push(tray));
     trays.forEach(tray => {
       const status = tray.querySelector(`[${RECYCLE_DEBUG_GUARDS_STATUS_ATTR}]`);
-      if (status) status.textContent = statusText;
+      if (status) {
+        status.textContent = statusText;
+        status.title = statusText;
+      }
 
       const btn = tray.querySelector(`[${RECYCLE_DEVICE_REQUIRED_TOGGLE_ATTR}]`);
       if (!btn) return;
@@ -3868,7 +3873,13 @@
     key: "",
     lookup: new Map(),
     loaded: false,
-    inFlight: null
+    inFlight: null,
+    status: "idle",
+    lastAttemptAt: "",
+    lastSuccessAt: "",
+    rowCount: 0,
+    url: "",
+    error: ""
   };
   let recycleHistoryDuplicateOverrideSerial = "";
   const recycleHistoryWarnedKeys = new Set();
@@ -3878,6 +3889,69 @@
     if (recycleHistoryWarnedKeys.has(k)) return;
     recycleHistoryWarnedKeys.add(k);
     try { console.warn("[recycleHistory]", ...args); } catch (e) {}
+  }
+
+  function setRecycleHistoryCacheStatus(status, details = {}) {
+    recycleHistoryCache.status = String(status || "idle");
+    if (Object.prototype.hasOwnProperty.call(details, "url")) recycleHistoryCache.url = String(details.url || "");
+    if (Object.prototype.hasOwnProperty.call(details, "error")) recycleHistoryCache.error = String(details.error || "");
+    if (Object.prototype.hasOwnProperty.call(details, "rowCount")) recycleHistoryCache.rowCount = Number(details.rowCount || 0);
+    if (Object.prototype.hasOwnProperty.call(details, "lastAttemptAt")) recycleHistoryCache.lastAttemptAt = String(details.lastAttemptAt || "");
+    if (Object.prototype.hasOwnProperty.call(details, "lastSuccessAt")) recycleHistoryCache.lastSuccessAt = String(details.lastSuccessAt || "");
+    updateRecycleHistoryStatusIndicators();
+  }
+
+  function getRecycleHistoryUnavailableReason() {
+    const status = String(recycleHistoryCache.status || "idle");
+    if (status === "idle" || status === "loading" || status === "loaded" || status === "empty") return "";
+    if (status === "missing-url") return "missing-url";
+    if (status === "fetch-failed") return "fetch-failed";
+    if (status === "parse-failed") return "parse-failed";
+    if (status === "stale") return "stale";
+    return status || "idle";
+  }
+
+  function formatRecycleHistoryStatusTime(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function getRecycleHistoryCompactStatusText() {
+    const status = String(recycleHistoryCache.status || "idle");
+    const rows = Number(recycleHistoryCache.rowCount || 0);
+    const checkedAt = formatRecycleHistoryStatusTime(recycleHistoryCache.lastSuccessAt);
+    if (status === "loaded") return `history OK | rows ${rows}${checkedAt ? ` | checked ${checkedAt}` : ""}`;
+    if (status === "empty") return `history OK | rows 0 | no records${checkedAt ? ` | checked ${checkedAt}` : ""}`;
+    if (status === "loading") return "history loading";
+    if (status === "missing-url") return "history unavailable | missing-url";
+    if (status === "fetch-failed") return "history failed | fetch-failed";
+    if (status === "parse-failed") return "history failed | parse-failed";
+    if (status === "stale") return "history unavailable | stale";
+    return `history ${status || "idle"}`;
+  }
+
+  function updateRecycleHistoryStatusIndicators(root = document) {
+    const text = getRecycleHistoryCompactStatusText();
+    const status = String(recycleHistoryCache.status || "idle");
+    const ok = status === "loaded" || status === "empty";
+    const loading = status === "idle" || status === "loading";
+    const indicators = [];
+    if (root?.matches?.(`[${RECYCLE_HISTORY_STATUS_COMPACT_ATTR}]`)) indicators.push(root);
+    root?.querySelectorAll?.(`[${RECYCLE_HISTORY_STATUS_COMPACT_ATTR}]`).forEach(indicator => indicators.push(indicator));
+    indicators.forEach(indicator => {
+      indicator.textContent = text;
+      indicator.title = [
+        text,
+        recycleHistoryCache.url ? `url: ${recycleHistoryCache.url}` : "",
+        recycleHistoryCache.error ? `error: ${recycleHistoryCache.error}` : ""
+      ].filter(Boolean).join("\n");
+      indicator.style.color = ok ? "#2f6f2f" : loading ? "#777" : "#8a4b00";
+      indicator.style.borderColor = ok ? "#b8d8b8" : loading ? "#d7d7d7" : "#d28a1d";
+      indicator.style.background = ok ? "#f1fbf1" : loading ? "#fff" : "#fff7e6";
+    });
+    try { updateRecycleDebugGuardsToggles(root); } catch (e) {}
   }
 
   function normalizeRecycleHistorySerial(serialRaw) {
@@ -4609,6 +4683,14 @@
   async function preloadRecycleHistoryCache({ force = false } = {}) {
     const url = buildRecycleHistoryUrlForDateRange();
     if (!url) {
+      recycleHistoryCache.loaded = false;
+      recycleHistoryCache.lookup = new Map();
+      setRecycleHistoryCacheStatus("missing-url", {
+        url: "",
+        error: "History URL/template is unavailable",
+        rowCount: 0,
+        lastAttemptAt: new Date().toISOString()
+      });
       warnRecycleHistoryOnce("missing-url", "History URL/template is unavailable; duplicate validation will fail open.");
       return false;
     }
@@ -4617,22 +4699,50 @@
     if (recycleHistoryCache.inFlight && recycleHistoryCache.key === url) return recycleHistoryCache.inFlight;
 
     recycleHistoryCache.key = url;
+    const startedAt = new Date().toISOString();
+    setRecycleHistoryCacheStatus("loading", {
+      url,
+      error: "",
+      lastAttemptAt: startedAt
+    });
+    try { console.info("[recycleHistory] fetch start", { url, startedAt, force: !!force }); } catch (e) {}
     recycleHistoryCache.inFlight = (async () => {
       try {
         const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          const err = new Error(`HTTP ${res.status}`);
+          err.recycleHistoryStatus = "fetch-failed";
+          throw err;
+        }
         const html = await res.text();
         const doc = new DOMParser().parseFromString(html, "text/html");
-        if (!doc.getElementById(RECYCLE_LIST_ID)) throw new Error("Recycle history list not found");
+        if (!doc.getElementById(RECYCLE_LIST_ID)) {
+          const err = new Error("Recycle history list not found");
+          err.recycleHistoryStatus = "parse-failed";
+          throw err;
+        }
         const items = parseRecycleHistoryItemsFromDocument(doc);
         recycleHistoryCache.lookup = buildRecycleHistoryLookup(items);
         recycleHistoryCache.loaded = true;
-        try { console.info("[recycleHistory] loaded", { url, rows: items.length }); } catch (e) {}
+        const finishedAt = new Date().toISOString();
+        setRecycleHistoryCacheStatus(items.length ? "loaded" : "empty", {
+          url,
+          error: "",
+          rowCount: items.length,
+          lastSuccessAt: finishedAt
+        });
+        try { console.info("[recycleHistory] loaded", { url, rows: items.length, status: recycleHistoryCache.status, startedAt, finishedAt }); } catch (e) {}
         return true;
       } catch (e) {
         recycleHistoryCache.lookup = new Map();
         recycleHistoryCache.loaded = false;
-        warnRecycleHistoryOnce(`fetch:${url}`, "History fetch/parse failed; duplicate validation will fail open.", e);
+        const status = e?.recycleHistoryStatus || "fetch-failed";
+        setRecycleHistoryCacheStatus(recycleHistoryCache.lastSuccessAt ? "stale" : status, {
+          url,
+          error: String(e?.message || e || "History fetch/parse failed"),
+          rowCount: 0
+        });
+        warnRecycleHistoryOnce(`${status}:${url}`, "History validation unavailable; duplicate validation will fail open.", { status: recycleHistoryCache.status, url, error: recycleHistoryCache.error });
         return false;
       } finally {
         recycleHistoryCache.inFlight = null;
@@ -7942,6 +8052,24 @@
     summary.appendChild(compactStatus);
     details.appendChild(summary);
 
+    const historyStatus = document.createElement("div");
+    historyStatus.setAttribute(RECYCLE_HISTORY_STATUS_COMPACT_ATTR, "1");
+    historyStatus.style.marginTop = "6px";
+    historyStatus.style.display = "inline-flex";
+    historyStatus.style.alignItems = "center";
+    historyStatus.style.maxWidth = "100%";
+    historyStatus.style.boxSizing = "border-box";
+    historyStatus.style.padding = "2px 6px";
+    historyStatus.style.border = "1px solid #d7d7d7";
+    historyStatus.style.borderRadius = "999px";
+    historyStatus.style.background = "#fff";
+    historyStatus.style.color = "#777";
+    historyStatus.style.fontWeight = "600";
+    historyStatus.style.overflow = "hidden";
+    historyStatus.style.textOverflow = "ellipsis";
+    historyStatus.style.whiteSpace = "nowrap";
+    details.appendChild(historyStatus);
+
     const controls = document.createElement("div");
     controls.style.marginTop = "7px";
     controls.style.display = "flex";
@@ -8816,6 +8944,7 @@
     wrap.appendChild(details);
     updateMaterialAutoContinueDebugToggles();
     updateRecycleDebugGuardsToggles(wrap);
+    updateRecycleHistoryStatusIndicators(wrap);
     return wrap;
   }
 
@@ -9050,12 +9179,17 @@
     serialMsg.id = "wifi-oss-recycle-serial-msg";
     serialMsg.style.marginLeft = "10px";
     serialMsg.style.display = "none";
+    const historyStatusMsg = document.createElement("div");
+    historyStatusMsg.id = "wifi-oss-recycle-history-status-msg";
+    historyStatusMsg.style.marginLeft = "10px";
+    historyStatusMsg.style.display = "none";
     if (serialRow) {
       // Keep layout on one line when possible.
       if (serialRow.style && !serialRow.style.display) serialRow.style.display = "flex";
       if (serialRow.style && !serialRow.style.gap) serialRow.style.gap = "8px";
       if (serialRow.style && !serialRow.style.alignItems) serialRow.style.alignItems = "center";
       serialRow.appendChild(serialMsg);
+      serialRow.appendChild(historyStatusMsg);
     }
 
     const setSerialInlineAlert = (message, variant, kind) => {
@@ -9066,6 +9200,79 @@
     const clearSerialInlineAlert = () => {
       clearRecycleInlineAlert(serialMsg);
       hideRecycleSerialHelp();
+    };
+    const hideRecycleHistoryStatus = () => {
+      historyStatusMsg.textContent = "";
+      historyStatusMsg.style.display = "none";
+      historyStatusMsg.removeAttribute("role");
+    };
+    const getRecycleHistoryStatusText = () => {
+      const status = String(recycleHistoryCache.status || "idle");
+      if (status === "loading") {
+        return "Проверката за вече рециклирано/бракувано устройство се зарежда. Ако продължите веднага, продължавате без history validation.";
+      }
+      if (status === "empty") {
+        return "Проверката за вече рециклирано/бракувано устройство не намери записи за избрания период. Продължавате без намерени history записи.";
+      }
+      return "Проверката за вече рециклирано/бракувано устройство не е активна. Продължавате без history validation.";
+    };
+    const updateRecycleHistoryStatusUi = () => {
+      const reason = getRecycleHistoryUnavailableReason();
+      if (!reason || serialMsg.dataset.wifiOssRecycleSerialAlertKind === "duplicate") {
+        hideRecycleHistoryStatus();
+        return;
+      }
+
+      historyStatusMsg.textContent = "";
+      historyStatusMsg.style.display = "inline-flex";
+      historyStatusMsg.style.alignItems = "center";
+      historyStatusMsg.style.flexWrap = "wrap";
+      historyStatusMsg.style.gap = "8px";
+      historyStatusMsg.style.boxSizing = "border-box";
+      historyStatusMsg.style.padding = "6px 9px";
+      historyStatusMsg.style.borderRadius = "6px";
+      historyStatusMsg.style.border = "1px solid #d28a1d";
+      historyStatusMsg.style.background = "#fff7e6";
+      historyStatusMsg.style.color = "#7a4300";
+      historyStatusMsg.style.fontWeight = "700";
+      historyStatusMsg.style.fontSize = "12px";
+      historyStatusMsg.style.lineHeight = "1.25";
+      historyStatusMsg.setAttribute("role", "status");
+
+      const text = document.createElement("span");
+      text.textContent = getRecycleHistoryStatusText();
+      text.style.minWidth = "0";
+      text.style.flex = "1 1 auto";
+
+      const retryBtn = document.createElement("button");
+      retryBtn.type = "button";
+      retryBtn.textContent = "Опитай пак";
+      retryBtn.style.padding = "4px 8px";
+      retryBtn.style.border = "1px solid #d28a1d";
+      retryBtn.style.borderRadius = "4px";
+      retryBtn.style.background = "#fff";
+      retryBtn.style.color = "#7a4300";
+      retryBtn.style.fontWeight = "800";
+      retryBtn.style.cursor = "pointer";
+      retryBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        try { console.info("[recycleHistory] retry clicked", { status: recycleHistoryCache.status, url: recycleHistoryCache.url }); } catch (e) {}
+        let p = null;
+        try { p = preloadRecycleHistoryCache({ force: true }); } catch (e) {}
+        updateRecycleHistoryStatusUi();
+        try { Promise.resolve(p).finally(updateRecycleHistoryStatusUi); } catch (e) {}
+      }, true);
+
+      historyStatusMsg.appendChild(text);
+      historyStatusMsg.appendChild(retryBtn);
+    };
+    const preloadRecycleHistoryAndUpdateStatus = (options = {}) => {
+      let p = null;
+      try { p = preloadRecycleHistoryCache(options); } catch (e) {}
+      updateRecycleHistoryStatusUi();
+      try { Promise.resolve(p).finally(updateRecycleHistoryStatusUi); } catch (e) {}
+      return p;
     };
     attachRecycleSerialDebug(serialInput);
 
@@ -9592,7 +9799,7 @@
     renderCategories();
     setTimeout(() => { try { runDailyworkProductionAutoSelect(panel); } catch (e) {} }, 0);
     scheduleRecycleRemoteAutomaticEligibleDevices();
-    try { preloadRecycleHistoryCache({ force: true }); } catch (e) {}
+    preloadRecycleHistoryAndUpdateStatus({ force: true });
 
     const focusSerialInputOnce = () => {
       const active = document.activeElement;
@@ -9641,8 +9848,25 @@
         e.preventDefault();
         e.stopPropagation();
         hideRecycleSerialHelp();
+        hideRecycleHistoryStatus();
         showRecycleDuplicateWarning(serialMsg, duplicate, serialInput, continueBtn);
         return;
+      }
+
+      const historyUnavailableReason = getRecycleHistoryUnavailableReason();
+      if (historyUnavailableReason) {
+        updateRecycleHistoryStatusUi();
+        warnRecycleHistoryOnce(
+          `fail-open:${historyUnavailableReason}:${recycleHistoryCache.url || "no-url"}`,
+          "History validation unavailable during continue; fail-open.",
+          {
+            status: recycleHistoryCache.status,
+            reason: historyUnavailableReason,
+            url: recycleHistoryCache.url,
+            rowCount: recycleHistoryCache.rowCount,
+            serialKey: normalizeRecycleHistorySerial(serialInput.value)
+          }
+        );
       }
 
       hideRecycleSerialHelp();
@@ -9663,13 +9887,14 @@
       if (e.key === "Enter") guardContinue(e);
     }, true);
     serialInput.addEventListener("focus", () => {
-      try { preloadRecycleHistoryCache(); } catch (e) {}
+      preloadRecycleHistoryAndUpdateStatus();
     }, true);
     serialInput.addEventListener("input", () => {
-      try { preloadRecycleHistoryCache(); } catch (e) {}
+      preloadRecycleHistoryAndUpdateStatus();
       if (serialMsg.dataset.wifiOssRecycleSerialAlertKind === "duplicate") {
         if (serialMsg.dataset.wifiOssRecycleDuplicateSerial !== normalizeRecycleHistorySerial(serialInput.value)) {
           clearSerialInlineAlert();
+          updateRecycleHistoryStatusUi();
         } else {
           return;
         }
