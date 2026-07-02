@@ -3787,6 +3787,7 @@
   const DAILYWORK_SCHEDULE_BUTTON_ID = "wifi-oss-dailywork-schedule-btn";
   const DAILYWORK_APPLY_BUTTON_ID = "wifi-oss-dailywork-apply-btn";
   const DAILYWORK_SCHEDULE_PANEL_ID = "wifi-oss-dailywork-schedule-panel";
+  const RECYCLE_HISTORY_COUNTER_BUTTON_ID = "wifi-oss-recycle-history-counter-btn";
   const RECYCLE_STATE_ROOT_ID = "_wflowRecycleState";
   const RECYCLE_STATE_SERIAL_INPUT_ID = "_wflowRecycleState_SerialNo";
   const RECYCLE_STATE_MAC_INPUT_ID = "_wflowRecycleState_Mac";
@@ -3901,6 +3902,7 @@
     if (Object.prototype.hasOwnProperty.call(details, "lastAttemptAt")) recycleHistoryCache.lastAttemptAt = String(details.lastAttemptAt || "");
     if (Object.prototype.hasOwnProperty.call(details, "lastSuccessAt")) recycleHistoryCache.lastSuccessAt = String(details.lastSuccessAt || "");
     updateRecycleHistoryStatusIndicators();
+    updateRecycleHistoryCounterButton();
   }
 
   function getRecycleHistoryUnavailableReason() {
@@ -3958,6 +3960,171 @@
       indicator.style.background = ok ? "#f1fbf1" : loading ? "#fff" : "#fff7e6";
     });
     try { updateRecycleDebugGuardsToggles(root); } catch (e) {}
+  }
+
+  function getRecycleHistoryCounterTextParts() {
+    const status = String(recycleHistoryCache.status || "idle");
+    const counts = recycleHistoryCache.todayCounts || {};
+    const recycled = Number(counts.recycled || 0);
+    const scrap = Number(counts.scrap || 0);
+    const available = status === "loaded" || status === "empty";
+    return {
+      available,
+      label: available ? "" : "Няма history",
+      recycled: `${recycled} рециклирани`,
+      scrap: `${scrap} брак`,
+      ariaLabel: available
+        ? `${recycled} рециклирани · ${scrap} брак`
+        : `Няма history (${status || "idle"})`
+    };
+  }
+
+  function updateRecycleHistoryCounterButton() {
+    const button = document.getElementById(RECYCLE_HISTORY_COUNTER_BUTTON_ID);
+    if (!button) return;
+    const parts = getRecycleHistoryCounterTextParts();
+    const label = button.querySelector("[data-wifi-oss-recycle-history-counter-label]");
+    const recycledGroup = button.querySelector("[data-wifi-oss-recycle-history-counter-recycled-group]");
+    const recycledValue = button.querySelector("[data-wifi-oss-recycle-history-counter-recycled]");
+    const scrapGroup = button.querySelector("[data-wifi-oss-recycle-history-counter-scrap-group]");
+    const scrapValue = button.querySelector("[data-wifi-oss-recycle-history-counter-scrap]");
+
+    button.removeAttribute("title");
+    button.setAttribute("aria-label", parts.ariaLabel);
+    button.style.borderColor = parts.available ? "#9ac8a0" : "#d28a1d";
+    button.style.background = parts.available ? "#eef9f0" : "#fff7e6";
+    button.style.color = parts.available ? "#174f25" : "#7a4300";
+    if (label) label.textContent = parts.label;
+    [recycledGroup, scrapGroup].forEach(part => {
+      if (part) part.style.display = parts.available ? "inline-flex" : "none";
+    });
+    if (recycledValue) recycledValue.textContent = parts.recycled;
+    if (scrapValue) scrapValue.textContent = parts.scrap;
+  }
+
+  function ensureRecycleHistoryCounterButton() {
+    const existing = document.getElementById(RECYCLE_HISTORY_COUNTER_BUTTON_ID);
+    if (existing) {
+      updateRecycleHistoryCounterButton();
+      return existing;
+    }
+    const parent = document.body || document.documentElement;
+    if (!parent) return null;
+
+    const button = document.createElement("button");
+    button.id = RECYCLE_HISTORY_COUNTER_BUTTON_ID;
+    button.type = "button";
+    button.style.position = "fixed";
+    button.style.top = "322px";
+    button.style.right = "18px";
+    button.style.zIndex = "2147482998";
+    button.style.width = "48px";
+    button.style.height = "48px";
+    button.style.boxSizing = "border-box";
+    button.style.padding = "0 12px";
+    button.style.border = "1px solid #9ac8a0";
+    button.style.borderRadius = "6px";
+    button.style.background = "#eef9f0";
+    button.style.color = "#174f25";
+    button.style.boxShadow = "0 3px 10px rgba(23, 79, 37, 0.14)";
+    button.style.cursor = "default";
+    button.style.display = "flex";
+    button.style.alignItems = "center";
+    button.style.justifyContent = "center";
+    button.style.gap = "8px";
+    button.style.fontSize = "12px";
+    button.style.fontWeight = "900";
+    button.style.lineHeight = "1";
+    button.style.letterSpacing = "0";
+    button.style.whiteSpace = "nowrap";
+    button.style.overflow = "hidden";
+    button.style.transition = isRecycleReducedMotionPreferred()
+      ? "none"
+      : "width 160ms ease, height 160ms ease, box-shadow 160ms ease";
+
+    const compact = document.createElement("span");
+    compact.setAttribute("data-wifi-oss-recycle-history-counter-compact", "1");
+    compact.style.flex = "0 0 auto";
+    compact.innerHTML = `
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" focusable="false" style="display:block;pointer-events:none;">
+        <path d="M7.2 8.1A6.5 6.5 0 1 1 6 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        <path d="M4.8 5.8v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+        <circle cx="9" cy="16.2" r="1.7" fill="#2f9e44"></circle>
+        <circle cx="15.5" cy="16.2" r="1.7" fill="#d9480f"></circle>
+      </svg>`;
+    button.appendChild(compact);
+
+    const details = document.createElement("span");
+    details.style.display = "inline-flex";
+    details.style.flexDirection = "column";
+    details.style.alignItems = "flex-start";
+    details.style.justifyContent = "center";
+    details.style.gap = "3px";
+    details.style.minWidth = "0";
+    details.style.fontWeight = "800";
+    details.style.lineHeight = "1.15";
+
+    const label = document.createElement("span");
+    label.setAttribute("data-wifi-oss-recycle-history-counter-label", "1");
+    details.appendChild(label);
+
+    const recycledGroup = document.createElement("span");
+    recycledGroup.setAttribute("data-wifi-oss-recycle-history-counter-recycled-group", "1");
+    recycledGroup.style.alignItems = "center";
+    recycledGroup.style.gap = "4px";
+    const recycledDot = document.createElement("span");
+    recycledDot.setAttribute("aria-hidden", "true");
+    recycledDot.style.width = "7px";
+    recycledDot.style.height = "7px";
+    recycledDot.style.borderRadius = "999px";
+    recycledDot.style.background = "#2f9e44";
+    const recycledValue = document.createElement("span");
+    recycledValue.setAttribute("data-wifi-oss-recycle-history-counter-recycled", "1");
+    recycledValue.style.color = "#1f7a34";
+    recycledGroup.appendChild(recycledDot);
+    recycledGroup.appendChild(recycledValue);
+    details.appendChild(recycledGroup);
+
+    const scrapGroup = document.createElement("span");
+    scrapGroup.setAttribute("data-wifi-oss-recycle-history-counter-scrap-group", "1");
+    scrapGroup.style.alignItems = "center";
+    scrapGroup.style.gap = "4px";
+    const scrapDot = document.createElement("span");
+    scrapDot.setAttribute("aria-hidden", "true");
+    scrapDot.style.width = "7px";
+    scrapDot.style.height = "7px";
+    scrapDot.style.borderRadius = "999px";
+    scrapDot.style.background = "#d9480f";
+    const scrapValue = document.createElement("span");
+    scrapValue.setAttribute("data-wifi-oss-recycle-history-counter-scrap", "1");
+    scrapValue.style.color = "#b23b00";
+    scrapGroup.appendChild(scrapDot);
+    scrapGroup.appendChild(scrapValue);
+    details.appendChild(scrapGroup);
+
+    button.appendChild(details);
+
+    const expand = () => {
+      updateRecycleHistoryCounterButton();
+      button.style.width = "184px";
+      button.style.height = "58px";
+      button.style.justifyContent = "flex-start";
+      button.style.boxShadow = "0 5px 14px rgba(23, 79, 37, 0.22)";
+    };
+    const collapse = () => {
+      button.style.width = "48px";
+      button.style.height = "48px";
+      button.style.justifyContent = "center";
+      button.style.boxShadow = "0 3px 10px rgba(23, 79, 37, 0.14)";
+    };
+    button.addEventListener("mouseenter", expand);
+    button.addEventListener("mouseleave", collapse);
+    button.addEventListener("focus", expand);
+    button.addEventListener("blur", collapse);
+
+    parent.appendChild(button);
+    updateRecycleHistoryCounterButton();
+    return button;
   }
 
   function normalizeRecycleHistorySerial(serialRaw) {
@@ -9830,6 +9997,7 @@
     const debugGuardsTray = ensureRecycleDebugGuardsTray(panel);
     if (debugGuardsTray) panel.appendChild(debugGuardsTray);
     fieldset.appendChild(panel);
+    ensureRecycleHistoryCounterButton();
     renderCategories();
     setTimeout(() => { try { runDailyworkProductionAutoSelect(panel); } catch (e) {} }, 0);
     scheduleRecycleRemoteAutomaticEligibleDevices();
