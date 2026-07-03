@@ -3788,6 +3788,7 @@
   const DAILYWORK_APPLY_BUTTON_ID = "wifi-oss-dailywork-apply-btn";
   const DAILYWORK_SCHEDULE_PANEL_ID = "wifi-oss-dailywork-schedule-panel";
   const RECYCLE_HISTORY_COUNTER_BUTTON_ID = "wifi-oss-recycle-history-counter-btn";
+  const RECYCLE_HISTORY_TITLE_BADGE_ID = "wifi-oss-recycle-history-title-badge";
   const RECYCLE_STATE_ROOT_ID = "_wflowRecycleState";
   const RECYCLE_STATE_SERIAL_INPUT_ID = "_wflowRecycleState_SerialNo";
   const RECYCLE_STATE_MAC_INPUT_ID = "_wflowRecycleState_Mac";
@@ -3903,6 +3904,7 @@
     if (Object.prototype.hasOwnProperty.call(details, "lastSuccessAt")) recycleHistoryCache.lastSuccessAt = String(details.lastSuccessAt || "");
     updateRecycleHistoryStatusIndicators();
     updateRecycleHistoryCounterButton();
+    updateRecycleHistoryTitleBadge();
   }
 
   function getRecycleHistoryUnavailableReason() {
@@ -4000,6 +4002,136 @@
     });
     if (recycledValue) recycledValue.textContent = parts.recycled;
     if (scrapValue) scrapValue.textContent = parts.scrap;
+  }
+
+  function updateRecycleHistoryTitleBadge() {
+    try {
+      const badge = document.getElementById(RECYCLE_HISTORY_TITLE_BADGE_ID);
+      if (!badge) return;
+      const counts = recycleHistoryCache.todayCounts || {};
+      const recycled = Number(counts.recycled || 0);
+      const scrap = Number(counts.scrap || 0);
+      const recycledValue = badge.querySelector("[data-wifi-oss-recycle-history-title-recycled]");
+      const scrapValue = badge.querySelector("[data-wifi-oss-recycle-history-title-scrap]");
+      if (recycledValue) recycledValue.textContent = `${recycled} \u0440\u0435\u0446\u0438\u043a\u043b\u0438\u0440\u0430\u043d\u0438`;
+      if (scrapValue) scrapValue.textContent = `${scrap} \u0431\u0440\u0430\u043a`;
+      const label = `${recycled} \u0440\u0435\u0446\u0438\u043a\u043b\u0438\u0440\u0430\u043d\u0438 / ${scrap} \u0431\u0440\u0430\u043a`;
+      badge.setAttribute("aria-label", label);
+      if (badge.dataset.wifiOssRecycleHistoryTitleLastLabel !== label) {
+        badge.dataset.wifiOssRecycleHistoryTitleLastLabel = label;
+        try { console.info("[recycleHistoryTitleBadge] updated", { recycled, scrap }); } catch (e) {}
+      }
+    } catch (e) {
+      try { console.warn("[recycleHistoryTitleBadge] update failed", e); } catch (e2) {}
+    }
+  }
+
+  function positionRecycleHistoryTitleBadge(root, h1, badge) {
+    if (!root || !h1 || !badge) return;
+    try {
+      const rootStyle = window.getComputedStyle ? window.getComputedStyle(root) : null;
+      if (!rootStyle || rootStyle.position === "static") root.style.position = "relative";
+
+      const h1Height = Math.max(32, Number(h1.offsetHeight || 0));
+      const badgeHeight = Math.max(30, Math.min(38, h1Height - 8));
+      const top = Number(h1.offsetTop || 0) + Math.max(4, Math.round((h1Height - badgeHeight) / 2));
+
+      badge.style.position = "absolute";
+      badge.style.top = `${top}px`;
+      badge.style.right = "12px";
+      badge.style.zIndex = "2";
+      badge.style.display = "inline-flex";
+      badge.style.alignItems = "center";
+      badge.style.justifyContent = "center";
+      badge.style.gap = "9px";
+      badge.style.boxSizing = "border-box";
+      badge.style.height = `${badgeHeight}px`;
+      badge.style.maxWidth = "min(390px, calc(58% - 18px))";
+      badge.style.margin = "0";
+      badge.style.padding = "0 13px";
+      badge.style.border = "1px solid #b8d8b8";
+      badge.style.borderRadius = "999px";
+      badge.style.background = "#f7fff7";
+      badge.style.color = "#333";
+      badge.style.boxShadow = "0 1px 4px rgba(0, 0, 0, 0.08)";
+      badge.style.fontSize = "13px";
+      badge.style.fontWeight = "900";
+      badge.style.lineHeight = "1";
+      badge.style.whiteSpace = "nowrap";
+      badge.style.overflow = "hidden";
+      badge.style.textOverflow = "ellipsis";
+      badge.style.pointerEvents = "none";
+    } catch (e) {
+      try { console.warn("[recycleHistoryTitleBadge] positioning failed", e); } catch (e2) {}
+    }
+  }
+
+  function ensureRecycleHistoryTitleBadge() {
+    try {
+      const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
+      if (!root) {
+        try { console.info("[recycleHistoryTitleBadge] root not found"); } catch (e) {}
+        return null;
+      }
+      try { console.info("[recycleHistoryTitleBadge] root found"); } catch (e) {}
+
+      const h1 = Array.from(root.children || []).find(child => child?.tagName === "H1");
+      if (!h1) {
+        try { console.warn("[recycleHistoryTitleBadge] direct child h1 not found"); } catch (e) {}
+        return null;
+      }
+      try { console.info("[recycleHistoryTitleBadge] h1 found"); } catch (e) {}
+
+      let badge = document.getElementById(RECYCLE_HISTORY_TITLE_BADGE_ID);
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.id = RECYCLE_HISTORY_TITLE_BADGE_ID;
+        badge.setAttribute("role", "status");
+
+        const recycledGroup = document.createElement("span");
+        recycledGroup.style.display = "inline-flex";
+        recycledGroup.style.alignItems = "center";
+        recycledGroup.style.gap = "4px";
+        recycledGroup.style.color = "#1f7a34";
+        const recycledDot = document.createElement("span");
+        recycledDot.setAttribute("aria-hidden", "true");
+        recycledDot.textContent = "\u25cf";
+        const recycledValue = document.createElement("span");
+        recycledValue.setAttribute("data-wifi-oss-recycle-history-title-recycled", "1");
+        recycledGroup.appendChild(recycledDot);
+        recycledGroup.appendChild(recycledValue);
+
+        const separator = document.createElement("span");
+        separator.setAttribute("aria-hidden", "true");
+        separator.textContent = "/";
+        separator.style.color = "#999";
+
+        const scrapGroup = document.createElement("span");
+        scrapGroup.style.display = "inline-flex";
+        scrapGroup.style.alignItems = "center";
+        scrapGroup.style.gap = "4px";
+        scrapGroup.style.color = "#b23b00";
+        const scrapDot = document.createElement("span");
+        scrapDot.setAttribute("aria-hidden", "true");
+        scrapDot.textContent = "\u25cf";
+        const scrapValue = document.createElement("span");
+        scrapValue.setAttribute("data-wifi-oss-recycle-history-title-scrap", "1");
+        scrapGroup.appendChild(scrapDot);
+        scrapGroup.appendChild(scrapValue);
+
+        badge.appendChild(recycledGroup);
+        badge.appendChild(separator);
+        badge.appendChild(scrapGroup);
+        root.insertBefore(badge, h1.nextSibling);
+        try { console.info("[recycleHistoryTitleBadge] inserted"); } catch (e) {}
+      }
+      positionRecycleHistoryTitleBadge(root, h1, badge);
+      updateRecycleHistoryTitleBadge();
+      return badge;
+    } catch (e) {
+      try { console.warn("[recycleHistoryTitleBadge] ensure failed", e); } catch (e2) {}
+      return null;
+    }
   }
 
   function ensureRecycleHistoryCounterButton() {
@@ -9997,6 +10129,7 @@
     const debugGuardsTray = ensureRecycleDebugGuardsTray(panel);
     if (debugGuardsTray) panel.appendChild(debugGuardsTray);
     fieldset.appendChild(panel);
+    ensureRecycleHistoryTitleBadge();
     ensureRecycleHistoryCounterButton();
     renderCategories();
     setTimeout(() => { try { runDailyworkProductionAutoSelect(panel); } catch (e) {} }, 0);
