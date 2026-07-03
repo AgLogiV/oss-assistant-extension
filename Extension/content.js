@@ -4033,8 +4033,9 @@
       if (!rootStyle || rootStyle.position === "static") root.style.position = "relative";
 
       const h1Height = Math.max(32, Number(h1.offsetHeight || 0));
-      const badgeHeight = Math.max(30, Math.min(38, h1Height - 8));
-      const top = Number(h1.offsetTop || 0) + Math.max(4, Math.round((h1Height - badgeHeight) / 2));
+      const badgeHeight = Math.max(34, Math.min(42, h1Height - 4));
+      const centerOffset = Math.max(0, Math.round((h1Height - badgeHeight) / 2));
+      const top = Number(h1.offsetTop || 0) + centerOffset;
 
       badge.style.position = "absolute";
       badge.style.top = `${top}px`;
@@ -4043,18 +4044,18 @@
       badge.style.display = "inline-flex";
       badge.style.alignItems = "center";
       badge.style.justifyContent = "center";
-      badge.style.gap = "9px";
+      badge.style.gap = "10px";
       badge.style.boxSizing = "border-box";
       badge.style.height = `${badgeHeight}px`;
-      badge.style.maxWidth = "min(390px, calc(58% - 18px))";
+      badge.style.maxWidth = "min(430px, calc(62% - 18px))";
       badge.style.margin = "0";
-      badge.style.padding = "0 13px";
+      badge.style.padding = "0 16px";
       badge.style.border = "1px solid #b8d8b8";
       badge.style.borderRadius = "999px";
       badge.style.background = "#f7fff7";
       badge.style.color = "#333";
-      badge.style.boxShadow = "0 1px 4px rgba(0, 0, 0, 0.08)";
-      badge.style.fontSize = "13px";
+      badge.style.boxShadow = "0 1px 5px rgba(0, 0, 0, 0.1)";
+      badge.style.fontSize = "14px";
       badge.style.fontWeight = "900";
       badge.style.lineHeight = "1";
       badge.style.whiteSpace = "nowrap";
@@ -4091,11 +4092,13 @@
         const recycledGroup = document.createElement("span");
         recycledGroup.style.display = "inline-flex";
         recycledGroup.style.alignItems = "center";
-        recycledGroup.style.gap = "4px";
+        recycledGroup.style.gap = "5px";
         recycledGroup.style.color = "#1f7a34";
         const recycledDot = document.createElement("span");
         recycledDot.setAttribute("aria-hidden", "true");
         recycledDot.textContent = "\u25cf";
+        recycledDot.style.fontSize = "15px";
+        recycledDot.style.lineHeight = "1";
         const recycledValue = document.createElement("span");
         recycledValue.setAttribute("data-wifi-oss-recycle-history-title-recycled", "1");
         recycledGroup.appendChild(recycledDot);
@@ -4109,11 +4112,13 @@
         const scrapGroup = document.createElement("span");
         scrapGroup.style.display = "inline-flex";
         scrapGroup.style.alignItems = "center";
-        scrapGroup.style.gap = "4px";
+        scrapGroup.style.gap = "5px";
         scrapGroup.style.color = "#b23b00";
         const scrapDot = document.createElement("span");
         scrapDot.setAttribute("aria-hidden", "true");
         scrapDot.textContent = "\u25cf";
+        scrapDot.style.fontSize = "15px";
+        scrapDot.style.lineHeight = "1";
         const scrapValue = document.createElement("span");
         scrapValue.setAttribute("data-wifi-oss-recycle-history-title-scrap", "1");
         scrapGroup.appendChild(scrapDot);
