@@ -62,6 +62,9 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - In `Debug guards`, toggle `Device required` OFF and confirm only the selected-device-required guard is bypassed; no-category, serial validation, duplicate warning, SAP/material, and CAM behavior remain unchanged.
 - Confirm the `Debug guards` material auto-continue toggle still controls only `wifi_oss_debug_material_auto_continue_enabled` for the current session.
 - Confirm the `Remote config` tray remains visible and unchanged while `Debug guards` is present.
+- On a recycle entry page without a direct `sap-recycle-devices-by-technician` link, but with a discoverable `sap-warehouse-cells-recycle` link/table, confirm history status becomes loaded/empty instead of `missing-url`; the built history URL should stay same-origin and use the detected technician and warehouse.
+- On a recycle entry page with no history/cells links, confirm `Dailywork technician dry-run` can detect a visible header user such as `A1BG514837` plus the selected numeric warehouse dropdown, and history status becomes loaded/empty after retry.
+- If history remains `missing-url`, confirm the compact history status includes the unavailable reason and run `Dailywork technician dry-run` to inspect `technicianId`, `warehouseId`, source URL, and reason.
 - Test a recycle-history duplicate where `_recycleDevicesByTechnician` has `Успешно рециклиран = Да`. Expected: duplicate warning appears and the flow does not continue without explicit `Да`.
 - Test a recycle-history duplicate where `_recycleDevicesByTechnician` has `Успешно рециклиран = Не`. Expected: duplicate warning appears and the flow does not continue without explicit `Да`.
 - Test a duplicate serial that appears more than once in `_recycleDevicesByTechnician` with conflicting `Да`/`Не` values. Expected MVP safety behavior: duplicate warning appears and the flow does not continue without explicit `Да`.
@@ -82,6 +85,11 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - When the current technician has no schedule row, confirm production Dailywork auto-selection is a no-op. Save a fallback user in the floating `ДР` panel, then click `wifi-oss-dailywork-apply-btn`; expected: fallback is used only on that explicit manual click.
 - If the schedule contains multiple rows for the same `User`, confirm production and manual matching skip with no category/device apply.
 - Open the floating `ДР` panel and confirm it shows the schedule table, compact current technician status, saved fallback controls, and collapsed `Инфо` metadata/device summary. Confirm panel open/close and the barcode help floating button coexist visually.
+- Dailywork retry hardening: open the recycle entry page with a valid mappable schedule row while the OSS DOM/header renders slowly or the first schedule fetch is momentarily slow. Expected: the category (and device where applicable) is still auto-selected within the retry window instead of being silently skipped.
+- Dailywork persistence verification: confirm that after a successful production auto-selection the selected category actually persists in `localStorage` and the panel re-renders with the selected state; a re-render must not clear it.
+- Dailywork no-recycle-assignment notice: with a schedule row for the current technician that is `Друго`/`Отпуск`/`Болничен` or an unmapped device name, confirm the closable "Няма разпределение за рециклиране" modal appears, shows the schedule device when present, does NOT block recycling, and can be closed via the button, `x`, backdrop click, and `Escape`.
+- Confirm the no-recycle-assignment modal appears at most once per workday (`wifi_oss_dailywork_noop_notice_date_v1`) and does NOT appear on transient failures such as undetected technician or failed schedule fetch.
+- Confirm the no-recycle-assignment modal does NOT appear when a valid category/device is auto-selected.
 - For each category, test at least one valid and one invalid serial:
   - `android_iptv`
   - `xplore_zapper`
@@ -173,10 +181,12 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - With multiple selected recycle devices in a mapped category, confirm the quick-button grid is restricted to only those selected devices/material IDs without duplicates.
 - After valid Continue from the recycle serial step, confirm selected-device material filtering still uses the same per-flow selection even if another OSS tab changes the shared selected devices before the material step is inspected.
 - With one selected recycle device, a valid per-flow snapshot, and an empty `MaterialId`, confirm controlled auto-fill writes the expected SAP/material value and shows the yellow warning `Това устройство няма Material ID, стойността е попълнена автоматично.`
+- With one selected recycle device, a valid per-flow snapshot, and a prefilled `MaterialId` that differs from the selected device catalog SAP/material, confirm the extension replaces the value with the catalog SAP/material before auto-continue and shows the replacement warning.
 - With debug auto-continue `ON`, confirm the existing material auto-continue logic may continue after extension auto-fill; with debug auto-continue `OFF`, confirm the page remains visible with the filled SAP/material value and warning.
 - For `ZTE G5B`, confirm the quick-button card and `MaterialId` use `124173`, remain `124173` after waiting more than 30 seconds, and still show the ZTE G5B / ZTE MC888A similar-device warning.
+- For `Huawei B310s`, confirm the quick-button card uses `111732`; if OSS prefills another MaterialId such as `111420`, confirm it is replaced with `111732` before continuing.
 - With multiple selected recycle devices that have different SAP/material IDs, confirm there is no auto-fill, there is no auto-continue, and the yellow warning `Това устройство няма Material ID, моля изберете кое е устройството.` appears.
-- With a prefilled OSS `MaterialId`, confirm the extension does not overwrite the value.
+- With a prefilled OSS `MaterialId` and no valid single selected-device snapshot, confirm the extension does not overwrite the value.
 - With no selected devices in the valid per-flow snapshot, confirm the current category-level material filtering remains unchanged.
 - In the ambiguous multi-select case, note the known low-priority UI follow-up: after choosing a quick button manually, the warning may disappear and the layout may shift slightly.
 - For mapped categories, confirm the broad chips (`Всички`, `Интернет`, `Телевизия`, `Други`) are hidden and search only matches the allowed buttons.
@@ -199,8 +209,9 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Open a warehouse list with `_warehouseMaterialsCellList` and confirm the injected print button appears.
 - Print/export labels with no selected rows and confirm serial numbers render.
 - Open a recycle devices list with `_recycleDevicesByTechnician`.
-- Select one or more rows and confirm printing uses selected rows.
-- With no selected rows, confirm printing uses all rows.
+- Select one or more rows and confirm printing uses exactly the selected rows, including any row with `Успешно рециклиран = Не`.
+- With no selected rows, confirm printing uses only successful rows (`Успешно рециклиран = Да`) and excludes `Не` rows, for `Принтирай баркод`, `Принтирай Всичко`, and the injected printer icon.
+- With no selected rows and no successful rows, confirm a clear alert is shown telling the operator to select rows manually, and nothing is printed.
 - Confirm barcode labels include expected name, serial, and SAP ID where available.
 
 ## Clipboard SSID/Password Autofill

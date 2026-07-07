@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+- Recycle label printing now defaults to successful devices only: `Принтирай баркод`, `Принтирай Всичко`, and the injected printer icon print only rows with `Успешно рециклиран = Да` when nothing is selected; manually checked rows still print exactly as selected, including `Не` rows.
+- Hardened Dailywork production auto-selection with a bounded retry scheduler (backoff up to ~20s), post-write persistence verification, and transient-vs-terminal outcome classification so timing, DOM-not-ready, network, and last-known-good warm-up failures are retried instead of silently skipped. Intentional outcomes (absence/`Друго`, already applied, suppressed after Reset, existing manual selection) still stop cleanly and are never overridden.
+- Added a non-blocking, closable "Няма разпределение за рециклиране" modal shown once per workday when the technician has a found schedule row that does not map to a recycle category/device (`Друго`/absence or an unmapped device name). It never blocks recycling and can be dismissed via the button, `x`, backdrop click, or `Escape`.
 - Production patch: `ZTE G5B` now uses confirmed SAP/material `124173`; `deviceId: "zte_g5b1"` and image paths were intentionally kept unchanged.
+- Enforced selected-device catalog SAP/material on the swap-material step: when a valid single selected-device snapshot has one catalog material, any different OSS-prefilled `MaterialId` is replaced before auto-continue.
 - Temporarily disabled Render dashboard material-model override so production uses packaged/local fallback material models until the old dashboard data source and replacement behavior are reviewed.
 - Removed legacy SAP/material quick buttons from the visible material grid while keeping old-to-new SAP rewrite active for OSS-prefilled legacy values.
 - Added local recycle device catalog cards with 16:9 device images, visual multi-select, shared cross-tab category/device selection state, and selected-device validation profiles.
@@ -28,13 +32,16 @@
 
 ## Recent Validation
 
+- Recycle label printing defaults to `Успешно рециклиран = Да` rows only, and manual checkbox selection still prints exactly the selected rows (including `Не`).
+- Dailywork production auto-selection retry/verification works; transient failures are retried and intentional no-op/terminal outcomes are respected without overriding manual selections.
+- The "Няма разпределение за рециклиране" notice appears once per workday only for a found-but-unmappable schedule row and never blocks recycling.
 - Clipboard SSID/password autofill works.
 - Label generation works, including Austrian labels.
 - CAM Modules flow works.
 - Category-specific material filtering works for the mapped recycle categories.
 - Selected-device SAP/material button prioritization and controlled single-candidate auto-fill work without selected-only restriction.
 - Per-flow SAP/material snapshot behavior preserves selected-device ordering without changing CAM or Austrian behavior.
-- Controlled SAP/material auto-fill works for safe single-candidate recycle selections without overwriting prefilled OSS values or auto-continuing.
+- Controlled SAP/material enforcement works for safe single-candidate recycle selections, including replacing mismatched OSS-prefilled values with the selected device catalog SAP/material before auto-continue.
 - Austrian ADB/Huawei selected-device validation and material fill work; no selected Austrian device keeps the legacy preset fallback.
 - Shared recycle category/device selection works across tabs/windows.
 - Selected-device validation profiles and multi-select OR validation work for the implemented profiles.

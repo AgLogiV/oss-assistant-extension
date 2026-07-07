@@ -215,20 +215,21 @@ Important rules:
 - `materialId` is not identity; `deviceId` is identity.
 - Missing dashboard data must not remove local material buttons.
 - Remote dashboard entries should merge into known local devices or add explicitly enabled external devices after validation.
-- Prefilled OSS `MaterialId` auto-continue behavior should remain unchanged until there is evidence it is wrong.
+- Prefilled OSS `MaterialId` auto-continue behavior remains unchanged only when there is no valid single selected-device catalog candidate. When a selected device snapshot safely identifies one catalog SAP/material, that catalog value is authoritative.
 - `cam_modules` missing-material behavior must stay separate from normal material quick buttons.
 
 Current selected-device material behavior:
 
 ```text
-OSS MaterialId prefilled -> preserve current auto-continue rules
+OSS MaterialId prefilled + valid single selected-device candidate differs -> replace with selected device catalog SAP/material, warn, then apply existing material auto-continue logic
+OSS MaterialId prefilled + no valid single selected-device candidate -> preserve current auto-continue rules
 MaterialId empty + selected devices exist + one safe candidate -> auto-fill, warn, then apply existing material auto-continue logic
 MaterialId empty + selected devices exist + no single safe candidate -> selected-only quick buttons, warning, no auto-fill, no auto-continue
 MaterialId empty + no selected devices -> category-level material filtering
 Unknown/unmapped category -> keep existing full-list fallback
 ```
 
-Prefilled OSS `MaterialId` values are not overwritten. `CAM Модули` missing-material behavior remains a separate breadcrumb redirect flow and must not be generalized to normal categories. Known low-priority UI follow-up: after choosing a quick button in the ambiguous multi-select case, the warning can disappear and the layout can shift slightly.
+Prefilled OSS `MaterialId` values are not overwritten unless a valid single selected-device snapshot proves a different catalog SAP/material should be used. `CAM Модули` missing-material behavior remains a separate breadcrumb redirect flow and must not be generalized to normal categories. Known low-priority UI follow-up: after choosing a quick button in the ambiguous multi-select case, the warning can disappear and the layout can shift slightly.
 
 ## 7. Austrian special behavior
 
@@ -428,8 +429,8 @@ Recommended next milestones:
    - Keep Netbox IMEI behavior unchanged.
 
 5. **SAP/material mapping from selected devices**
-   - Implemented current behavior: valid per-flow selected-device snapshots restrict quick buttons to selected devices/material IDs, safe single candidates auto-fill empty `MaterialId`, and ambiguous selected-device candidates warn without auto-fill or auto-continue.
-   - Preserve prefilled `MaterialId`, no-selected category-level filtering, Austrian no-selected legacy fallback, and CAM behavior.
+   - Implemented current behavior: valid per-flow selected-device snapshots restrict quick buttons to selected devices/material IDs, safe single candidates auto-fill empty `MaterialId`, safe single candidates replace mismatched OSS-prefilled `MaterialId`, and ambiguous selected-device candidates warn without auto-fill or auto-continue.
+   - Preserve prefilled `MaterialId` only when it already matches the selected device catalog SAP/material or when there is no valid single selected-device snapshot; preserve no-selected category-level filtering, Austrian no-selected legacy fallback, and CAM behavior.
    - Keep dashboard optional.
 
 6. **Help menu by selected device**

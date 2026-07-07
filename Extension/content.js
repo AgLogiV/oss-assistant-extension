@@ -751,12 +751,21 @@
     const nameIdx = findIdx("name", ["име"], 3);
     const serialIdx = findIdx("serialnumber", ["сериен номер", "serial number"], 4);
     const sapIdx = findIdx("sapid", ["sapid", "sap id"], 5);
+    const successIdx = findIdx("issuccess", ["успешно рециклиран"], 6);
+
+    const isSuccessfulRow = (tr) => {
+      const tds = tr.querySelectorAll("td");
+      const successText = (tds[successIdx]?.textContent || "").trim();
+      return normalizeRecycleHistorySuccess(successText) === "yes";
+    };
 
     const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
     const checkedRows = preferSelected
       ? rows.filter(tr => !!tr.querySelector("td input[type='checkbox'].icheck-input:checked"))
       : [];
-    const useRows = (preferSelected && checkedRows.length) ? checkedRows : rows;
+    const useRows = (preferSelected && checkedRows.length)
+      ? checkedRows
+      : rows.filter(isSuccessfulRow);
 
     const items = [];
     for (const tr of useRows) {
@@ -1552,8 +1561,24 @@
   function bindRecyclePrintBarcodeButton() {
     const btn = document.getElementById("_recycleDevicesByTechnician_printBarcode");
     if (!btn) return false;
-    // Do NOT override the existing "Принтирай баркод" button behavior.
-    // The user wants the new button to handle checkbox printing instead.
+
+    const printFilteredRecycleBarcodes = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      const items = getRecycleDevicesForBarcodeSheet({ preferSelected: true });
+      if (!items.length) {
+        alert("Не намерих успешно рециклирани устройства за принтиране. Маркирайте желаните редове ръчно, за да ги включите.");
+        return;
+      }
+      printRecycleBarcodeSheetInIframe(items);
+    };
+
+    if (!btn.dataset.wifiOssPrintBarcodeHooked) {
+      btn.dataset.wifiOssPrintBarcodeHooked = "1";
+      const nativeTarget = btn.closest("a") || btn;
+      nativeTarget.addEventListener("click", printFilteredRecycleBarcodes, true);
+    }
 
     // Add companion button: "Принтирай Всичко"
     const existingAllBtnId = "_recycleDevicesByTechnician_printAll";
@@ -1574,17 +1599,7 @@
         btn.parentElement.insertBefore(allBtn, btn.nextSibling);
       }
 
-      allBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // Like ADB labels: if rows are selected -> print only selected; otherwise print all.
-        const items = getRecycleDevicesForBarcodeSheet({ preferSelected: true });
-        if (!items.length) {
-          alert("Не намерих серийни номера в таблицата.");
-          return;
-        }
-        printRecycleBarcodeSheetInIframe(items);
-      }, true);
+      allBtn.addEventListener("click", printFilteredRecycleBarcodes, true);
     }
 
     return true;
@@ -1705,15 +1720,18 @@
       e.stopPropagation();
       let sns = [];
       if (listId === RECYCLE_LIST_ID) {
-        // If user selected rows -> print only selected; otherwise print all.
-        const selected = getSelectedSerialNumbersFromList(listId);
-        sns = selected.length ? selected : getSerialNumbersFromList(listId);
+        // If user selected rows -> print only selected; otherwise print successful only.
+        sns = getRecycleDevicesForBarcodeSheet({ preferSelected: true }).map(it => it.serial);
+        if (!sns.length) {
+          alert("Не намерих успешно рециклирани устройства за принтиране. Маркирайте желаните редове ръчно, за да ги включите.");
+          return;
+        }
       } else {
         sns = getSerialNumbersFromList(listId);
-      }
-      if (!sns.length) {
-        alert("Не намерих серийни номера в таблицата.");
-        return;
+        if (!sns.length) {
+          alert("Не намерих серийни номера в таблицата.");
+          return;
+        }
       }
       printLabelsInIframe(sns);
     });
@@ -1913,6 +1931,7 @@
   const CAM_MODULES_MISSING_MATERIAL_HINT_TEXT = "Не е открита история за този сериен номер в SAP. Опитайте с другия номер на CAM модула. При повторен неуспех предайте устройството на супервайзър.";
   const SWAP_MATERIAL_SIMILAR_WARNING_ID = "wifi-oss-swap-material-similar-warning";
   const SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING = "Това устройство няма Material ID, стойността е попълнена автоматично.";
+  const SWAP_MATERIAL_CATALOG_REPLACED_WARNING = "Material ID беше различен от каталога. Стойността е заменена с правилния SAP за избраното устройство.";
   const SWAP_MATERIAL_MISSING_AMBIGUOUS_WARNING = "Това устройство няма Material ID, моля изберете кое е устройството.";
   const SWAP_MATERIAL_SIMILAR_WARNINGS = {
     "1000059633": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
@@ -3385,7 +3404,6 @@
     restoreRecycleRemoteAutoSessionState();
     // If we came from a recycle flow with a material preset, prefill based on serial.
     try { applyRecycleCategoryMaterialPreset(input); } catch (e) {}
-    autoContinueSwapMaterialIfReady(root, input);
     if (maybeRedirectCamModulesEmptyMaterial(root, input)) return true;
     const autoContinueEnabled = isMaterialAutoContinueEnabled();
     const category = getSelectedRecycleEntryCategory();
@@ -3403,9 +3421,11 @@
     let shouldAutoContinueAfterControlledFill = false;
     if (fillCandidate.ok) {
       setSwapMaterialInputValue(input, fillCandidate.materialId);
-      materialNoticeMessage = SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING;
+      materialNoticeMessage = fillCandidate.reason === "material_mismatch"
+        ? SWAP_MATERIAL_CATALOG_REPLACED_WARNING
+        : SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING;
       shouldAutoContinueAfterControlledFill = true;
-    } else if (materialWasEmptyBeforeControlledFill && hasSelectedSnapshotDevices) {
+    } else if (hasSelectedSnapshotDevices && fillCandidate.reason === "ambiguous_material") {
       materialNoticeMessage = SWAP_MATERIAL_MISSING_AMBIGUOUS_WARNING;
     }
 
@@ -3450,6 +3470,7 @@
     }
     if (materialNoticeMessage) setRecycleInlineAlert(materialWarning, materialNoticeMessage, "warning");
     if (shouldAutoContinueAfterControlledFill) autoContinueSwapMaterialIfReady(root, input);
+    else if (!(hasSelectedSnapshotDevices && fillCandidate.reason === "ambiguous_material")) autoContinueSwapMaterialIfReady(root, input);
 
     const title = document.createElement("div");
     title.textContent = "Бърз избор на Material Id";
@@ -3926,6 +3947,8 @@
 
   function getRecycleHistoryCompactStatusText() {
     const status = String(recycleHistoryCache.status || "idle");
+    const errorText = String(recycleHistoryCache.error || "").trim();
+    const detailText = errorText ? ` | ${errorText.replace(/^History URL\/template is unavailable\s*/i, "").trim()}` : "";
     const rows = Number(recycleHistoryCache.rowCount || 0);
     const todayCounts = recycleHistoryCache.todayCounts || {};
     const recycled = Number(todayCounts.recycled || 0);
@@ -3935,10 +3958,10 @@
     if (status === "loaded") return `history OK | rows ${rows} | ${todayText}${checkedAt ? ` | checked ${checkedAt}` : ""}`;
     if (status === "empty") return `history OK | rows 0 | ${todayText} | no records${checkedAt ? ` | checked ${checkedAt}` : ""}`;
     if (status === "loading") return "history loading";
-    if (status === "missing-url") return "history unavailable | missing-url";
-    if (status === "fetch-failed") return "history failed | fetch-failed";
-    if (status === "parse-failed") return "history failed | parse-failed";
-    if (status === "stale") return "history unavailable | stale";
+    if (status === "missing-url") return `history unavailable | missing-url${detailText}`;
+    if (status === "fetch-failed") return `history failed | fetch-failed${detailText}`;
+    if (status === "parse-failed") return `history failed | parse-failed${detailText}`;
+    if (status === "stale") return `history unavailable | stale${detailText}`;
     return `history ${status || "idle"}`;
   }
 
@@ -4371,6 +4394,55 @@
     return null;
   }
 
+  function readRecycleHistoryCurrentUserIdFromDom() {
+    try {
+      const text = String(document.body?.innerText || "");
+      const match = text.match(/\bA1BG\s*([0-9]{3,})\b/i);
+      if (match) return match[1];
+    } catch (e) {}
+    return "";
+  }
+
+  function readRecycleHistorySelectedWarehouseIdFromDom(technicianId = "") {
+    const technician = String(technicianId || "").trim();
+    try {
+      const selects = Array.from(document.querySelectorAll("select"));
+      for (const select of selects) {
+        const style = window.getComputedStyle ? window.getComputedStyle(select) : null;
+        if (style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")) continue;
+        if (select.disabled) continue;
+        const option = select.selectedOptions?.[0] || select.options?.[select.selectedIndex] || null;
+        const rawCandidates = [
+          select.value,
+          option?.value,
+          option?.textContent
+        ];
+        for (const raw of rawCandidates) {
+          const match = String(raw || "").trim().match(/^([0-9]{2,6})$/);
+          if (!match) continue;
+          const warehouseId = match[1];
+          if (technician && warehouseId === technician) continue;
+          return warehouseId;
+        }
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  function detectDailyworkTechnicianFromHeaderDom() {
+    const technicianId = readRecycleHistoryCurrentUserIdFromDom();
+    const warehouseId = readRecycleHistorySelectedWarehouseIdFromDom(technicianId);
+    if (!technicianId || !warehouseId) return null;
+    return {
+      ok: true,
+      technicianId,
+      source: "header-user-warehouse-select",
+      warehouseId,
+      url: "",
+      reason: "parsed_header_user_and_selected_warehouse"
+    };
+  }
+
   function sanitizeDailyworkCellsUrl(rawUrl) {
     const url = resolveRecycleSameOriginUrl(rawUrl);
     if (!url) return null;
@@ -4470,6 +4542,9 @@
   async function detectDailyworkTechnicianDryRun() {
     const historyResult = detectDailyworkTechnicianFromHistoryDom();
     if (historyResult) return historyResult;
+
+    const headerResult = detectDailyworkTechnicianFromHeaderDom();
+    if (headerResult) return headerResult;
 
     const cellsInfo = discoverDailyworkCellsUrlFromDom();
     if (!cellsInfo) {
@@ -4904,6 +4979,24 @@
       writeSelectedRecycleEntryCategory(plan.targetCategoryId);
       if (plan.resolvedAction === "category_device") writeSelectedRecycleDeviceIdsStorage(plan.targetDeviceIds);
       else writeSelectedRecycleDeviceIdsStorage([]);
+
+      // Verify the selection actually persisted before declaring success. If storage
+      // writes were blocked/failed, report a retryable failure instead of a silent no-op
+      // so the retry scheduler can try again.
+      const verifyState = readDailyworkAutoPlanCurrentSelectionState();
+      const persistedCategory = String(verifyState.currentCategoryId || "").trim();
+      if (persistedCategory !== String(plan.targetCategoryId || "").trim()) {
+        return {
+          applied: false,
+          plan: {
+            ...plan,
+            wouldApply: "no",
+            blockers: Array.from(new Set([...(Array.isArray(plan.blockers) ? plan.blockers : []), "dailywork_auto_persist_verification_failed"])),
+            reason: "dailywork_auto_persist_verification_failed"
+          }
+        };
+      }
+
       markDailyworkAutoAppliedForWorkday(currentWorkday);
       const renderedPanels = refreshRecycleEntryCategoryPanel(panel) ? 1 : refreshRecycleRemoteVisualOverlayPanels();
       return { applied: true, plan, renderedPanels };
@@ -4920,8 +5013,356 @@
     return dailyworkProductionAutoSelectPromise;
   }
 
-  function buildRecycleHistoryUrlForDateRange(now = new Date()) {
-    const templatePath = discoverRecycleHistoryTemplateFromDom();
+  // Intentional/terminal outcomes: retrying will not (and must not) change the result.
+  // Everything NOT in this set is treated as transient (timing, DOM not ready, network,
+  // last-known-good not cached yet, unstable technician detection) and is retried so the
+  // technician still gets their category/device selected automatically.
+  const DAILYWORK_AUTO_SELECT_TERMINAL_REASONS = new Set([
+    "resolved_action_noop",
+    "current_category_already_selected",
+    "current_devices_already_selected",
+    "dailywork_auto_suppressed_for_workday",
+    "dailywork_auto_already_applied_for_workday"
+  ]);
+
+  // Config-gap outcomes: they will not self-heal within the current page session
+  // (e.g. the schedule device name is not mapped, or maps to an unknown category/device).
+  // We still retry them a few times in case detection/schedule was momentarily wrong,
+  // but we cap them harder so we do not loop pointlessly.
+  const DAILYWORK_AUTO_SELECT_CONFIG_GAP_REASONS = new Set([
+    "unmapped_device_name",
+    "missing_device_name",
+    "target_category_unknown",
+    "target_category_missing",
+    "resolved_action_not_applicable"
+  ]);
+
+  function isDailyworkAutoSelectApplied(result) {
+    return Boolean(result && result.applied === true);
+  }
+
+  function collectDailyworkAutoSelectReasonTokens(result) {
+    const tokens = new Set();
+    const plan = result && result.plan ? result.plan : null;
+    if (!plan) return tokens;
+    const reason = String(plan.reason || "").trim();
+    if (reason) tokens.add(reason);
+    (Array.isArray(plan.blockers) ? plan.blockers : []).forEach(blocker => {
+      const value = String(blocker || "").trim();
+      if (value) tokens.add(value);
+    });
+    return tokens;
+  }
+
+  function isDailyworkAutoSelectResultTerminal(result) {
+    // null => panel missing or a run is already in flight; not terminal, keep trying.
+    if (!result) return false;
+    if (result.applied === true) return true;
+    const tokens = collectDailyworkAutoSelectReasonTokens(result);
+    for (const token of tokens) {
+      if (DAILYWORK_AUTO_SELECT_TERMINAL_REASONS.has(token)) return true;
+    }
+    return false;
+  }
+
+  function isDailyworkAutoSelectResultConfigGap(result) {
+    if (!result || result.applied === true) return false;
+    const tokens = collectDailyworkAutoSelectReasonTokens(result);
+    for (const token of tokens) {
+      if (DAILYWORK_AUTO_SELECT_CONFIG_GAP_REASONS.has(token)) return true;
+    }
+    return false;
+  }
+
+  // Backoff schedule for transient failures. Total worst-case ~20s, which comfortably
+  // covers slow OSS DOM render, background schedule fetch, and last-known-good warm-up.
+  const DAILYWORK_AUTO_SELECT_RETRY_DELAYS_MS = [250, 500, 1000, 1800, 3000, 5000, 8000];
+  // Config-gap outcomes get only a couple of extra tries (detection could have been wrong once).
+  const DAILYWORK_AUTO_SELECT_CONFIG_GAP_MAX_ATTEMPTS = 3;
+
+  function scheduleDailyworkProductionAutoSelectWithRetry(panel, options = {}) {
+    if (!panel) return;
+    // One scheduler per panel element; a re-injected panel is a new element and re-arms.
+    if (panel.dataset.wifiOssDailyworkAutoScheduler === "running") return;
+    panel.dataset.wifiOssDailyworkAutoScheduler = "running";
+
+    const delays = Array.isArray(options.delays) && options.delays.length
+      ? options.delays
+      : DAILYWORK_AUTO_SELECT_RETRY_DELAYS_MS;
+    const configGapMaxAttempts = Number.isFinite(Number(options.configGapMaxAttempts))
+      ? Number(options.configGapMaxAttempts)
+      : DAILYWORK_AUTO_SELECT_CONFIG_GAP_MAX_ATTEMPTS;
+
+    let attempt = 0;
+    let configGapAttempts = 0;
+    let finished = false;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      try { delete panel.dataset.wifiOssDailyworkAutoScheduler; }
+      catch (e) { try { panel.dataset.wifiOssDailyworkAutoScheduler = ""; } catch (e2) {} }
+    };
+
+    const scheduleNext = () => {
+      if (attempt >= delays.length) { finish(); return; }
+      const delay = delays[attempt];
+      attempt += 1;
+      setTimeout(() => { runOnce(); }, delay);
+    };
+
+    const runOnce = () => {
+      if (finished) return;
+      // Stop if the panel was removed (navigation / re-render replaced it).
+      if (!panel || !document.contains(panel)) { finish(); return; }
+
+      Promise.resolve()
+        .then(() => runDailyworkProductionAutoSelect(panel))
+        .then(result => {
+          if (finished) return;
+          if (isDailyworkAutoSelectApplied(result) || isDailyworkAutoSelectResultTerminal(result)) {
+            try { maybeShowDailyworkNoRecycleAssignmentNotice(result); } catch (e) {}
+            finish();
+            return;
+          }
+          if (isDailyworkAutoSelectResultConfigGap(result)) {
+            configGapAttempts += 1;
+            if (configGapAttempts >= configGapMaxAttempts) { finish(); return; }
+          }
+          scheduleNext();
+        })
+        .catch(() => {
+          if (finished) return;
+          // Unexpected throw is transient by definition; keep retrying within the cap.
+          scheduleNext();
+        });
+    };
+
+    const initialDelay = Number(options.initialDelayMs);
+    setTimeout(() => { runOnce(); }, Number.isFinite(initialDelay) && initialDelay >= 0 ? initialDelay : 0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dailywork "no recycle assignment" notice (non-blocking, closable modal)
+  // Shown when the technician HAS a schedule row today, but that row is not a
+  // mappable recycle assignment (e.g. "Друго"/absence, or a device name that
+  // does not resolve to any recycle category/device). It never blocks recycling.
+  // ---------------------------------------------------------------------------
+  const DAILYWORK_NOOP_NOTICE_DATE_KEY = "wifi_oss_dailywork_noop_notice_date_v1";
+  const DAILYWORK_NOOP_NOTICE_MODAL_ID = "wifi-oss-dailywork-noop-notice-modal";
+  let dailyworkNoopNoticeKeydownHandler = null;
+
+  function shouldShowDailyworkNoRecycleAssignmentNotice(result) {
+    if (!result || result.applied === true) return false;
+    const plan = result.plan || {};
+    const technicianId = String(plan.technicianId || "").trim();
+    const rowStatus = String(plan.scheduleRowStatus || "").trim();
+    const action = String(plan.resolvedAction || "").trim();
+    // Only when we positively found this technician's row and it maps to nothing
+    // recyclable. Detection/fetch failures (transient) must NOT trigger the notice.
+    if (!technicianId || rowStatus !== "found") return false;
+    return action === "noop";
+  }
+
+  function hasShownDailyworkNoRecycleNoticeForWorkday(workday = localDateKey()) {
+    try {
+      return String(localStorage.getItem(DAILYWORK_NOOP_NOTICE_DATE_KEY) || "").trim() === String(workday || "").trim();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markDailyworkNoRecycleNoticeShownForWorkday(workday = localDateKey()) {
+    try { localStorage.setItem(DAILYWORK_NOOP_NOTICE_DATE_KEY, String(workday || localDateKey())); } catch (e) {}
+  }
+
+  function closeDailyworkNoRecycleAssignmentModal() {
+    try {
+      const existing = document.getElementById(DAILYWORK_NOOP_NOTICE_MODAL_ID);
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    } catch (e) {}
+    if (dailyworkNoopNoticeKeydownHandler) {
+      try { document.removeEventListener("keydown", dailyworkNoopNoticeKeydownHandler, true); } catch (e) {}
+      dailyworkNoopNoticeKeydownHandler = null;
+    }
+  }
+
+  function showDailyworkNoRecycleAssignmentModal(details = {}) {
+    try {
+      if (document.getElementById(DAILYWORK_NOOP_NOTICE_MODAL_ID)) return false;
+      const host = document.body || document.documentElement;
+      if (!host) return false;
+
+      const scheduleDevice = String(details.scheduleDevice || "").trim();
+
+      const overlay = document.createElement("div");
+      overlay.id = DAILYWORK_NOOP_NOTICE_MODAL_ID;
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-label", "Няма разпределение за рециклиране");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.zIndex = "2147483040";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.boxSizing = "border-box";
+      overlay.style.background = "rgba(15, 23, 42, 0.45)";
+
+      const card = document.createElement("div");
+      card.style.boxSizing = "border-box";
+      card.style.width = "min(440px, calc(100vw - 32px))";
+      card.style.maxHeight = "calc(100vh - 32px)";
+      card.style.overflowY = "auto";
+      card.style.background = "#ffffff";
+      card.style.borderRadius = "12px";
+      card.style.border = "1px solid #e5e7eb";
+      card.style.boxShadow = "0 20px 50px rgba(15, 23, 42, 0.30)";
+      card.style.padding = "20px";
+
+      const header = document.createElement("div");
+      header.style.display = "flex";
+      header.style.alignItems = "flex-start";
+      header.style.justifyContent = "space-between";
+      header.style.gap = "12px";
+      header.style.marginBottom = "12px";
+
+      const titleWrap = document.createElement("div");
+      titleWrap.style.display = "flex";
+      titleWrap.style.alignItems = "center";
+      titleWrap.style.gap = "10px";
+
+      const iconBadge = document.createElement("div");
+      iconBadge.textContent = "!";
+      iconBadge.setAttribute("aria-hidden", "true");
+      iconBadge.style.flex = "0 0 auto";
+      iconBadge.style.width = "32px";
+      iconBadge.style.height = "32px";
+      iconBadge.style.borderRadius = "50%";
+      iconBadge.style.display = "flex";
+      iconBadge.style.alignItems = "center";
+      iconBadge.style.justifyContent = "center";
+      iconBadge.style.background = "#fef3c7";
+      iconBadge.style.color = "#b45309";
+      iconBadge.style.fontSize = "18px";
+      iconBadge.style.fontWeight = "900";
+      iconBadge.style.lineHeight = "1";
+
+      const heading = document.createElement("div");
+      heading.textContent = "Няма разпределение за рециклиране";
+      heading.style.color = "#111827";
+      heading.style.fontSize = "16px";
+      heading.style.fontWeight = "900";
+      heading.style.lineHeight = "1.25";
+
+      titleWrap.appendChild(iconBadge);
+      titleWrap.appendChild(heading);
+
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "x";
+      closeBtn.setAttribute("aria-label", "Затвори");
+      closeBtn.style.flex = "0 0 auto";
+      closeBtn.style.width = "30px";
+      closeBtn.style.height = "30px";
+      closeBtn.style.padding = "0";
+      closeBtn.style.border = "1px solid #cfd6df";
+      closeBtn.style.borderRadius = "6px";
+      closeBtn.style.background = "#ffffff";
+      closeBtn.style.color = "#475467";
+      closeBtn.style.cursor = "pointer";
+      closeBtn.style.fontSize = "16px";
+      closeBtn.style.fontWeight = "900";
+      closeBtn.style.lineHeight = "1";
+
+      header.appendChild(titleWrap);
+      header.appendChild(closeBtn);
+
+      const body = document.createElement("div");
+      body.style.color = "#374151";
+      body.style.fontSize = "14px";
+      body.style.lineHeight = "1.5";
+
+      const line1 = document.createElement("p");
+      line1.style.margin = "0 0 8px 0";
+      line1.textContent = "Според дневното разпределение днес няма зададено устройство/категория за рециклиране за Вас.";
+      body.appendChild(line1);
+
+      if (scheduleDevice) {
+        const line2 = document.createElement("p");
+        line2.style.margin = "0 0 8px 0";
+        const label = document.createElement("span");
+        label.textContent = "Разпределение за деня: ";
+        const value = document.createElement("strong");
+        value.textContent = scheduleDevice;
+        value.style.color = "#111827";
+        line2.appendChild(label);
+        line2.appendChild(value);
+        body.appendChild(line2);
+      }
+
+      const line3 = document.createElement("p");
+      line3.style.margin = "0";
+      line3.textContent = "Това е само предупреждение — можете да продължите и да изберете категория/устройство ръчно, ако все пак ще рециклирате.";
+      body.appendChild(line3);
+
+      const footer = document.createElement("div");
+      footer.style.display = "flex";
+      footer.style.justifyContent = "flex-end";
+      footer.style.gap = "8px";
+      footer.style.marginTop = "18px";
+
+      const okBtn = document.createElement("button");
+      okBtn.type = "button";
+      okBtn.textContent = "Разбрах";
+      okBtn.style.cursor = "pointer";
+      okBtn.style.border = "1px solid #b91c1c";
+      okBtn.style.borderRadius = "8px";
+      okBtn.style.background = "#e2001a";
+      okBtn.style.color = "#ffffff";
+      okBtn.style.fontSize = "14px";
+      okBtn.style.fontWeight = "800";
+      okBtn.style.padding = "9px 18px";
+      footer.appendChild(okBtn);
+
+      card.appendChild(header);
+      card.appendChild(body);
+      card.appendChild(footer);
+      overlay.appendChild(card);
+      host.appendChild(overlay);
+
+      // Prevent backdrop clicks from reaching the page; card clicks stay inside.
+      card.addEventListener("click", (e) => { e.stopPropagation(); });
+      overlay.addEventListener("click", () => { closeDailyworkNoRecycleAssignmentModal(); });
+      closeBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); closeDailyworkNoRecycleAssignmentModal(); });
+      okBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); closeDailyworkNoRecycleAssignmentModal(); });
+
+      dailyworkNoopNoticeKeydownHandler = (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          closeDailyworkNoRecycleAssignmentModal();
+        }
+      };
+      document.addEventListener("keydown", dailyworkNoopNoticeKeydownHandler, true);
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function maybeShowDailyworkNoRecycleAssignmentNotice(result) {
+    if (!shouldShowDailyworkNoRecycleAssignmentNotice(result)) return;
+    const workday = localDateKey();
+    if (hasShownDailyworkNoRecycleNoticeForWorkday(workday)) return;
+    const shown = showDailyworkNoRecycleAssignmentModal({
+      scheduleDevice: String(result?.plan?.scheduleDevice || "").trim()
+    });
+    if (shown) markDailyworkNoRecycleNoticeShownForWorkday(workday);
+  }
+
+  function buildRecycleHistoryUrlFromTemplatePath(templatePath, now = new Date()) {
     if (!templatePath) return "";
     try {
       const url = new URL(templatePath, window.location.origin);
@@ -4931,6 +5372,40 @@
       return url.href;
     } catch (e) {}
     return "";
+  }
+
+  function buildRecycleHistoryUrlForDateRange(now = new Date()) {
+    return buildRecycleHistoryUrlFromTemplatePath(discoverRecycleHistoryTemplateFromDom(), now);
+  }
+
+  function getRecycleHistoryFallbackBasePath() {
+    try {
+      const match = String(window.location.pathname || "").match(/^(\/[^/]+)(?:\/|$)/);
+      return match ? match[1] : "";
+    } catch (e) {}
+    return "";
+  }
+
+  async function resolveRecycleHistoryUrlForDateRange(now = new Date()) {
+    const directUrl = buildRecycleHistoryUrlForDateRange(now);
+    if (directUrl) return { url: directUrl, reason: "history-template" };
+
+    let technician = null;
+    try { technician = await detectDailyworkTechnicianDryRun(); } catch (e) {}
+    const technicianId = String(technician?.technicianId || "").trim();
+    const warehouseId = String(technician?.warehouseId || "").trim();
+    const basePath = getRecycleHistoryFallbackBasePath();
+    if (technician?.ok && technicianId && warehouseId && basePath) {
+      const templatePath = `${basePath}/sap-recycle-devices-by-technician/${technicianId}/${warehouseId}`;
+      const cleanTemplatePath = writeRecycleHistoryTemplatePath(templatePath);
+      const fallbackUrl = buildRecycleHistoryUrlFromTemplatePath(cleanTemplatePath, now);
+      if (fallbackUrl) return { url: fallbackUrl, reason: "technician-cells-fallback" };
+    }
+
+    return {
+      url: "",
+      reason: technician?.reason || "history-template-unavailable"
+    };
   }
 
   function findRecycleHistoryColumnIndex(headerCells, relName, textMatchers, fallbackIdx) {
@@ -5013,7 +5488,8 @@
   }
 
   async function preloadRecycleHistoryCache({ force = false } = {}) {
-    const url = buildRecycleHistoryUrlForDateRange();
+    const resolved = await resolveRecycleHistoryUrlForDateRange();
+    const url = String(resolved?.url || "");
     if (!url) {
       recycleHistoryCache.loaded = false;
       recycleHistoryCache.lookup = new Map();
@@ -5021,11 +5497,11 @@
       recycleHistoryCache.todayCounts = buildRecycleHistoryTodayCounts([]);
       setRecycleHistoryCacheStatus("missing-url", {
         url: "",
-        error: "History URL/template is unavailable",
+        error: `History URL/template is unavailable (${resolved?.reason || "unknown"})`,
         rowCount: 0,
         lastAttemptAt: new Date().toISOString()
       });
-      warnRecycleHistoryOnce("missing-url", "History URL/template is unavailable; duplicate validation will fail open.");
+      warnRecycleHistoryOnce("missing-url", "History URL/template is unavailable; duplicate validation will fail open.", { reason: resolved?.reason || "unknown" });
       return false;
     }
 
@@ -5410,7 +5886,7 @@
     if (!category) return { ok: false, materialId: "", reason: "missing_category" };
     if (category === "cam_modules") return { ok: false, materialId: "", reason: "special_cam_modules" };
     if (category === "modems") return { ok: false, materialId: "", reason: "special_modems" };
-    if (normalizeSwapMaterialId(inputEl?.value)) return { ok: false, materialId: "", reason: "material_prefilled" };
+    const currentMaterialId = normalizeSwapMaterialId(inputEl?.value);
 
     const snapshot = readValidRecycleEntryMaterialSnapshot(category);
     if (category === "austrian" && (!snapshot || !snapshot.deviceIds.length)) {
@@ -5427,7 +5903,9 @@
     const hasMaterialModel = modelList.some(model => normalizeSwapMaterialId(model?.id) === materialId);
     if (!hasMaterialModel) return { ok: false, materialId, reason: "missing_material_model" };
 
-    return { ok: true, materialId, reason: "ok" };
+    if (!currentMaterialId) return { ok: true, materialId, reason: "missing_material" };
+    if (currentMaterialId === materialId) return { ok: false, materialId, reason: "material_matches_catalog" };
+    return { ok: true, materialId, reason: "material_mismatch" };
   }
 
   const RECYCLE_SERIAL_CYRILLIC_WARNING = "\u0417\u0430\u0441\u0435\u0447\u0435\u043d\u0430 \u0435 \u043a\u0438\u0440\u0438\u043b\u0438\u0446\u0430 \u0432 \u0441\u0435\u0440\u0438\u0439\u043d\u0438\u044f \u043d\u043e\u043c\u0435\u0440. \u0421\u043c\u0435\u043d\u0438 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430\u0442\u0430 \u043d\u0430 EN \u0438 \u0441\u043a\u0430\u043d\u0438\u0440\u0430\u0439 \u043e\u0442\u043d\u043e\u0432\u043e.";
@@ -10137,7 +10615,7 @@
     ensureRecycleHistoryTitleBadge();
     ensureRecycleHistoryCounterButton();
     renderCategories();
-    setTimeout(() => { try { runDailyworkProductionAutoSelect(panel); } catch (e) {} }, 0);
+    try { scheduleDailyworkProductionAutoSelectWithRetry(panel); } catch (e) {}
     scheduleRecycleRemoteAutomaticEligibleDevices();
     preloadRecycleHistoryAndUpdateStatus({ force: true });
 

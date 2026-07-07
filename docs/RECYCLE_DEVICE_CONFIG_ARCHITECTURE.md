@@ -45,7 +45,7 @@ The normalized local recycle catalog already drives:
 - selected-device help images through `helpImagePath`;
 - category material allowlists generated from catalog `materialId` values.
 
-Current selected-device behavior affects validation, help context, SAP/material quick-button ordering, and controlled SAP/material auto-fill. SAP/material quick-button filtering remains category-level: selected devices are prioritized first when their material buttons exist, but they do not restrict the grid to selected devices only. A per-flow material snapshot in `sessionStorage` captures category/device/material/serial/date context at valid recycle Continue time so the SAP/material step does not have to depend only on live shared selected-device state. `getRecycleMaterialFillCandidate(...)` evaluates a controlled fill candidate and returns `{ ok, materialId, reason }`; when the candidate is safe and the OSS `MaterialId` field is empty, runtime fills the material value without calling auto-continue again.
+Current selected-device behavior affects validation, help context, SAP/material quick-button filtering, and controlled SAP/material enforcement. A per-flow material snapshot in `sessionStorage` captures category/device/material/serial/date context at valid recycle Continue time so the SAP/material step does not have to depend only on live shared selected-device state. With selected devices in that valid snapshot, the SAP/material quick-button grid is restricted to the selected devices/material IDs. `getRecycleMaterialFillCandidate(...)` evaluates a controlled candidate and returns `{ ok, materialId, reason }`; when the candidate is safe and the OSS `MaterialId` field is empty, runtime fills the catalog material value. When the candidate is safe and OSS prefilled a different `MaterialId`, runtime replaces it with the selected device catalog SAP/material before auto-continue.
 
 Current recycle device image policy:
 
@@ -592,8 +592,8 @@ Before any config architecture implementation is considered safe:
 - dashboard offline/invalid config keeps local fallback working;
 - SAP/material quick buttons still render and fill values;
 - SAP/material selected-device ordering uses a valid per-flow material snapshot when available and falls back safely when it is missing or stale;
-- SAP/material controlled auto-fill requires a valid per-flow snapshot, an empty `MaterialId`, exactly one safe normalized material candidate, and a material model match;
-- SAP/material controlled auto-fill does not overwrite prefilled OSS values and does not call auto-continue after extension fill;
+- SAP/material controlled enforcement requires a valid per-flow snapshot, exactly one safe normalized material candidate, and a material model match;
+- SAP/material controlled enforcement fills empty values and replaces mismatched OSS-prefilled values with the selected device catalog SAP/material before using the existing auto-continue path;
 - Austrian selected-device validation covers ADB `PI` + exactly 19 alphanumeric characters and Huawei exactly 16 alphanumeric characters;
 - Austrian no-selected-device legacy preset fallback still works;
 - material auto-continue debug toggle still works;
@@ -613,7 +613,7 @@ While colleagues are testing the current extension, avoid:
 
 - moving recycle config to JSON runtime loading;
 - adding dashboard recycle config;
-- changing SAP/material filtering to selected-only behavior or broadening controlled auto-fill beyond the safe snapshot candidate policy;
+- broadening SAP/material selected-device enforcement beyond the safe single-candidate snapshot policy;
 - retiring Austrian no-selected-device legacy fallback without a separate plan;
 - changing CAM flow;
 - changing validation profiles;

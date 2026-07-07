@@ -152,7 +152,9 @@ Behavior:
 - Injects print buttons into warehouse/recycle list controls when matching list roots and pagination exist.
 - For warehouse labels, reads serial numbers and overlays Code128 barcode/text onto `images/label.svg`, falling back to `images/label.png`.
 - For recycle barcode sheets, reads name/serial/SAP ID and prints a 3x8 A4 barcode grid.
-- For recycle lists, selected checkbox rows are preferred; if none selected, it prints all.
+- For recycle lists, manually selected checkbox rows are printed exactly as selected (including `Успешно рециклиран = Не`). When no rows are selected, printing defaults to successful rows only (`Успешно рециклиран = Да`) instead of all rows.
+- `getRecycleDevicesForBarcodeSheet` reads the `Успешно рециклиран`/`IsSuccess` column via `normalizeRecycleHistorySuccess` to apply the successful-only default. If nothing successful is found and nothing is selected, all three recycle print entry points show a clear alert telling the operator to select rows manually.
+- The recycle `Принтирай баркод` OSS button is hooked (capture-phase) so its default behavior also follows the successful-only default and manual-selection override, matching `Принтирай Всичко` and the injected printer icon.
 
 Important selectors/IDs:
 
@@ -339,6 +341,7 @@ Recycle entry storage:
 - `wifi_oss_dailywork_auto_applied_date_v1` in `localStorage`, local workday marker after a successful production Dailywork auto-selection
 - `wifi_oss_dailywork_auto_suppressed_date_v1` in `localStorage`, local workday marker set by Reset so production Dailywork auto-selection does not immediately reapply
 - `wifi_oss_dailywork_manual_user_override_v1` in `localStorage`, manual Dailywork fallback user ID only; it does not store schedule rows, names, or devices
+- `wifi_oss_dailywork_noop_notice_date_v1` in `localStorage`, local workday marker so the non-blocking "Няма разпределение за рециклиране" notice shows at most once per workday
 - `wifi_oss_recycle_entry_last_serial` in `sessionStorage`
 - `wifi_oss_recycle_entry_pending_material` in `sessionStorage`
 - `wifi_oss_recycle_entry_material_snapshot` in `sessionStorage`, per-flow category/device/material/serial/date context for the next SAP/material step
@@ -374,7 +377,20 @@ Dailywork schedule support is separate from the external recycle catalog runtime
 
 Production auto-selection runs only on the recycle entry page after the initial category panel render and daily reset opportunity. It detects the current logged-in OSS technician, finds exactly one matching Dailywork `User`, resolves that row's `Device` through the explicit local schedule-device mapping, and applies only safe `category` or `category_device` plans. It skips on no row, multiple rows, `noop` devices such as absence/admin work, invalid categories/devices, existing manual category/device selection, or same-day suppress markers. Production auto-selection never uses the saved fallback user automatically and never clicks OSS category/device DOM elements, navigates OSS, clicks Continue, edits serial input, or writes material snapshots.
 
+Production auto-selection is triggered through `scheduleDailyworkProductionAutoSelectWithRetry(panel)`, a hardened wrapper around `runDailyworkProductionAutoSelect(panel)`:
+
+- One scheduler runs per injected panel element (guarded by `panel.dataset.wifiOssDailyworkAutoScheduler`); a re-injected panel re-arms a fresh scheduler.
+- Transient outcomes (technician detection failed, schedule fetch/items unavailable, cells fetch failed, in-flight `null`, unexpected throw, or `dailywork_auto_persist_verification_failed`) are retried with a bounded backoff schedule (`250ms → 8s`, ~20s worst case). Each retry re-runs detection and the background schedule fetch, so slow OSS DOM render, momentary network failures, and last-known-good warm-up recover automatically.
+- Terminal/intentional outcomes stop immediately and are never retried or overridden: `resolved_action_noop`, `current_category_already_selected`, `current_devices_already_selected`, `dailywork_auto_suppressed_for_workday`, and `dailywork_auto_already_applied_for_workday`.
+- Config-gap outcomes that will not self-heal in-session (`unmapped_device_name`, `missing_device_name`, `target_category_unknown`, `target_category_missing`, `resolved_action_not_applicable`) get only a few extra attempts and then stop.
+- The scheduler stops if the panel is removed from the DOM (navigation/re-render).
+- `runDailyworkProductionAutoSelect` verifies the write persisted by reading the selection back before marking success; a failed/blocked storage write returns the retryable `dailywork_auto_persist_verification_failed` instead of a silent no-op.
+
+Non-blocking "no recycle assignment" notice: when the retry scheduler reaches a terminal outcome where the technician row was positively found (`scheduleRowStatus === "found"`) but the resolved action is `noop` (absence/`Друго` or an unmapped device name), `maybeShowDailyworkNoRecycleAssignmentNotice` shows a closable modal (`wifi-oss-dailywork-noop-notice-modal`) at most once per workday (`wifi_oss_dailywork_noop_notice_date_v1`). It only appears for a positively found unmappable row, never for transient detection/fetch failures. It never blocks recycling and can be dismissed with the button, `x`, backdrop click, or `Escape`.
+
 Reset clears the current recycle category/device selection and writes `wifi_oss_dailywork_auto_suppressed_date_v1` for the current local workday. This prevents production Dailywork auto-selection from immediately reapplying after an operator intentionally resets the selection. Manual Dailywork apply remains available after Reset because it is an explicit operator action.
+
+Recycle-history duplicate validation first discovers a `sap-recycle-devices-by-technician` template from the current page, matching links, or the saved `wifi_oss_recycle_history_url_template` value. If that template is missing, it falls back to technician detection: first the visible OSS header user code such as `A1BG514837` plus the selected numeric warehouse dropdown, then discover/fetch `sap-warehouse-cells-recycle`. When a technician and warehouse are available, it builds the same-origin `sap-recycle-devices-by-technician/{technicianId}/{warehouseId}` URL and caches it as the history template. If all discovery paths fail, duplicate validation remains fail-open with the visible history warning.
 
 Manual/demo Dailywork tools:
 
@@ -618,9 +634,10 @@ Behavior for mapped categories:
 - After a valid recycle serial Continue, a per-flow material snapshot is saved in `sessionStorage`; the SAP/material step uses only a valid per-flow snapshot for selected-device material decisions, so another OSS tab changing the shared selected devices does not affect the current material step.
 - If one or more recycle devices exist in the valid per-flow snapshot, the quick-button grid is restricted to only the selected devices/material IDs instead of merely prioritizing them first.
 - `getRecycleMaterialFillCandidate(...)` calculates a controlled fill candidate from the snapshot and current material model list, returning `{ ok, materialId, reason }`.
-- If the candidate is safe, `MaterialId` is empty, and the material exists in the current material model list, the extension fills `MaterialId`, shows a yellow warning that the value was filled automatically, and calls the existing material auto-continue logic again. Debug auto-continue `ON` may continue forward; debug auto-continue `OFF` keeps the material page visible.
+- If the candidate is safe, the material exists in the current material model list, and `MaterialId` is empty, the extension fills `MaterialId`, shows a yellow warning that the value was filled automatically, and calls the existing material auto-continue logic again.
+- If the candidate is safe and OSS prefilled a different `MaterialId`, the selected device catalog SAP/material wins: the extension replaces the OSS value, shows a yellow replacement warning, and only then calls the existing material auto-continue logic. This covers cases such as `Huawei B310s` where the catalog value is `111732` and OSS may prefill a different SAP.
 - If selected devices exist in the valid snapshot but there is no single safe Material ID candidate, the extension does not auto-fill, does not auto-continue, and shows a yellow warning asking the operator to choose the device.
-- Prefilled OSS `MaterialId` values are not overwritten.
+- Prefilled OSS `MaterialId` values are preserved only when there is no valid single selected-device snapshot or when the prefilled value already matches the selected device catalog SAP/material.
 - If no selected devices exist in the valid snapshot, the current category-level material filtering behavior remains unchanged.
 - The broad chips `all` / `internet` / `tv` / `other` are hidden.
 - Search stays scoped to the rendered allowlisted devices.
@@ -753,7 +770,7 @@ Latest confirmed real-OSS checks:
 - Austrian label generation works.
 - CAM modules flow works.
 - Recycle-specific material filtering works for the mapped categories.
-- Selected recycle devices restrict mapped SAP/material quick-button grids to the valid per-flow selected devices/material IDs. Safe single-candidate selections can controlled-fill empty `MaterialId`; debug auto-continue `ON` may continue forward after that fill, while debug auto-continue `OFF` keeps the page visible.
+- Selected recycle devices restrict mapped SAP/material quick-button grids to the valid per-flow selected devices/material IDs. Safe single-candidate selections can controlled-fill empty `MaterialId` or replace a mismatched OSS-prefilled value with the selected device catalog SAP/material; debug auto-continue `ON` may continue forward after that enforcement, while debug auto-continue `OFF` keeps the page visible.
 - Austrian ADB/Huawei device cards, selected-device validation, and selected-device material fill are implemented; no selected Austrian device keeps the legacy preset fallback.
 - `Material auto-continue` debug toggle works and no longer freezes the page.
 
