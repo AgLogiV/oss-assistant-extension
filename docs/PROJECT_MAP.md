@@ -214,7 +214,7 @@ Injection:
 Current categories:
 
 - `android_iptv` - `Android TV & ZTE IPTV`
-- `xplore_zapper` - `XPLORE & Zapper`
+- `xplore_zapper` - `5019/5020 & Zapper`
 - `dth_kaon_nagra` - `DTH Kaon & Nagra`
 - `austrian` - `Австрийски`
 - `netbox` - `Netbox`
@@ -225,6 +225,8 @@ Current categories:
 
 Each category has a card/button with an image from `images/categories/` except `modems`, which uses the Technicolor device image.
 `cam_modules` uses `Extension/images/categories/CAM_modules.webp`.
+
+Category clicks go through `requestCategorySelection` and device clicks through `requestDeviceToggle`, which enforce the dailywork manual-change confirmation described in `Dailywork Schedule Auto-Selection`. Without a dailywork assignment for the current workday, selection is unguarded.
 
 ### Local Device Catalog and Device Cards
 
@@ -342,6 +344,8 @@ Recycle entry storage:
 - `wifi_oss_dailywork_auto_suppressed_date_v1` in `localStorage`, local workday marker set by Reset so production Dailywork auto-selection does not immediately reapply
 - `wifi_oss_dailywork_manual_user_override_v1` in `localStorage`, manual Dailywork fallback user ID only; it does not store schedule rows, names, or devices
 - `wifi_oss_dailywork_noop_notice_date_v1` in `localStorage`, local workday marker so the non-blocking "Няма разпределение за рециклиране" notice shows at most once per workday
+- `wifi_oss_dailywork_assignment_v1` in `localStorage`, the category/device the dailywork distribution applied for the current workday (`{ workday, categoryId, deviceIds }`); used to confirm manual category/device changes that deviate from the schedule
+- `wifi_oss_recycle_processed_ledger_v1` in `localStorage`, local processed-serial ledger keyed by normalized serial (`{ serial, action, categoryId, at, firstAt, workday }`); independent double-process guard checked alongside the server recycle history, pruned after ~30 days and capped in size
 - `wifi_oss_recycle_entry_last_serial` in `sessionStorage`
 - `wifi_oss_recycle_entry_pending_material` in `sessionStorage`
 - `wifi_oss_recycle_entry_material_snapshot` in `sessionStorage`, per-flow category/device/material/serial/date context for the next SAP/material step
@@ -388,7 +392,13 @@ Production auto-selection is triggered through `scheduleDailyworkProductionAutoS
 
 Non-blocking "no recycle assignment" notice: when the retry scheduler reaches a terminal outcome where the technician row was positively found (`scheduleRowStatus === "found"`) but the resolved action is `noop` (absence/`Друго` or an unmapped device name), `maybeShowDailyworkNoRecycleAssignmentNotice` shows a closable modal (`wifi-oss-dailywork-noop-notice-modal`) at most once per workday (`wifi_oss_dailywork_noop_notice_date_v1`). It only appears for a positively found unmappable row, never for transient detection/fetch failures. It never blocks recycling and can be dismissed with the button, `x`, backdrop click, or `Escape`.
 
+Manual-change confirmation: whenever the dailywork target is applied (production auto-select, manual apply, or debug force), `recordDailyworkAssignment` stores the applied category/device in `wifi_oss_dailywork_assignment_v1` for the current workday. In the recycle entry panel, category clicks go through `requestCategorySelection` and device clicks through `requestDeviceToggle`. If an assignment exists for today and the operator picks a different category (or toggles the device selection so it no longer matches the assigned device set), `showRecycleAssignmentChangeConfirm` opens a closable dialog before the change is applied. Confirming applies the change; cancel/Escape/backdrop keeps the current selection. The assignment baseline is the schedule, not the last manual pick, so re-selecting the assigned category/device is always free and any deviation keeps prompting. When there is no assignment for today (e.g. `Друго`/config gap), selection is unguarded. The Reset button reuses the same confirm ("Нулиране на избора") via `showRecycleAssignmentChangeConfirm` when an assignment exists for today and a category/device is currently selected; confirming runs the normal reset (clear selection + suppress auto-reapply for the workday), cancel keeps the selection.
+
 Reset clears the current recycle category/device selection and writes `wifi_oss_dailywork_auto_suppressed_date_v1` for the current local workday. This prevents production Dailywork auto-selection from immediately reapplying after an operator intentionally resets the selection. Manual Dailywork apply remains available after Reset because it is an explicit operator action.
+
+Double-process guard: in addition to the server recycle history, the recycle entry gate (`guardContinue` in `injectRecycleEntryCategoryPanel`) checks a local processed-serial ledger (`wifi_oss_recycle_processed_ledger_v1`) through `buildRecycleDuplicateForSerial`, which merges the server history duplicate and the local ledger entry into one duplicate signal. When a serial passes all guards and the flow proceeds, `recordRecycleProcessedSerial` writes it to the ledger, so an immediate re-entry of the same serial is blocked even before the server history reflects it. Because the entry serial gate is shared by recycle and scrap, this enforces cross-action safety (an already recycled/scrapped device is blocked for both). The existing "Да" override (`consumeRecycleHistoryDuplicateOverride`) still allows intentional re-processing, and an in-memory per-page-load key (`recycleEntryHandledSerialKey`, reset on each fresh panel injection) prevents a single Continue gesture from self-blocking after it records the serial. The ledger is shared across tabs (same origin), pruned after `RECYCLE_PROCESSED_LEDGER_MAX_DAYS` (30) and capped at `RECYCLE_PROCESSED_LEDGER_MAX_ENTRIES` (3000). The warning wording reflects the known action: recycled, scrapped, or a generic "обработено" when only the ledger knows.
+
+The server recycle history covers the last `RECYCLE_HISTORY_DAYS_BACK` (7) days, so a device recycled/scrapped within the past week is detected as a duplicate. Because the history loads asynchronously, `guardContinue` performs a fast, bounded, one-shot wait per serial (`recycleEntryHistoryWaitedSerialKey`) when the history is still `idle`/`loading`: it awaits the in-flight fetch capped at `RECYCLE_HISTORY_CONTINUE_WAIT_MS` (1500 ms) and then re-triggers Continue so the duplicate check runs against real data. On timeout it fails open and the local processed-serial ledger still blocks same-device repeats, keeping the flow fast.
 
 Recycle-history duplicate validation first discovers a `sap-recycle-devices-by-technician` template from the current page, matching links, or the saved `wifi_oss_recycle_history_url_template` value. If that template is missing, it falls back to technician detection: first the visible OSS header user code such as `A1BG514837` plus the selected numeric warehouse dropdown, then discover/fetch `sap-warehouse-cells-recycle`. When a technician and warehouse are available, it builds the same-origin `sap-recycle-devices-by-technician/{technicianId}/{warehouseId}` URL and caches it as the history template. If all discovery paths fail, duplicate validation remains fail-open with the visible history warning.
 
@@ -402,12 +412,15 @@ Manual/demo Dailywork tools:
 
 The `RESET` button is created by the generic `injectButton()` flow, not by `injectRecycleEntryCategoryPanel()`.
 
-On click it:
+Before it clears anything, if the dailywork distribution assigned a category/device for today (`readDailyworkAssignmentForToday`) and a category/device is currently selected, it opens the shared `showRecycleAssignmentChangeConfirm` dialog ("Нулиране на избора", `Да, нулирай` / `Отказ`). Cancel/Escape keeps the selection; confirm runs the reset. With no assignment for today, or nothing currently selected, it resets immediately without a prompt.
+
+On (confirmed) click it:
 
 - removes `wifi_oss_recycle_entry_category`
 - removes `wifi_oss_recycle_entry_category_date`
 - removes `wifi_oss_recycle_entry_selected_devices`
 - removes the legacy category value from `sessionStorage`
+- writes `wifi_oss_dailywork_auto_suppressed_date_v1` for the current workday so production Dailywork auto-selection does not immediately reapply
 - clears `panel.dataset.wifiOssRecycleSelected`
 - sets category button backgrounds back to `#585858`
 - clears `wifi-oss-recycle-serial-msg`
@@ -733,6 +746,10 @@ Fallback behavior:
 - `wifi_oss_dailywork_auto_applied_date_v1` - `localStorage`, local workday marker for a successful production Dailywork auto-selection.
 - `wifi_oss_dailywork_auto_suppressed_date_v1` - `localStorage`, local workday marker that blocks production Dailywork auto-selection after Reset.
 - `wifi_oss_dailywork_manual_user_override_v1` - `localStorage`, selected fallback Dailywork user ID for explicit manual apply only.
+- `wifi_oss_dailywork_noop_notice_date_v1` - `localStorage`, local workday marker so the non-blocking "Няма разпределение за рециклиране" notice shows at most once per workday.
+- `wifi_oss_dailywork_assignment_v1` - `localStorage`, category/device applied by the dailywork distribution for the current workday (`{ workday, categoryId, deviceIds }`); baseline for the manual category/device/Reset change confirmations.
+- `wifi_oss_recycle_processed_ledger_v1` - `localStorage`, local processed-serial ledger (`{ serial, action, categoryId, at, firstAt, workday }`) for the offline-proof double-process guard; pruned after ~30 days and size-capped.
+- `wifi_oss_recycle_history_url_template` - `localStorage`, cached same-origin `sap-recycle-devices-by-technician` history URL template for duplicate validation.
 - `wifi_oss_recycle_entry_last_serial` - `sessionStorage`, serial saved before material step.
 - `wifi_oss_recycle_entry_pending_material` - `sessionStorage`, flag for material preset step.
 - `wifi_oss_recycle_entry_material_snapshot` - `sessionStorage`, per-flow category/device/material/serial/date snapshot used for SAP/material button ordering and controlled auto-fill.

@@ -552,20 +552,46 @@
     autoBtn.addEventListener("click", (e) => { e.preventDefault(); setAutoMode(!autoMode); });
     resetBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      clearRecycleEntrySelectionStorage();
-      const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
-      const panel = root ? root.querySelector(".wifi-oss-recycle-category-panel") : null;
-      if (root || panel) markDailyworkAutoSuppressedForWorkday();
-      if (panel) {
-        panel.dataset.wifiOssRecycleSelected = "";
-        if (!refreshRecycleEntryCategoryPanel(panel)) {
-          const buttons = Array.from(panel.querySelectorAll("button[data-wifi-oss-recycle-cat]"));
-          buttons.forEach(b => { b.style.background = "#585858"; });
+      const performReset = () => {
+        clearRecycleEntrySelectionStorage();
+        const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
+        const panel = root ? root.querySelector(".wifi-oss-recycle-category-panel") : null;
+        if (root || panel) markDailyworkAutoSuppressedForWorkday();
+        if (panel) {
+          panel.dataset.wifiOssRecycleSelected = "";
+          if (!refreshRecycleEntryCategoryPanel(panel)) {
+            const buttons = Array.from(panel.querySelectorAll("button[data-wifi-oss-recycle-cat]"));
+            buttons.forEach(b => { b.style.background = "#585858"; });
+          }
         }
+        const inlineMsg = document.getElementById("wifi-oss-recycle-serial-msg");
+        clearRecycleInlineAlert(inlineMsg);
+        hideRecycleSerialHelp();
+      };
+
+      // Reset clears the category/device. If the dailywork distribution assigned something
+      // for today and there is a current selection to clear, confirm first so Reset cannot
+      // silently drop the scheduled category/device. No assignment or nothing selected =>
+      // reset immediately.
+      const assignment = readDailyworkAssignmentForToday();
+      let hasSelection = false;
+      try {
+        const currentCategory = String(readSelectedRecycleEntryCategory() || "").trim();
+        const currentDevices = readSelectedRecycleDeviceIdsStorage();
+        hasSelection = !!currentCategory || (Array.isArray(currentDevices) && currentDevices.length > 0);
+      } catch (e2) {}
+      if (assignment && assignment.categoryId && hasSelection) {
+        showRecycleAssignmentChangeConfirm({
+          title: "Нулиране на избора",
+          message: "Сигурен ли си, че искаш да нулираш избора на категория/устройство? Той е зададен по дневното разпределение.",
+          assignedText: getRecycleEntryCategoryLabel(assignment.categoryId),
+          confirmLabel: "Да, нулирай",
+          cancelLabel: "Отказ",
+          onConfirm: performReset
+        });
+        return;
       }
-      const inlineMsg = document.getElementById("wifi-oss-recycle-serial-msg");
-      clearRecycleInlineAlert(inlineMsg);
-      hideRecycleSerialHelp();
+      performReset();
     });
     autoButtonRef = autoBtn;
 
@@ -3801,6 +3827,10 @@
   const RECYCLE_HISTORY_TEMPLATE_KEY = "wifi_oss_recycle_history_url_template";
   const DAILYWORK_AUTO_APPLIED_DATE_KEY = "wifi_oss_dailywork_auto_applied_date_v1";
   const DAILYWORK_AUTO_SUPPRESSED_DATE_KEY = "wifi_oss_dailywork_auto_suppressed_date_v1";
+  // Records the category/device that the dailywork distribution assigned for the current
+  // workday, so a manual category/device change away from it can ask for confirmation.
+  const DAILYWORK_ASSIGNMENT_KEY = "wifi_oss_dailywork_assignment_v1";
+  const RECYCLE_ASSIGNMENT_CHANGE_CONFIRM_MODAL_ID = "wifi-oss-recycle-assignment-change-confirm";
   const DAILYWORK_MANUAL_USER_OVERRIDE_KEY = "wifi_oss_dailywork_manual_user_override_v1";
   const RECYCLE_SERIAL_ALERT_ID = "wifi-oss-recycle-serial-msg";
   const RECYCLE_SERIAL_HELP_BUTTON_ID = "wifi-oss-recycle-serial-help-btn";
@@ -3889,9 +3919,37 @@
     "cam_modules",
     "modems"
   ]);
-  const RECYCLE_HISTORY_DAYS_BACK = 3;
+  // Display labels for recycle categories, mirroring the panel category cards. Used where a
+  // human-readable category name is needed outside the panel closure (e.g. Reset confirm).
+  const RECYCLE_ENTRY_CATEGORY_LABELS = {
+    android_iptv: "Android TV & ZTE IPTV",
+    xplore_zapper: "5019/5020 & Zapper",
+    dth_kaon_nagra: "DTH Kaon & Nagra",
+    austrian: "Австрийски",
+    netbox: "Netbox",
+    routers: "Рутери",
+    gpon: "GPON",
+    cam_modules: "CAM Модули",
+    modems: "Модеми"
+  };
+  function getRecycleEntryCategoryLabel(id) {
+    const key = String(id || "").trim();
+    return RECYCLE_ENTRY_CATEGORY_LABELS[key] || key;
+  }
+  const RECYCLE_HISTORY_DAYS_BACK = 7;
+  // Max time the recycle entry gate will briefly wait for the server history to finish
+  // loading before letting the user proceed. Kept short so the flow stays fast; if it
+  // elapses we fail open and the local processed-serial ledger still blocks repeats.
+  const RECYCLE_HISTORY_CONTINUE_WAIT_MS = 1500;
   const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
   const RECYCLE_HISTORY_TO_PARAM = "RecycleDevicesByTechnician.To";
+  // Local processed-serial ledger: an independent, offline-proof guard against
+  // recycling/scrapping the same device more than once. It is written when a serial
+  // passes the recycle entry gate and checked together with the server history, so a
+  // just-processed device is blocked immediately even before the server history reflects it.
+  const RECYCLE_PROCESSED_LEDGER_KEY = "wifi_oss_recycle_processed_ledger_v1";
+  const RECYCLE_PROCESSED_LEDGER_MAX_DAYS = 30;
+  const RECYCLE_PROCESSED_LEDGER_MAX_ENTRIES = 3000;
   let recycleHistoryCache = {
     key: "",
     lookup: new Map(),
@@ -3907,13 +3965,26 @@
     error: ""
   };
   let recycleHistoryDuplicateOverrideSerial = "";
+  // Serial already let through the current recycle entry page load; prevents a single
+  // Continue gesture (click + form submit, or Enter + submit) from self-blocking after
+  // it records the serial in the processed ledger. Reset on each fresh panel injection.
+  let recycleEntryHandledSerialKey = "";
+  // Serial for which the entry gate has already performed its one-shot bounded wait for the
+  // server history on this page load; prevents repeated/looping waits on the same serial.
+  let recycleEntryHistoryWaitedSerialKey = "";
   const recycleHistoryWarnedKeys = new Set();
 
   function warnRecycleHistoryOnce(key, ...args) {
     const k = String(key || "generic");
     if (recycleHistoryWarnedKeys.has(k)) return;
     recycleHistoryWarnedKeys.add(k);
-    try { console.warn("[recycleHistory]", ...args); } catch (e) {}
+    // Render object arguments as readable JSON so log aggregators do not collapse
+    // them to "[object Object]", which makes fail-open diagnostics impossible.
+    const readable = args.map(a => {
+      if (a === null || typeof a !== "object") return a;
+      try { return JSON.stringify(a); } catch (e) { return String(a); }
+    });
+    try { console.warn("[recycleHistory]", ...readable); } catch (e) {}
   }
 
   function setRecycleHistoryCacheStatus(status, details = {}) {
@@ -4743,6 +4814,38 @@
     try { localStorage.setItem(DAILYWORK_AUTO_SUPPRESSED_DATE_KEY, String(workday || localDateKey())); } catch (e) {}
   }
 
+  // Persist the category/device assigned by the dailywork distribution for this workday.
+  // Written whenever the schedule target is applied (auto, manual, or debug force) so the
+  // panel can warn when the operator later changes to a different category/device.
+  function recordDailyworkAssignment(categoryId, deviceIds, workday = localDateKey()) {
+    const categoryIdValue = String(categoryId || "").trim();
+    if (!categoryIdValue) return;
+    const ids = Array.isArray(deviceIds)
+      ? Array.from(new Set(deviceIds.map(id => String(id || "").trim()).filter(Boolean)))
+      : [];
+    const record = { workday: String(workday || localDateKey()).trim(), categoryId: categoryIdValue, deviceIds: ids };
+    try { localStorage.setItem(DAILYWORK_ASSIGNMENT_KEY, JSON.stringify(record)); } catch (e) {}
+  }
+
+  // Returns the dailywork assignment for the CURRENT workday only, or null. A stale
+  // assignment from a previous day is ignored so it never guards a new day's manual work.
+  function readDailyworkAssignmentForToday() {
+    let raw = "";
+    try { raw = String(localStorage.getItem(DAILYWORK_ASSIGNMENT_KEY) || "").trim(); } catch (e) { return null; }
+    if (!raw) return null;
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) { return null; }
+    if (!parsed || typeof parsed !== "object") return null;
+    const workday = String(parsed.workday || "").trim();
+    if (!workday || workday !== localDateKey()) return null;
+    const categoryId = String(parsed.categoryId || "").trim();
+    if (!categoryId) return null;
+    const deviceIds = Array.isArray(parsed.deviceIds)
+      ? Array.from(new Set(parsed.deviceIds.map(id => String(id || "").trim()).filter(Boolean)))
+      : [];
+    return { workday, categoryId, deviceIds };
+  }
+
   function createDailyworkAutoSelectPlanDryRun(overrides = {}) {
     return {
       ok: false,
@@ -4936,6 +5039,7 @@
     writeSelectedRecycleEntryCategory(target.categoryId);
     if (target.action === "category_device") writeSelectedRecycleDeviceIdsStorage(target.deviceIds);
     else writeSelectedRecycleDeviceIdsStorage([]);
+    recordDailyworkAssignment(target.categoryId, target.action === "category_device" ? target.deviceIds : []);
 
     const renderedPanels = refreshRecycleEntryCategoryPanel(panel) ? 1 : refreshRecycleRemoteVisualOverlayPanels();
     return createDailyworkDebugForceApplyResult({
@@ -4979,6 +5083,7 @@
       writeSelectedRecycleEntryCategory(plan.targetCategoryId);
       if (plan.resolvedAction === "category_device") writeSelectedRecycleDeviceIdsStorage(plan.targetDeviceIds);
       else writeSelectedRecycleDeviceIdsStorage([]);
+      recordDailyworkAssignment(plan.targetCategoryId, plan.resolvedAction === "category_device" ? plan.targetDeviceIds : [], currentWorkday);
 
       // Verify the selection actually persisted before declaring success. If storage
       // writes were blocked/failed, report a retryable failure instead of a silent no-op
@@ -5151,6 +5256,7 @@
   const DAILYWORK_NOOP_NOTICE_DATE_KEY = "wifi_oss_dailywork_noop_notice_date_v1";
   const DAILYWORK_NOOP_NOTICE_MODAL_ID = "wifi-oss-dailywork-noop-notice-modal";
   let dailyworkNoopNoticeKeydownHandler = null;
+  let recycleAssignmentChangeKeydownHandler = null;
 
   function shouldShowDailyworkNoRecycleAssignmentNotice(result) {
     if (!result || result.applied === true) return false;
@@ -5362,6 +5468,179 @@
     if (shown) markDailyworkNoRecycleNoticeShownForWorkday(workday);
   }
 
+  function closeRecycleAssignmentChangeConfirm() {
+    try {
+      const existing = document.getElementById(RECYCLE_ASSIGNMENT_CHANGE_CONFIRM_MODAL_ID);
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    } catch (e) {}
+    if (recycleAssignmentChangeKeydownHandler) {
+      try { document.removeEventListener("keydown", recycleAssignmentChangeKeydownHandler, true); } catch (e) {}
+      recycleAssignmentChangeKeydownHandler = null;
+    }
+  }
+
+  // Blocking-style confirm shown when the operator manually changes the recycle category
+  // or device to something different from the dailywork assignment. It does NOT stop the
+  // change if confirmed; it only makes deviating from the schedule a deliberate action.
+  function showRecycleAssignmentChangeConfirm(details = {}) {
+    const onConfirm = typeof details.onConfirm === "function" ? details.onConfirm : () => {};
+    const onCancel = typeof details.onCancel === "function" ? details.onCancel : () => {};
+    // Only one confirm at a time; if one is already open, treat a new request as a cancel.
+    if (document.getElementById(RECYCLE_ASSIGNMENT_CHANGE_CONFIRM_MODAL_ID)) {
+      try { onCancel(); } catch (e) {}
+      return false;
+    }
+    const host = document.body || document.documentElement;
+    if (!host) {
+      // No place to render the dialog: fail open so the operator is never stuck.
+      try { onConfirm(); } catch (e) {}
+      return false;
+    }
+
+    let settled = false;
+    const settle = (confirmed) => {
+      if (settled) return;
+      settled = true;
+      closeRecycleAssignmentChangeConfirm();
+      try { confirmed ? onConfirm() : onCancel(); } catch (e) {}
+    };
+
+    const overlay = document.createElement("div");
+    overlay.id = RECYCLE_ASSIGNMENT_CHANGE_CONFIRM_MODAL_ID;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Промяна на разпределението");
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.zIndex = "2147483041";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.padding = "16px";
+    overlay.style.boxSizing = "border-box";
+    overlay.style.background = "rgba(15, 23, 42, 0.45)";
+
+    const card = document.createElement("div");
+    card.style.boxSizing = "border-box";
+    card.style.width = "min(460px, calc(100vw - 32px))";
+    card.style.maxHeight = "calc(100vh - 32px)";
+    card.style.overflowY = "auto";
+    card.style.background = "#ffffff";
+    card.style.borderRadius = "12px";
+    card.style.border = "1px solid #e5e7eb";
+    card.style.boxShadow = "0 20px 50px rgba(15, 23, 42, 0.30)";
+    card.style.padding = "20px";
+
+    const header = document.createElement("div");
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.gap = "10px";
+    header.style.marginBottom = "12px";
+
+    const iconBadge = document.createElement("div");
+    iconBadge.textContent = "!";
+    iconBadge.setAttribute("aria-hidden", "true");
+    iconBadge.style.flex = "0 0 auto";
+    iconBadge.style.width = "32px";
+    iconBadge.style.height = "32px";
+    iconBadge.style.borderRadius = "50%";
+    iconBadge.style.display = "flex";
+    iconBadge.style.alignItems = "center";
+    iconBadge.style.justifyContent = "center";
+    iconBadge.style.background = "#fef3c7";
+    iconBadge.style.color = "#b45309";
+    iconBadge.style.fontSize = "18px";
+    iconBadge.style.fontWeight = "900";
+    iconBadge.style.lineHeight = "1";
+
+    const heading = document.createElement("div");
+    heading.textContent = String(details.title || "Промяна извън разпределението");
+    heading.style.color = "#111827";
+    heading.style.fontSize = "16px";
+    heading.style.fontWeight = "900";
+    heading.style.lineHeight = "1.25";
+
+    header.appendChild(iconBadge);
+    header.appendChild(heading);
+
+    const body = document.createElement("div");
+    body.style.color = "#374151";
+    body.style.fontSize = "14px";
+    body.style.lineHeight = "1.5";
+
+    const line1 = document.createElement("p");
+    line1.style.margin = "0 0 8px 0";
+    line1.textContent = String(details.message || "Сигурен ли си, че искаш да смениш избора на различен от зададения по разпределение?");
+    body.appendChild(line1);
+
+    const assignedText = String(details.assignedText || "").trim();
+    if (assignedText) {
+      const line2 = document.createElement("p");
+      line2.style.margin = "0";
+      const label = document.createElement("span");
+      label.textContent = "По разпределение: ";
+      const value = document.createElement("strong");
+      value.textContent = assignedText;
+      value.style.color = "#111827";
+      line2.appendChild(label);
+      line2.appendChild(value);
+      body.appendChild(line2);
+    }
+
+    const footer = document.createElement("div");
+    footer.style.display = "flex";
+    footer.style.justifyContent = "flex-end";
+    footer.style.gap = "8px";
+    footer.style.marginTop = "18px";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = String(details.cancelLabel || "Отказ");
+    cancelBtn.style.cursor = "pointer";
+    cancelBtn.style.border = "1px solid #cfd6df";
+    cancelBtn.style.borderRadius = "8px";
+    cancelBtn.style.background = "#ffffff";
+    cancelBtn.style.color = "#334155";
+    cancelBtn.style.fontSize = "14px";
+    cancelBtn.style.fontWeight = "800";
+    cancelBtn.style.padding = "9px 16px";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.textContent = String(details.confirmLabel || "Да, смени");
+    confirmBtn.style.cursor = "pointer";
+    confirmBtn.style.border = "1px solid #b91c1c";
+    confirmBtn.style.borderRadius = "8px";
+    confirmBtn.style.background = "#e2001a";
+    confirmBtn.style.color = "#ffffff";
+    confirmBtn.style.fontSize = "14px";
+    confirmBtn.style.fontWeight = "800";
+    confirmBtn.style.padding = "9px 18px";
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    host.appendChild(overlay);
+
+    card.addEventListener("click", (e) => { e.stopPropagation(); });
+    overlay.addEventListener("click", () => { settle(false); });
+    cancelBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); settle(false); });
+    confirmBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); settle(true); });
+
+    recycleAssignmentChangeKeydownHandler = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); settle(false); }
+      else if (e.key === "Enter") { e.stopPropagation(); settle(true); }
+    };
+    document.addEventListener("keydown", recycleAssignmentChangeKeydownHandler, true);
+
+    try { confirmBtn.focus({ preventScroll: true }); } catch (e) { try { confirmBtn.focus(); } catch (e2) {} }
+    return true;
+  }
+
   function buildRecycleHistoryUrlFromTemplatePath(templatePath, now = new Date()) {
     if (!templatePath) return "";
     try {
@@ -5556,7 +5835,11 @@
           error: String(e?.message || e || "History fetch/parse failed"),
           rowCount: 0
         });
-        warnRecycleHistoryOnce(`${status}:${url}`, "History validation unavailable; duplicate validation will fail open.", { status: recycleHistoryCache.status, url, error: recycleHistoryCache.error });
+        warnRecycleHistoryOnce(
+          `${status}:${url}`,
+          `History validation unavailable; duplicate validation will fail open. status=${recycleHistoryCache.status}; url=${url || "(none)"}; error=${recycleHistoryCache.error || "(none)"}`,
+          { status: recycleHistoryCache.status, url, error: recycleHistoryCache.error }
+        );
         return false;
       } finally {
         recycleHistoryCache.inFlight = null;
@@ -5587,13 +5870,97 @@
     return false;
   }
 
+  // ---------------------------------------------------------------------------
+  // Local processed-serial ledger (independent double-process guard)
+  // ---------------------------------------------------------------------------
+  function readRecycleProcessedLedger() {
+    let raw = {};
+    try { raw = JSON.parse(String(localStorage.getItem(RECYCLE_PROCESSED_LEDGER_KEY) || "{}")); } catch (e) { raw = {}; }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const cutoff = Date.now() - RECYCLE_PROCESSED_LEDGER_MAX_DAYS * 24 * 60 * 60 * 1000;
+    const clean = {};
+    Object.keys(raw).forEach(key => {
+      const entry = raw[key];
+      if (!entry || typeof entry !== "object") return;
+      const at = Date.parse(String(entry.at || ""));
+      if (Number.isFinite(at) && at < cutoff) return; // prune entries older than the retention window
+      clean[key] = entry;
+    });
+    return clean;
+  }
+
+  function writeRecycleProcessedLedger(ledger) {
+    if (!ledger || typeof ledger !== "object") return;
+    let entries = Object.entries(ledger);
+    if (entries.length > RECYCLE_PROCESSED_LEDGER_MAX_ENTRIES) {
+      entries.sort((a, b) => (Date.parse(String(b[1]?.at || "")) || 0) - (Date.parse(String(a[1]?.at || "")) || 0));
+      entries = entries.slice(0, RECYCLE_PROCESSED_LEDGER_MAX_ENTRIES);
+    }
+    const obj = {};
+    entries.forEach(([k, v]) => { obj[k] = v; });
+    try { localStorage.setItem(RECYCLE_PROCESSED_LEDGER_KEY, JSON.stringify(obj)); } catch (e) {}
+  }
+
+  function getRecycleProcessedLedgerEntry(serialRaw) {
+    const serialKey = normalizeRecycleHistorySerial(serialRaw);
+    if (!serialKey) return null;
+    const ledger = readRecycleProcessedLedger();
+    const entry = ledger[serialKey];
+    if (!entry || typeof entry !== "object") return null;
+    return { serialKey, ...entry };
+  }
+
+  function recordRecycleProcessedSerial(serialRaw, details = {}) {
+    const serialKey = normalizeRecycleHistorySerial(serialRaw);
+    if (!serialKey) return;
+    const ledger = readRecycleProcessedLedger();
+    const now = new Date();
+    const action = (details.action === "recycle" || details.action === "scrap") ? details.action : "processed";
+    const previous = ledger[serialKey] && typeof ledger[serialKey] === "object" ? ledger[serialKey] : null;
+    ledger[serialKey] = {
+      serial: String(serialRaw || "").trim(),
+      // Keep a known recycle/scrap action if one was ever recorded; do not downgrade to "processed".
+      action: action !== "processed" ? action : (previous?.action || "processed"),
+      categoryId: String(details.categoryId || previous?.categoryId || "").trim(),
+      at: now.toISOString(),
+      firstAt: previous?.firstAt || previous?.at || now.toISOString(),
+      workday: localDateKey(now)
+    };
+    writeRecycleProcessedLedger(ledger);
+    try { console.info("[recycleHistory] processed-ledger recorded", { serialKey, action: ledger[serialKey].action, categoryId: ledger[serialKey].categoryId }); } catch (e) {}
+  }
+
+  // Merge the authoritative server history and the local ledger into one duplicate signal.
+  function buildRecycleDuplicateForSerial(serialRaw) {
+    const serialKey = normalizeRecycleHistorySerial(serialRaw);
+    if (!serialKey) return null;
+    const history = getRecycleHistoryDuplicateForSerial(serialRaw);
+    const ledger = getRecycleProcessedLedgerEntry(serialRaw);
+    if (!history && !ledger) return null;
+
+    let success = "";
+    if (history && (history.success === "yes" || history.success === "no")) success = history.success;
+    else if (ledger && ledger.action === "recycle") success = "yes";
+    else if (ledger && ledger.action === "scrap") success = "no";
+
+    return {
+      serialKey,
+      serial: (history && history.serial) || (ledger && ledger.serial) || String(serialRaw || "").trim(),
+      success,
+      source: history ? "history" : "ledger",
+      hasHistory: !!history,
+      hasLedger: !!ledger
+    };
+  }
+
   function showRecycleDuplicateWarning(container, duplicate, serialInput, continueBtn) {
     if (!container || !duplicate) return;
     const serialKey = normalizeRecycleHistorySerial(duplicate.serialKey || duplicate.serial || serialInput?.value);
-    const recycled = duplicate.success === "yes";
-    const message = recycled
+    const message = duplicate.success === "yes"
       ? "Това устройство вече е рециклирано, искате ли да продължите?"
-      : "Това устройство вече е бракувано, искате ли да продължите?";
+      : duplicate.success === "no"
+        ? "Това устройство вече е бракувано, искате ли да продължите?"
+        : "Това устройство вече е обработено (рециклирано или бракувано), искате ли да продължите?";
 
     container.textContent = "";
     container.dataset.wifiOssRecycleSerialAlertKind = "duplicate";
@@ -6745,6 +7112,7 @@
     writeSelectedRecycleEntryCategory(target.categoryId);
     if (target.action === "category_device") writeSelectedRecycleDeviceIdsStorage(target.deviceIds);
     else writeSelectedRecycleDeviceIdsStorage([]);
+    recordDailyworkAssignment(target.categoryId, target.action === "category_device" ? target.deviceIds : []);
     const renderedPanels = refreshRecycleEntryCategoryPanel(panel) ? 1 : refreshRecycleRemoteVisualOverlayPanels();
     return createDailyworkManualApplyResult({
       ok: true,
@@ -9983,6 +10351,11 @@
     if (!root) return false;
     if (root.querySelector(`.${RECYCLE_ENTRY_PANEL_CLASS}`)) return true;
 
+    // Fresh entry page load: reset the per-page "already handled serial" guard so the
+    // ledger duplicate check applies normally to whatever serial is entered here.
+    recycleEntryHandledSerialKey = "";
+    recycleEntryHistoryWaitedSerialKey = "";
+
     const serialInput = root.querySelector(`#${RECYCLE_ENTRY_SERIAL_INPUT_ID}`) || document.getElementById(RECYCLE_ENTRY_SERIAL_INPUT_ID);
     if (!serialInput) return false;
 
@@ -10181,6 +10554,33 @@
       renderCategories();
     };
 
+    const getCategoryLabelById = (id) => {
+      const key = String(id || "").trim();
+      const found = categories.find(c => c.id === key);
+      return found ? found.label : key;
+    };
+
+    // Category selection entry point: if the dailywork distribution assigned a category for
+    // today and the operator picks a DIFFERENT one, ask for explicit confirmation first. The
+    // change is not blocked, only made deliberate. Re-selecting the assigned category, or any
+    // selection when there is no assignment for today, proceeds without a prompt.
+    const requestCategorySelection = (id) => {
+      const targetId = String(id || "").trim();
+      const assignment = readDailyworkAssignmentForToday();
+      if (!assignment || !assignment.categoryId || targetId === assignment.categoryId) {
+        setSelected(targetId);
+        return;
+      }
+      showRecycleAssignmentChangeConfirm({
+        title: "Смяна на категория",
+        message: `Сигурен ли си, че искаш да смениш категорията на „${getCategoryLabelById(targetId)}“? Тя е различна от зададената по дневното разпределение.`,
+        assignedText: getCategoryLabelById(assignment.categoryId),
+        confirmLabel: "Да, смени",
+        cancelLabel: "Отказ",
+        onConfirm: () => { setSelected(targetId); }
+      });
+    };
+
     const resolveCategoryImageUrl = (c) => {
       const imgPath = c.imagePath ? String(c.imagePath) : deviceImageForModel(c.hintModelName);
       return resolveRecycleImageUrl(imgPath);
@@ -10227,6 +10627,45 @@
         clearSerialInlineAlert();
       }
       refreshRecycleSerialHelpAvailability(getSelected());
+    };
+
+    // Device selection entry point: when the current category matches the dailywork
+    // assignment AND that assignment named specific device(s), warn before a toggle that
+    // would make the selection differ from the assigned device(s). Otherwise toggle freely.
+    const requestDeviceToggle = (deviceId, card, afterToggle) => {
+      const id = String(deviceId || "").trim();
+      if (!id) return;
+      const runToggle = () => {
+        toggleRecycleDeviceSelection(id, card);
+        if (typeof afterToggle === "function") { try { afterToggle(); } catch (e) {} }
+      };
+      const assignment = readDailyworkAssignmentForToday();
+      const guardActive = !!assignment
+        && !!assignment.categoryId
+        && assignment.categoryId === getSelected()
+        && Array.isArray(assignment.deviceIds)
+        && assignment.deviceIds.length > 0;
+      if (!guardActive) { runToggle(); return; }
+
+      const assignedSet = new Set(assignment.deviceIds);
+      const prospective = new Set(selectedRecycleDeviceIds);
+      if (prospective.has(id)) prospective.delete(id); else prospective.add(id);
+      const matchesAssigned = prospective.size === assignedSet.size
+        && Array.from(prospective).every(x => assignedSet.has(x));
+      if (matchesAssigned) { runToggle(); return; }
+
+      const assignedNames = assignment.deviceIds
+        .map(x => getRecycleDeviceById(x)?.displayName || x)
+        .filter(Boolean)
+        .join(", ");
+      showRecycleAssignmentChangeConfirm({
+        title: "Смяна на устройство",
+        message: "Сигурен ли си, че искаш да промениш избраното устройство на различно от зададеното по дневното разпределение?",
+        assignedText: assignedNames,
+        confirmLabel: "Да, смени",
+        cancelLabel: "Отказ",
+        onConfirm: runToggle
+      });
     };
 
     const createCategoryCard = (c, featured) => {
@@ -10347,7 +10786,7 @@
       b.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        setSelected(c.id);
+        requestCategorySelection(c.id);
       });
       b.addEventListener("mouseenter", () => {
         b.style.transform = featured ? "translateY(-1px)" : "translateY(-2px)";
@@ -10538,8 +10977,7 @@
       card.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        toggleRecycleDeviceSelection(deviceId, card);
-        applyUnselectedHover(card.matches(":hover"));
+        requestDeviceToggle(deviceId, card, () => applyUnselectedHover(card.matches(":hover")));
       });
       card.addEventListener("mouseenter", () => applyUnselectedHover(true));
       card.addEventListener("mouseleave", () => applyUnselectedHover(false));
@@ -10661,8 +11099,42 @@
         return;
       }
 
-      const duplicate = getRecycleHistoryDuplicateForSerial(serialInput.value);
-      if (duplicate && !consumeRecycleHistoryDuplicateOverride(duplicate.serialKey)) {
+      const serialKeyForGuard = normalizeRecycleHistorySerial(serialInput.value);
+
+      // Fast, bounded wait for the server history before deciding on duplicates. If the
+      // history is still loading (or has not started yet), briefly await it ONCE per serial
+      // so the duplicate check runs against real data instead of failing open. It is capped
+      // by RECYCLE_HISTORY_CONTINUE_WAIT_MS to keep the flow snappy; on timeout we proceed
+      // and the local processed-serial ledger still blocks same-device repeats.
+      if (serialKeyForGuard
+          && serialKeyForGuard !== recycleEntryHistoryWaitedSerialKey
+          && !recycleHistoryCache.loaded
+          && (recycleHistoryCache.status === "idle" || recycleHistoryCache.status === "loading")) {
+        recycleEntryHistoryWaitedSerialKey = serialKeyForGuard;
+        e.preventDefault();
+        e.stopPropagation();
+        let pending = null;
+        try { pending = preloadRecycleHistoryAndUpdateStatus(); } catch (e2) {}
+        const inFlight = (recycleHistoryCache.inFlight && typeof recycleHistoryCache.inFlight.then === "function")
+          ? recycleHistoryCache.inFlight
+          : ((pending && typeof pending.then === "function") ? pending : null);
+        const resumeContinue = () => { try { continueBtn.click(); } catch (e2) {} };
+        if (inFlight) {
+          let resumed = false;
+          const finish = () => { if (resumed) return; resumed = true; resumeContinue(); };
+          try { Promise.resolve(inFlight).then(finish, finish); } catch (e2) { finish(); }
+          setTimeout(finish, RECYCLE_HISTORY_CONTINUE_WAIT_MS);
+        } else {
+          setTimeout(resumeContinue, 0);
+        }
+        return;
+      }
+
+      const duplicate = buildRecycleDuplicateForSerial(serialInput.value);
+      // Skip re-block only for the same serial already let through on THIS page load
+      // (protects a single Continue gesture from self-blocking after ledger write).
+      const alreadyHandledThisEntry = !!serialKeyForGuard && serialKeyForGuard === recycleEntryHandledSerialKey;
+      if (duplicate && !alreadyHandledThisEntry && !consumeRecycleHistoryDuplicateOverride(duplicate.serialKey)) {
         e.preventDefault();
         e.stopPropagation();
         hideRecycleSerialHelp();
@@ -10688,6 +11160,13 @@
       }
 
       hideRecycleSerialHelp();
+      // The serial passed all guards and the flow is proceeding. Record it locally so an
+      // immediate re-entry of the same serial (recycle OR scrap) is blocked even before the
+      // server-side recycle history reflects this action. This is the core double-process fix.
+      if (serialKeyForGuard) {
+        recycleEntryHandledSerialKey = serialKeyForGuard;
+        try { recordRecycleProcessedSerial(serialInput.value, { categoryId: cat }); } catch (e2) {}
+      }
       // Store context for the next step (Material Id page).
       try {
         sessionStorage.setItem(RECYCLE_ENTRY_LAST_SERIAL_KEY, String(serialInput.value || "").trim());
@@ -11342,6 +11821,44 @@
     obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
   }
 
+  // -----------------------------------------------------------------
+  // Conax card recycle: extra supervisor note on the "not registered
+  // as Conax Card" error dialog. Informational only; never blocks.
+  // -----------------------------------------------------------------
+  const CONAX_CARD_ERROR_MATCH_RE = /\u043d\u0435\s*\u0435\s*\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0430\u043d\s*\u043a\u0430\u0442\u043e\s*conax\s*card/i;
+  const CONAX_CARD_ERROR_SUPERVISOR_TEXT = "\u041a\u0430\u0440\u0442\u0430\u0442\u0430 \u043d\u0435 \u0435 \u0438\u0437\u043f\u0438\u0441\u0430\u043d\u0430 \u043e\u0442 \u0442\u0435\u0445\u043d\u0438\u043a, \u043f\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u044f \u043d\u0430 \u0441\u0443\u043f\u0435\u0440\u0432\u0430\u0439\u0437\u044a\u0440\u0430.";
+  const CONAX_CARD_ERROR_NOTE_CLASS = "wifi-oss-conax-supervisor-note";
+
+  function isConaxCardRecyclePagePath() {
+    return String(window.location?.pathname || "").toLowerCase().includes("sap-conax-card-recycle");
+  }
+
+  function augmentConaxCardErrorDialogs() {
+    const spans = document.querySelectorAll("#spanError, #divError span, .ui-state-error span");
+    spans.forEach(span => {
+      const text = String(span.textContent || "").replace(/\s+/g, " ");
+      if (!CONAX_CARD_ERROR_MATCH_RE.test(text)) return;
+      const container = span.closest(".ui-state-error") || span.parentElement;
+      if (!container || container.querySelector("." + CONAX_CARD_ERROR_NOTE_CLASS)) return;
+
+      const note = document.createElement("div");
+      note.className = CONAX_CARD_ERROR_NOTE_CLASS;
+      note.textContent = CONAX_CARD_ERROR_SUPERVISOR_TEXT;
+      note.style.marginTop = "8px";
+      note.style.fontWeight = "800";
+      note.style.color = "#b00020";
+      note.style.lineHeight = "1.35";
+      container.appendChild(note);
+    });
+  }
+
+  function startConaxCardErrorDialogObserver() {
+    if (!isConaxCardRecyclePagePath()) return;
+    augmentConaxCardErrorDialogs();
+    const obs = new MutationObserver(() => { augmentConaxCardErrorDialogs(); });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
   loadLastClipboardText();
   restoreRecycleRemoteDebugSessionState();
   injectButton();
@@ -11355,4 +11872,5 @@
   startRecycleStateKstb5019XploreTvHelperObserver();
   startRecycleStateEx220SsidWarningObserver();
   startAfterRecycleCaptureSnLabelObserver();
+  startConaxCardErrorDialogObserver();
 })();
