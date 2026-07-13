@@ -29,7 +29,7 @@
 **Изход:** `presentation/output/output.pptx`  
 **Preview:** `presentation/preview/slide-XX.png`
 
-За първи build на нова машина: инсталирай `@oai/artifact-tool` в `presentation/build/` (виж `HANDOFF.md`).
+За първи build на нова машина: пусни `presentation/build/setup-deps.ps1` (виж `BUILD_RECOVERY.md`).
 
 ## Работа от `main`
 
