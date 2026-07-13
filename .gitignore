@@ -2,6 +2,7 @@
 *.zip
 *.rar
 *.7z
+!presentation/build/vendor/*.zip
 release/
 
 # Dependencies

@@ -48,19 +48,25 @@ npm error 404 Not Found - GET https://registry.npmjs.org/@oai%2fartifact-tool
 
 ## 4. Възстановяване на `node_modules` (ако липсва)
 
-### Вариант A — копиране от Codex cache (препоръчително)
+### Вариант A — vendor zip в repo (препоръчително за чист clone)
+
+```powershell
+powershell -File presentation/build/setup-deps.ps1
+```
+
+Източник: `presentation/build/vendor/artifact-tool.zip` → `presentation/build/node_modules/@oai/artifact-tool`
+
+### Вариант B — копиране от Codex cache
 
 Източник (типичен на Windows):
 
 ```
-%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\@oai\
+%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\@oai\artifact-tool
 ```
 
-Цел:
+`setup-deps.ps1` опитва cache **преди** vendor zip, ако и двете са налични.
 
-```
-<prepo>\presentation\build\node_modules\@oai\
-```
+Ръчно копиране (ако скриптът не е опция):
 
 ```powershell
 $src = "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\@oai"
@@ -70,7 +76,7 @@ Copy-Item -Recurse -Force "$src\artifact-tool" "$dst\artifact-tool"
 Copy-Item -Recurse -Force "$src\walnut" "$dst\walnut" -ErrorAction SilentlyContinue
 ```
 
-### Вариант B — копиране от друг clone/машина
+### Вариант C — копиране от друг clone/машина
 
 Ако друг колега вече има работещ build, копирай цялата папка:
 
@@ -78,9 +84,9 @@ Copy-Item -Recurse -Force "$src\walnut" "$dst\walnut" -ErrorAction SilentlyConti
 presentation/build/node_modules/@oai/
 ```
 
-(не commit-вай в git — твърде голяма)
+(не commit-вай `node_modules/` в git — ползвай vendor zip или setup-deps)
 
-### Проверка след копиране
+### Проверка след setup
 
 ```powershell
 Set-Location presentation\build
@@ -113,8 +119,8 @@ const pptx = await PresentationFile.exportPptx(presentation);
 ## 6. Checklist след успешен build на v2
 
 - [ ] `DONE slides: 25` (или очакваният брой)
-- [ ] `presentation/output/output-v2.pptx` съществува
-- [ ] `output.pptx` непроменен (binary diff = 0)
+- [ ] `presentation/output/output.pptx` съществува
+- [ ] `presentation/output/output-v2.pptx` съществува (същото съдържание)
 - [ ] Преглед на променените слайдове: 4, 8, 9 (SAP), duplicate, clipboard, overview
 - [ ] Preview PNG за проблемни слайдове в `presentation/preview/`
 - [ ] Overflow / clipping / placeholder рамки

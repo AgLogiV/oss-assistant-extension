@@ -33,7 +33,13 @@
 
 Не отваряй стари fallback файлове като `output-v2-review.pptx` — те не се обновяват при build.
 
-За първи build на нова машина: пусни `presentation/build/setup-deps.ps1` (виж `BUILD_RECOVERY.md`).
+За първи build на нова машина:
+
+```powershell
+powershell -File presentation/build/setup-deps.ps1
+```
+
+Скриптът ползва Codex cache **или** `presentation/build/vendor/artifact-tool.zip` (виж `BUILD_RECOVERY.md`).
 
 ## Работа от `main`
 
