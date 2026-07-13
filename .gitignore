@@ -15,3 +15,9 @@ dashboard/node_modules/
 # OS files
 .DS_Store
 Thumbs.db
+
+# PowerPoint lock / deck scratch
+~$*.pptx
+tmp/slides/oss-assistant/preview/
+outputs/oss-assistant-deck/output-latest.pptx
+outputs/oss-assistant-deck/OSS-Assistant-prezentaciya.pptx
