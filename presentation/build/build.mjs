@@ -1078,24 +1078,35 @@ for (let i = 0; i < presentation.slides.count; i++) {
 
 // ---------- export ----------
 const pptx = await PresentationFile.exportPptx(presentation);
-let dest = path.join(OUT_DIR, "output-v2.pptx");
-try {
+const pptxBytes = pptx instanceof Uint8Array || Buffer.isBuffer(pptx)
+  ? Buffer.from(pptx)
+  : pptx && typeof pptx.bytes === "function"
+    ? Buffer.from(await pptx.bytes())
+    : pptx && typeof pptx.arrayBuffer === "function"
+      ? Buffer.from(await pptx.arrayBuffer())
+      : pptx && pptx.data
+        ? Buffer.from(pptx.data)
+        : null;
+
+async function writePptx(dest) {
+  if (pptxBytes) {
+    fs.writeFileSync(dest, pptxBytes);
+    return;
+  }
   await writeBlob(pptx, dest);
-} catch (e) {
-  if (String(e.message).includes("EBUSY") || String(e.code).includes("EBUSY")) {
-    dest = path.join(OUT_DIR, "output-v2-review.pptx");
-    try {
-      await writeBlob(pptx, dest);
-    } catch (e2) {
-      if (String(e2.message).includes("EBUSY") || String(e2.code).includes("EBUSY")) {
-        dest = path.join(OUT_DIR, "output-v2-latest.pptx");
-        await writeBlob(pptx, dest);
-      } else {
-        throw e2;
-      }
-    }
-  } else {
-    throw e;
+}
+
+const targets = [
+  path.join(OUT_DIR, "output.pptx"),
+  path.join(OUT_DIR, "output-v2.pptx"),
+];
+
+for (const dest of targets) {
+  try {
+    await writePptx(dest);
+    console.log("WROTE", dest);
+  } catch (e) {
+    console.log("SKIP (locked):", dest, "-", e.message);
   }
 }
-console.log("DONE slides:", presentation.slides.count, "->", dest);
+console.log("DONE slides:", presentation.slides.count);
