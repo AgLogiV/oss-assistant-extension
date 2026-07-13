@@ -26,6 +26,7 @@ The extension runs on the OSS domains and SharePoint list URL declared in `Exten
 | [docs/RECYCLE_DEVICE_CONFIG_ARCHITECTURE.md](docs/RECYCLE_DEVICE_CONFIG_ARCHITECTURE.md) | Config/export/dashboard architecture |
 | [docs/EXTERNAL_RECYCLE_CATALOG_RUNTIME.md](docs/EXTERNAL_RECYCLE_CATALOG_RUNTIME.md) | External simple catalog runtime |
 | [presentation/PRESENTATION_2026-07-08.md](presentation/PRESENTATION_2026-07-08.md) | Operator-facing change summary |
+| [presentation/SLIDES.md](presentation/SLIDES.md) | Slide deck content map for agents |
 | [presentation/HANDOFF.md](presentation/HANDOFF.md) | Presentation deck design handoff |
 | [presentation/README.md](presentation/README.md) | How to build and update the slide deck |
 

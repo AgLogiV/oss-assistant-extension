@@ -9,12 +9,12 @@
 ```
 Продължи OSS Assistant презентацията по същия дизайн.
 
-Прочети ПЪРВО: presentation/HANDOFF.md
+Прочети ПЪРВО: presentation/SLIDES.md (съдържание) и presentation/HANDOFF.md (дизайн)
 Редактирай САМО: presentation/build/build.mjs
 Не измисляй нов дизайн — използвай съществуващите helper-и и токени (C, FONT, MARGIN, header, titleBlock, footer, card, bullets, checklistSlide, newsDualSlide, 2x2 panel pattern).
 
 След промени rebuild:
-& "$HOME\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" "C:\Users\a1bg514837\Downloads\oss-assistant\tmp\slides\oss-assistant\build\build.mjs"
+& "$HOME\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" "presentation/build/build.mjs"
 
 Изход: presentation/output/output.pptx (fallback: OSS-Assistant-prezentaciya.pptx или output-latest.pptx ако файлът е отворен в PowerPoint)
 Прегледи: presentation/preview/slide-XX.png
@@ -26,9 +26,11 @@
 
 ## 2. Файлова карта
 
-| Път | Роля |
-|-----|------|
-| `presentation/build/build.mjs` | **Единствен източник на истина** — целият deck се генерира от тук |
+| Път | За какво е |
+|------|------------|
+| `presentation/SLIDES.md` | **Карта на съдържанието** — 24 слайда, навигация за агенти |
+| `presentation/build/build.mjs` | Изходен код — текст и layout на всеки слайд |
+| `presentation/HANDOFF.md` | Дизайн система и шаблони |
 | `presentation/build/node_modules/@oai/artifact-tool` | Библиотека за editable `.pptx` (`Presentation`, shapes, charts, export) |
 | `presentation/assets/slide-01.png` | Hero фон — cover |
 | `presentation/assets/slide-05.png` | Фон за chart слайд |
