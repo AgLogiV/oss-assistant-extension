@@ -18,6 +18,6 @@ Thumbs.db
 
 # PowerPoint lock / deck scratch
 ~$*.pptx
-tmp/slides/oss-assistant/preview/
-outputs/oss-assistant-deck/output-latest.pptx
-outputs/oss-assistant-deck/OSS-Assistant-prezentaciya.pptx
+presentation/preview/
+presentation/output/output-latest.pptx
+presentation/output/OSS-Assistant-prezentaciya.pptx
