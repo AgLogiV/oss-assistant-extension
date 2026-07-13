@@ -176,11 +176,15 @@ Future device-level rule:
 
 - valid plain 12-hex MAC format.
 
+Runtime note (implemented): when exactly this device is selected in `xplore_zapper`, the extension also blocks barcode-scanner prefix/suffix keys (`Tab`, `Alt`, tab-switch shortcuts) on the recycle entry serial field and recycle-state serial/MAC fields so MAC scans do not steal browser focus. See `Serial Keyboard Layout Protection` in `PROJECT_MAP.md`.
+
 ### KSTB5020 XploreTV
 
 Future device-level rule:
 
 - valid plain 12-hex MAC format.
+
+Runtime note (implemented): same MAC scanner shortcut guard as KSTB5019 when exactly this device is selected in `xplore_zapper`.
 
 Possible future profile:
 
@@ -258,10 +262,18 @@ Future device-level rule:
 
 ### HX520 Home
 
-Future device-level rule:
+Implemented device-level rule via profile `router_13_alnum`:
 
-- serial is exactly 13 characters;
+- serial is exactly 13 alphanumeric characters;
 - letters and digits are allowed.
+
+Clipboard WiFi label autofill (recycle-state / correct-wifi-settings):
+
+- detected by model keyword `HX520` in clipboard text;
+- uses TP-Link parser `parseForEX220` for `SSID:` blocks;
+- password label pattern: `Wireless Password:` (also accepts `Wireless Password/PIN:`);
+- port count `2`, 5G enabled;
+- `Ssid2` is generated as `<Ssid1>_5G` when only one SSID is present on the label.
 
 ### Deco M4 AC1200
 

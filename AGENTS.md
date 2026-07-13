@@ -8,7 +8,7 @@ This project is a Chrome Manifest V3 extension for the internal A1 OSS portal. I
 - The main runtime logic is in `Extension/content.js`. Treat it as sensitive: prefer small, controlled patches and avoid broad refactors unless the user explicitly asks for them.
 - Current primary focus: `Recycle device entry: Category + validation` and `Swap Shop Material` / SAP material quick buttons.
 - For recycle redesign/device catalog tasks, read `docs/RECYCLE_DEVICE_CATALOG_CONCEPT_EN.md` first. Treat it as a concept/roadmap document, not as already implemented behavior.
-- Secondary but important flows: clipboard SSID/password autofill and label/barcode generation. Do not break them while working on the primary flow.
+- Secondary but important flows: clipboard SSID/password autofill, label/barcode generation, SharePoint OSSRecycleSchedule date/time widget, and the in-page `Reload Extension` operator button. Do not break them while working on the primary flow.
 - Do not change `Extension/manifest.json`, `Extension/background.js`, dashboard runtime logic, images, or large parts of `content.js` unless the user specifically asks.
 - Ignore `.zip`/backup archives unless they are explicitly referenced by the project or the user asks to inspect them.
 - Use local Git only. Do not create a new worktree, project folder, remote, or upload anything unless the user explicitly asks.

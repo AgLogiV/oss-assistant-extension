@@ -77,6 +77,15 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://a1g.sharepoint.com/sites/o365RCR/Lists/OSSRecycleSchedule/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

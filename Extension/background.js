@@ -2155,6 +2155,41 @@ async function recycleRemoteRefresh() {
 }
 
 const actionApi = chrome.action || chrome.browserAction;
+
+const EXTENSION_RELOAD_TAB_STORAGE_KEY = "wifi_oss_extension_reload_tab_id_v1";
+
+async function storeExtensionReloadTabId(tabId) {
+  const id = Number(tabId);
+  if (!Number.isFinite(id) || id <= 0) return false;
+  try {
+    await chrome.storage.local.set({ [EXTENSION_RELOAD_TAB_STORAGE_KEY]: id });
+    return true;
+  } catch (e) {}
+  return false;
+}
+
+async function consumeExtensionReloadTabId() {
+  try {
+    const stored = await chrome.storage.local.get(EXTENSION_RELOAD_TAB_STORAGE_KEY);
+    const tabId = Number(stored?.[EXTENSION_RELOAD_TAB_STORAGE_KEY]);
+    await chrome.storage.local.remove(EXTENSION_RELOAD_TAB_STORAGE_KEY);
+    if (!Number.isFinite(tabId) || tabId <= 0) return null;
+    return tabId;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function maybeReloadTabAfterExtensionReload() {
+  const tabId = await consumeExtensionReloadTabId();
+  if (!tabId) return;
+  try {
+    await chrome.tabs.reload(tabId);
+  } catch (e) {
+    console.warn("[background] post-extension-reload tab reload failed:", tabId, e);
+  }
+}
+
 if (actionApi?.onClicked) {
   actionApi.onClicked.addListener(async (tab) => {
     if (!tab?.id) return;
@@ -2275,6 +2310,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return respondOnce({ ok: true, dataUrl: `data:${contentType};base64,${b64}` });
       }
 
+      if (msg.type === "extension.reload") {
+        const browser = String(msg.browser || "").trim() || "chromium";
+        const tabId = sender?.tab?.id;
+        if (tabId) await storeExtensionReloadTabId(tabId);
+        respondOnce({ ok: true, browser, action: "reload", tabId: tabId || null });
+        setTimeout(() => {
+          try { chrome.runtime.reload(); } catch (e) {
+            console.error("[background] chrome.runtime.reload failed:", e);
+          }
+        }, 75);
+        return;
+      }
+
       return respondOnce({ ok: false, error: "Unknown message type" });
     } catch (e) {
       console.error("[background] message handler error:", e);
@@ -2284,3 +2332,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return true;
 });
+
+maybeReloadTabAfterExtensionReload();

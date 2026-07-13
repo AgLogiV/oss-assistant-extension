@@ -89,7 +89,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Open the same recycle step in two OSS tabs/windows. Select a category in one tab and confirm the other tab updates to the same category.
 - In a mapped category with device cards, select one or more device cards and confirm the selected cards are shared across tabs/windows.
 - Change the category and confirm selected device cards are cleared.
-- For Dailywork production auto-selection, start from a clean same-day recycle state and a schedule row for the current logged-in technician. Expected: `SD STB` selects category `dth_kaon_nagra`, `TP-Link EX220` selects `routers` plus `tp_link_ex220`, `NETBOX 4G` selects category `netbox`, and `Друго`/`Отпуск`/`Болничен` do not auto-select.
+- For Dailywork production auto-selection, start from a clean same-day recycle state and a schedule row for the current logged-in technician. Expected: `DTH STB` selects category `dth_kaon_nagra` plus device `dth_kaon_kstb1001`, `SD STB` selects category `dth_kaon_nagra` only, `TP-Link EX220` selects `routers` plus `tp_link_ex220`, `NETBOX 4G` selects category `netbox`, and `Друго`/`Отпуск`/`Болничен` do not auto-select.
 - Confirm Dailywork production auto-selection does not overwrite an already selected manual category or selected devices.
 - Confirm the same-day Dailywork applied marker blocks repeat production apply on reload/navigation after a successful production apply.
 - Press Reset after a Dailywork production selection. Expected: category/devices clear, `wifi_oss_dailywork_auto_suppressed_date_v1` is set for the current workday, and production auto-selection does not immediately reapply.
@@ -114,6 +114,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
   - `modems`
 - For `android_iptv`, confirm the existing guards still apply and length must be 12-17 characters: valid examples include `450056000451`, `2420011067008933`, and `BG460823040142009`; invalid examples include `12345`, `BG`, `BG123`, and `123456789012345678`.
 - For `xplore_zapper`, confirm MAC validation accepts exactly 12 hex characters case-insensitively and does not require A-F letters: valid examples include `840112168CB1`, `001122334455`, `AABBCCDDEEFF`, and `aabbccddeeff`; invalid examples include `840112168CB`, `840112168CB12`, `840112168CG1`, `84:01:12:16:8C:B1`, `84-01-12-16-8C-B1`, and `123 456 789 012`.
+- KSTB5019/KSTB5020 MAC scanner guard: with exactly `KSTB5019 XploreTV` or `KSTB5020 XploreTV` selected in `xplore_zapper`, scan a MAC into the recycle entry serial field. Expected: the MAC is entered, focus stays in the field/browser tab, and the browser does not switch tabs or activate chrome menus from a scanner `Tab`/`Alt` suffix. `Enter` still continues the flow. With `KSTB6106 Zapper` or no single 5019/5020 device selected, the guard is inactive.
 - For `cam_modules`, confirm empty serial is blocked but non-empty values are not format-validated.
 - With no selected device cards, confirm validation remains category-level for the selected category.
 - Select one device card and confirm the selected-device validation profile applies.
@@ -172,6 +173,7 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - If `_wflowRecycleState_SerialNo` is missing, empty, or not a valid 12-hex MAC, confirm the helper does not fill `_wflowRecycleState_Mac` and does not block Continue/Save.
 - If `_wflowRecycleState_Mac` is already non-empty before extension interaction, confirm it is not overwritten.
 - Edit the auto-filled MAC manually and confirm the yellow/red marker is removed and the helper does not re-fill the MAC again on the same page load.
+- With `KSTB5019 XploreTV` or `KSTB5020 XploreTV` selected, scan into recycle-state `_wflowRecycleState_Mac` (if editable) or `_wflowRecycleState_SerialNo`; confirm the scanner shortcut guard prevents tab/window focus steal from `Tab`/`Alt` suffix (same behavior as entry serial field).
 - Manually change the OTT dropdown away from `OTT` and confirm the UI allows the change and the helper does not repeatedly force it back to `OTT`.
 - Continue with no concrete device selected, category-only `xplore_zapper`, multiple selected Xplore/Zapper devices, `KSTB5020 XploreTV`, and `KSTB6106 Zapper`; confirm the KSTB5019 helper does not activate.
 - Regression smoke: confirm DTH KAON/Nagra Chip Id autofill, EX220 SSID warning, clipboard autofill, and SAP/material flow still work.
@@ -228,13 +230,42 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 
 ## Clipboard SSID/Password Autofill
 
-- On a supported Wi-Fi OSS form, test manual `ПОПЪЛНИ` with a known clipboard sample.
+- On a supported Wi-Fi OSS form (recycle-state or correct-wifi-settings), test manual `ПОПЪЛНИ` with a known clipboard sample.
 - Test `АВТОМАТИЧНО` with a recognized sample and then with unrelated clipboard text.
 - Confirm hidden/background tabs do not unexpectedly fill forms.
 - Confirm fields for ports, Wi-Fi test, SSID1/SSID2, PSK1/PSK2, and custom request update correctly.
+- For **HX520 Home**, copy a label sample containing model `HX520`, `SSID:` with `A1_XXXX`, and `Wireless Password: <pass>`. Expected after `ПОПЪЛНИ` or `АВТОМАТИЧНО`:
+  - port count `2`
+  - `Тествай Wifi` = `Да`
+  - `Ssid1` = normalized base SSID (for example `A1_1A77`)
+  - `Ssid2` = same base with `_5G` suffix (for example `A1_1A77_5G`)
+  - `Psk1` and `Psk2` = password from `Wireless Password:`
+- For **TP-Link EX220/NX220**, confirm both `Wireless Password:` and `Wireless Password/PIN:` label variants parse the password.
+- For **MF296R**, **MC801A**, **H3601P**, and other 5G models, confirm `Ssid2` gets `_5G` when the label exposes only one SSID.
+- Regression: EX220 SSID warning and recycle-state helpers still behave normally after clipboard autofill.
+
+## Reload Extension
+
+- On an OSS page that shows the injected button row (`ПОПЪЛНИ`, `АВТОМАТИЧНО`, `RESET`, `Reload Extension`), click `Reload Extension`.
+- Expected: confirmation dialog `Презареждане на extension` with `Да, презареди` / `Отказ`; cancel keeps the page unchanged.
+- Confirm `Да, презареди` reloads the extension and refreshes the same tab back to the same OSS URL/step.
+- After reload, confirm extension-owned UI reappears (recycle panel, clipboard buttons, material panel, etc.) without requiring a manual Chrome `Load unpacked` reload.
+- If automatic reload fails, confirm the button re-enables and the alert points to `chrome://extensions/` or `edge://extensions/`.
+
+## SharePoint OSSRecycleSchedule Widget
+
+- Open `https://a1g.sharepoint.com/sites/o365RCR/Lists/OSSRecycleSchedule/` (or the equivalent list view URL matched by the manifest).
+- Confirm a Bulgarian date/time widget appears in the list title row near the sync icon.
+- Expected format examples: `10 юли 2026г.` and `Петък 9:26`.
+- Wait at least 30 seconds and confirm the time updates.
+- Confirm no OSS recycle category panel, clipboard autofill buttons, SAP/material panel, or recycle entry validation appears on SharePoint.
+- Navigate within the list or refresh the page and confirm the widget reappears after SharePoint re-renders the header.
 
 ## Recent Regression Checks
 
+- Confirm HX520 Home clipboard autofill fills `Ssid2` with `_5G` and reads password from `Wireless Password:`.
+- Confirm `Reload Extension` reloads the extension and refreshes the current OSS tab after confirmation.
+- Confirm SharePoint OSSRecycleSchedule shows the date/time widget and does not run OSS recycle runtime.
 - Confirm clipboard SSID/password autofill still works.
 - Confirm label generation still works.
 - Confirm Austrian label generation still works.

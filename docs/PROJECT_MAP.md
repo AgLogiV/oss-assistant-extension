@@ -4,7 +4,7 @@
 
 `OSS Assistant` is an internal Chrome Manifest V3 extension for A1 OSS portal workflows. It is loaded with Chrome `Load unpacked` from the `Extension/` directory and injects `content.js` into internal OSS pages. The current development focus is the recycle-device entry workflow: choosing a device category for the workday, validating the serial number, and guiding the next SAP/material step with quick-fill material buttons.
 
-The project also contains older/secondary workflows for clipboard-based Wi-Fi autofill and label/barcode printing. They are not the current focus, but they are active runtime behavior and should be protected from regressions.
+The project also contains older/secondary workflows for clipboard-based Wi-Fi autofill, label/barcode printing, in-page extension reload, and the SharePoint OSSRecycleSchedule date/time widget. They are not the current focus, but they are active runtime behavior and should be protected from regressions.
 
 For future recycle redesign/device catalog work, read `docs/RECYCLE_DEVICE_CATALOG_CONCEPT_EN.md` before planning changes. It is a concept/roadmap document and must not be treated as current implemented behavior.
 
@@ -29,8 +29,8 @@ For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_R
 
 ## Project Structure
 
-- `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, background service worker, content script, and web-accessible image assets.
-- `Extension/background.js` - MV3 service worker. Handles toolbar-click injection and proxies dashboard fetches/image downloads for `content.js`. It also owns optional remote recycle config GitHub Pages fetch, timeout, ETag/status, validation, and `chrome.storage.local` last-known-good cache.
+- `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, SharePoint OSSRecycleSchedule match, background service worker, content script, recycle-theme CSS on selected OSS wflow paths, and web-accessible image assets.
+- `Extension/background.js` - MV3 service worker. Handles toolbar-click injection, proxies dashboard fetches/image downloads for `content.js`, optional remote recycle config fetch/cache, Dailywork schedule fetch/cache, and `extension.reload` (stores tab id, reloads extension, then reloads the stored tab on startup).
 - `Extension/content.js` - main extension runtime. It contains clipboard parsing/autofill, button injection, label/barcode printing, device-function UI, SAP/material quick buttons, dashboard polling, and recycle entry validation. It remains local-first for recycle config and has a CSP-safe debug bridge for manual remote refresh/status/clear plus manual visual-only overlay apply.
 - `Extension/images/` - extension icons, label templates, and image assets.
 - `Extension/images/devices/` - packaged device images used by SAP/material quick buttons.
@@ -51,8 +51,11 @@ Old `.zip` backup/export files are not part of the extension runtime. Ignore the
 `Extension/manifest.json` declares:
 
 - `manifest_version`: `3`
-- `permissions`: `clipboardRead`, `scripting`
-- content script: `content.js`, loaded at `document_idle`
+- `permissions`: `clipboardRead`, `scripting`, `storage`
+- content scripts:
+  - `recycle-theme.css` at `document_start` on selected OSS recycle/wflow paths (`sap-warehouse-recycle`, `device-recycle`, `device-history`, `recycle-state`, `after-recycle-state`) for production/test OSS hosts
+  - `content.js` at `document_idle` on all OSS paths for each production/test host
+  - `content.js` at `document_idle` on SharePoint OSSRecycleSchedule list pages
 - background service worker: `background.js`
 - OSS matches/host permissions:
   - `https://oss.a1.bg/*`
@@ -60,6 +63,11 @@ Old `.zip` backup/export files are not part of the extension runtime. Ignore the
   - `https://srvvm-webtst-0.mobiltel.bg/*`
 - dashboard host permission:
   - `https://oss-assistant.onrender.com/*`
+- remote config / Dailywork raw sources (host permissions):
+  - `https://oss-assistant.github.io/*`
+  - approved external recycle catalog and Dailywork JSON URLs as listed in `manifest.json`
+- SharePoint content script match (no extra host permission required for the list URL pattern):
+  - `https://a1g.sharepoint.com/sites/o365RCR/Lists/OSSRecycleSchedule/*`
 - web-accessible resources:
   - `images/*.svg`
   - `images/*.png`
@@ -72,26 +80,35 @@ Any new packaged images must be under these existing paths or `manifest.json` mu
 
 ### `background.js`
 
-The background service worker does two things:
+The background service worker:
 
 - On extension action click, injects `content.js` into the current tab via `chrome.scripting.executeScript`.
 - Handles messages from `content.js`:
   - `swapMaterial.fetchModels` fetches dashboard JSON.
   - `swapMaterial.fetchImageDataUrl` fetches remote images and returns data URLs.
+  - Dailywork schedule fetch/cache messages (`dailywork.fetchSchedule`, etc.).
+  - Remote recycle config fetch/cache messages used by the debug bridge.
+  - `extension.reload` stores the sender tab id in `chrome.storage.local` (`wifi_oss_extension_reload_tab_id_v1`), responds, then calls `chrome.runtime.reload()`.
+- On service worker startup, `maybeReloadTabAfterExtensionReload()` consumes the stored tab id and calls `chrome.tabs.reload(tabId)` so the operator returns to the same OSS page after an in-page Reload Extension action.
 
 This bridge avoids mixed-content/CORS issues when OSS pages are HTTPS and dashboard resources are external.
 
 ### `content.js`
 
-`content.js` is wrapped in an IIFE and guarded by `window.__wifiOssAssistantInjected` to avoid duplicate injection. At the bottom it starts all active behaviors:
+`content.js` is wrapped in an IIFE and guarded by `window.__wifiOssAssistantInjected` to avoid duplicate injection.
+
+On SharePoint OSSRecycleSchedule pages it starts only the SharePoint date/time widget and returns early.
+
+On OSS pages it starts all active behaviors:
 
 - `loadLastClipboardText()`
-- `injectButton()`
+- `injectButton()` (includes `Reload Extension`)
 - `startLabelsObservers()`
 - `startSwapMaterialObserver()`
 - `startSwapMaterialDashboardPolling()`
 - `startDeviceFunctionsObserver()`
 - `startRecycleEntryObserver()`
+- plus recycle-state helpers, CAM hint observer, Conax dialog observer, etc.
 
 Because this file is monolithic and powers multiple workflows, changes should be small and targeted.
 
@@ -103,20 +120,43 @@ Main functions/values:
 
 - `AUTO_MODE_KEY`: `wifi_oss_auto_mode_enabled`
 - `LAST_CLIPBOARD_KEY`: `wifi_oss_last_clipboard_text`
-- `deviceConfig`
+- `deviceConfig` — model keyword detection with default ports and 5G flag
 - `detectDeviceModel`
 - model-specific parsers: `parseForH3601P`, `parseForMF296R`, `parseForMF283U`, `parseForMF293N`, `parseForEX220`, `parseForG5B`
 - `genericParse`, `normalizeA1Base`, `normalizeZeros`
-- `fillOssForm`
-- `injectButton`, `setAutoMode`, `autoLoopTick`
+- `processText`, `fillOssForm`
+- `injectButton`, `setAutoMode`, `autoLoopTick`, `createReloadExtensionButton`
+
+Supported models in `deviceConfig`:
+
+| Model keyword | Ports | 5G | Parser branch | Notes |
+|---|---|---|---|---|
+| `MF283U` | 4 | no | `parseForMF283U` | WLAN NAME (SSID) + (PASSWORD) |
+| `MF293N` | 1 | no | `parseForMF293N` | WLAN NAME (SSID) |
+| `MF296R` | 4 | yes | `parseForMF296R` + `_5G` SSID2 | WiFi SSID1 + generic password |
+| `MC888A` | 2 | no | generic | |
+| `MC801A` | 2 | yes | WLAN SSID1/SSID2 | adds `_5G` when needed |
+| `G5B`, `G5B1`, `G5TS` | 2 | no | `parseForG5B` | Wi-Fi Name |
+| `EX220`, `NX220` | 4 | yes | `parseForEX220` | `SSID:` blocks; password `Wireless Password` or `Wireless Password/PIN` |
+| `HX520` | 2 | yes | `parseForEX220` + `_5G` fallback | same TP-Link label shape as EX220; label password is usually `Wireless Password:` |
+| `Deco M4` | 2 | no | generic | |
+| `ZXHN H3601P`, `H3601P` | 3 | yes | `parseForH3601P` | WLAN SSID(2.4G) + WLAN Security; SSID2 gets `_5G` |
+
+After model-specific parsing, any device with `has5g: true` that yielded `ssid1` but no `ssid2` gets `ssid2 = ssid1 + "_5G"` (unless SSID1 already ends with `_5G`).
+
+Password patterns:
+
+- `parseForEX220`: `/Wireless\s+Password(?:\/PIN)?\s*[:\-]?\s*([^\s]+)/i`
+- `genericParse`: tries `Wireless Password` / `Wireless Password/PIN`, `WiFi Key`, `KEY`, then `PASSWORD`
 
 Behavior:
 
-- Adds `ПОПЪЛНИ`, `АВТОМАТИЧНО`, and `RESET` buttons near existing OSS `Запази`/`Продължи` buttons.
+- Adds `ПОПЪЛНИ`, `АВТОМАТИЧНО`, `RESET`, and `Reload Extension` near existing OSS `Запази`/`Продължи` buttons when `injectButton()` finds a suitable anchor.
 - Reads clipboard manually or in auto mode.
 - Recognizes device text by model keywords and parses SSID/password/ports/5G details.
 - Fills OSS fields by stable IDs first, then by label/table proximity fallback.
 - Auto mode processes only recognized clipboard text and avoids processing hidden/unfocused tabs.
+- For 5G-capable devices, `fillOssForm` fills `Ssid2` and `Psk2` only when `has5g && ssid2` / `has5g && pass`; empty `Ssid2` means the parser did not produce SSID2.
 
 Important autofill selectors/IDs:
 
@@ -128,6 +168,50 @@ Important autofill selectors/IDs:
 - `_wflowRecycleState_Psk2`, `_correctWifiSettings_Psk2`
 - `_correctWifiSettings_CustomRequest`
 - `_correctWifiSettings_save`
+
+### Reload Extension Button
+
+Main functions/values:
+
+- `EXTENSION_RELOAD_MESSAGE_TYPE`: `extension.reload`
+- `createReloadExtensionButton`, `sendExtensionReloadMessage`, `detectOssAssistantBrowserKind`
+- background helpers: `storeExtensionReloadTabId`, `consumeExtensionReloadTabId`, `maybeReloadTabAfterExtensionReload`
+- storage key: `wifi_oss_extension_reload_tab_id_v1` in `chrome.storage.local`
+
+Behavior:
+
+- Injected by `injectButton()` as `Reload Extension` after `RESET`, using the same OSS anchor button styling.
+- Click opens `showRecycleAssignmentChangeConfirm` (`Презареждане на extension`, `Да, презареди` / `Отказ`).
+- On confirm, `content.js` sends `extension.reload` with the detected browser kind (`chrome`, `edge`, or `chromium`).
+- `background.js` stores the sender tab id, responds, then reloads the extension runtime.
+- After the service worker restarts, it reloads the stored tab so the operator stays on the same OSS step with the updated extension code.
+- On failure, the button re-enables and shows an alert pointing to `chrome://extensions/` or `edge://extensions/`.
+
+This is an operator/dev convenience on OSS WiFi/recycle pages that already receive `injectButton()`. It does not replace Chrome's manual Load unpacked reload during development.
+
+### SharePoint OSSRecycleSchedule Date/Time Widget
+
+Main functions/values:
+
+- `isSharePointRecycleSchedulePage`
+- `formatSharePointRecycleScheduleDateTime`
+- `findSharePointRecycleScheduleTitleRow`
+- `ensureSharePointRecycleScheduleDateTimeWidget`
+- `startSharePointRecycleScheduleDateTimeWidget`
+- widget id: `wifi-oss-sharepoint-recycle-schedule-datetime`
+
+Page match:
+
+- host ends with `.sharepoint.com`
+- path includes `/lists/ossrecycleschedule/`
+- manifest match: `https://a1g.sharepoint.com/sites/o365RCR/Lists/OSSRecycleSchedule/*`
+
+Behavior:
+
+- At the bottom of the IIFE, SharePoint pages call `startSharePointRecycleScheduleDateTimeWidget()` and then `return`, so OSS recycle entry, clipboard autofill observers, SAP/material observers, and label observers do not start on SharePoint.
+- The widget is inserted in the SharePoint list title row, preferably immediately after the sync icon (`od-ListState-icon`).
+- Shows Bulgarian date/time, for example `10 юли 2026г.` and `Петък 9:26`.
+- Refreshes every 30 seconds and re-injects if SharePoint re-renders the title row.
 
 ### Label/Barcode Generation
 
@@ -315,6 +399,8 @@ Current behavior:
 - allows the operator to manually change the MAC field or OTT dropdown after automation;
 - does not block Continue/Save, call `preventDefault`, auto-click anything, change serial validation, or change SAP/material flow.
 
+Separate from the KSTB5019 MAC autofill helper: when exactly `KSTB5019 XploreTV` or `KSTB5020 XploreTV` is selected in `xplore_zapper`, `injectRecycleStateXploreKaonMacScannerGuard` also attaches the MAC scanner shortcut guard on recycle-state `_wflowRecycleState_SerialNo` and `_wflowRecycleState_Mac` (see `Serial Keyboard Layout Protection`).
+
 ### Later-Page Helpers by Selected Device
 
 The EX220 recycle-state SSID warning, DTH Chip Id autofill, and KSTB5019 MAC + OTT helper are implemented examples of a broader pattern: a concrete recycle device selected earlier can decide whether a small helper runs on a later OSS page.
@@ -381,6 +467,17 @@ Dailywork schedule support is separate from the external recycle catalog runtime
 
 Production auto-selection runs only on the recycle entry page after the initial category panel render and daily reset opportunity. It detects the current logged-in OSS technician, finds exactly one matching Dailywork `User`, resolves that row's `Device` through the explicit local schedule-device mapping, and applies only safe `category` or `category_device` plans. It skips on no row, multiple rows, `noop` devices such as absence/admin work, invalid categories/devices, existing manual category/device selection, or same-day suppress markers. Production auto-selection never uses the saved fallback user automatically and never clicks OSS category/device DOM elements, navigates OSS, clicks Continue, edits serial input, or writes material snapshots.
 
+Explicit concrete mapping examples in `DAILYWORK_DEVICE_CONCRETE_MAPPINGS`:
+
+- `DTH STB` -> category `dth_kaon_nagra`, device `dth_kaon_kstb1001`
+- `TP-Link EX220` -> category `routers`, device `tp_link_ex220`
+- `Kaon Xplore 5019 - ОТТ` -> category `xplore_zapper`, device `kaon_kstb5019_xploretv`
+
+Broad category-only examples in `DAILYWORK_DEVICE_CATEGORY_MAPPINGS`:
+
+- `SD STB` -> category `dth_kaon_nagra` only
+- `NETBOX 4G` / `NETBOX 5G` -> category `netbox`
+
 Production auto-selection is triggered through `scheduleDailyworkProductionAutoSelectWithRetry(panel)`, a hardened wrapper around `runDailyworkProductionAutoSelect(panel)`:
 
 - One scheduler runs per injected panel element (guarded by `panel.dataset.wifiOssDailyworkAutoScheduler`); a re-injected panel re-arms a fresh scheduler.
@@ -411,6 +508,8 @@ Manual/demo Dailywork tools:
 ### Reset Button
 
 The `RESET` button is created by the generic `injectButton()` flow, not by `injectRecycleEntryCategoryPanel()`.
+
+The same `injectButton()` row also injects `Reload Extension`; see `Reload Extension Button` above.
 
 Before it clears anything, if the dailywork distribution assigned a category/device for today (`readDailyworkAssignmentForToday`) and a category/device is currently selected, it opens the shared `showRecycleAssignmentChangeConfirm` dialog ("Нулиране на избора", `Да, нулирай` / `Отказ`). Cancel/Escape keeps the selection; confirm runs the reset. With no assignment for today, or nothing currently selected, it resets immediately without a prompt.
 
@@ -473,6 +572,7 @@ The device-required toggle does not bypass no-category validation, serial valida
 - Trusted `keydown` events with a single Cyrillic `event.key` and known `KeyboardEvent.code` are normalized only for clear cases: `KeyA`..`KeyZ` -> `A`..`Z`, and `Semicolon` + `Shift` -> `:`.
 - Normal Latin/digit input is left unchanged. Paste or unknown Cyrillic input is not auto-corrected; it keeps the warning/block fallback.
 - Opt-in serial keyboard diagnostics use `sessionStorage.setItem("wifi_oss_serial_keyboard_debug", "1")` and expose `window.__wifiOssSerialDebugEvents` plus `wifi_oss_serial_keyboard_debug_events`.
+- For `KSTB5019 XploreTV` and `KSTB5020 XploreTV` (single selected device in `xplore_zapper`), `attachRecycleXploreKaonMacScannerShortcutGuard` blocks scanner prefix/suffix keys that steal focus or switch browser tabs: `Tab`, `Alt`/`Meta` combos, most `Ctrl` shortcuts (except copy/paste/select), `F1`–`F12`, `PageUp`/`PageDown`. Applied on recycle entry serial input and recycle-state serial/MAC inputs. Does not block `Enter` (Continue) or manual `Ctrl+C/V/A/X/Z/Y`. True OS-level `Alt+Tab` between applications cannot be blocked by a page extension; if that persists, reprogram the scanner prefix/suffix.
 
 Risk/TBD: the guard uses `preventDefault()` and `stopPropagation()`, not `stopImmediatePropagation()`. If OSS has other capture listeners on the same element, verify that invalid entries truly cannot continue.
 
@@ -755,6 +855,7 @@ Fallback behavior:
 - `wifi_oss_recycle_entry_material_snapshot` - `sessionStorage`, per-flow category/device/material/serial/date snapshot used for SAP/material button ordering and controlled auto-fill.
 - `wifi_oss_dailywork_lkg_v1` - `chrome.storage.local`, background-owned Dailywork last-known-good normalized schedule cache.
 - `wifi_oss_dailywork_meta_v1` - `chrome.storage.local`, background-owned Dailywork fetch/cache metadata.
+- `wifi_oss_extension_reload_tab_id_v1` - `chrome.storage.local`, transient tab id consumed after `extension.reload` so the same OSS tab can be refreshed post-reload.
 - `wifi_oss_recycle_remote_auto_session_state_v1` - `sessionStorage`, minimal same-tab projection for auto-accepted remote devices/material so `swap-material` navigation can rehydrate.
 - `wifi_oss_recycle_remote_debug_session_state_v1` - `sessionStorage`, minimal same-tab debug projection for remote-added devices/material enablement; cleared by Remote config debug `Clear`.
 - `wifi_oss_cam_modules_missing_material_operation_id` - `sessionStorage`, operation id for showing the CAM missing-material helper only on the redirected operation page.
@@ -782,6 +883,9 @@ Fallback behavior:
 
 Latest confirmed real-OSS checks:
 
+- HX520 Home clipboard autofill fills SSID1, SSID2 with `_5G`, PSK1/PSK2, ports, and WiFi test on recycle-state WiFi forms.
+- Reload Extension reloads the extension and refreshes the current OSS tab after confirmation.
+- SharePoint OSSRecycleSchedule date/time widget renders in Bulgarian and does not start OSS recycle runtime on that page.
 - Clipboard SSID/password autofill works.
 - Label generation works.
 - Austrian label generation works.

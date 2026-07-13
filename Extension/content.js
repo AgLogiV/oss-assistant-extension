@@ -21,6 +21,75 @@
   const RECYCLE_REMOTE_CONFIG_RESOLVED_PLAN_ACTION = "resolvedPlan";
   const RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION = "applyEligibleDevices";
   const DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE = "dailywork.fetchSchedule";
+  const EXTENSION_RELOAD_MESSAGE_TYPE = "extension.reload";
+
+  function detectOssAssistantBrowserKind() {
+    const ua = String(navigator.userAgent || "");
+    if (/Edg\//.test(ua)) return "edge";
+    if (/Chrome\//.test(ua)) return "chrome";
+    return "chromium";
+  }
+
+  function sendExtensionReloadMessage() {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!chrome?.runtime?.sendMessage) {
+          reject(new Error("chrome.runtime.sendMessage unavailable"));
+          return;
+        }
+        chrome.runtime.sendMessage({
+          type: EXTENSION_RELOAD_MESSAGE_TYPE,
+          browser: detectOssAssistantBrowserKind()
+        }, (response) => {
+          const lastError = chrome.runtime.lastError?.message;
+          if (lastError) {
+            reject(new Error(lastError));
+            return;
+          }
+          resolve(response);
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  function createReloadExtensionButton(anchorBtn) {
+    const reloadBtn = document.createElement(anchorBtn.tagName.toLowerCase());
+    reloadBtn.id = "wifi-oss-assistant-reload-extension-btn";
+    reloadBtn.type = "button";
+    reloadBtn.value = reloadBtn.textContent = "Reload Extension";
+    reloadBtn.title = "Презарежда OSS Assistant (Chrome / Edge)";
+    reloadBtn.className = anchorBtn.className;
+    if (anchorBtn.getAttribute("style")) reloadBtn.setAttribute("style", anchorBtn.getAttribute("style"));
+    reloadBtn.style.marginLeft = "6px";
+    reloadBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (reloadBtn.disabled) return;
+
+      const performExtensionReload = () => {
+        const browserKind = detectOssAssistantBrowserKind();
+        const browserLabel = browserKind === "edge" ? "Edge" : (browserKind === "chrome" ? "Chrome" : "Chromium");
+        reloadBtn.disabled = true;
+        reloadBtn.value = reloadBtn.textContent = `Reload (${browserLabel})...`;
+        sendExtensionReloadMessage().catch(() => {
+          reloadBtn.disabled = false;
+          reloadBtn.value = reloadBtn.textContent = "Reload Extension";
+          try { window.alert(`Не успях да презаредя extension-а автоматично. Отворете ${browserKind === "edge" ? "edge://extensions/" : "chrome://extensions/"} и натиснете Reload.`); } catch (e2) {}
+        });
+      };
+
+      showRecycleAssignmentChangeConfirm({
+        title: "Презареждане на extension",
+        message: "Сигурен ли си, че искаш да презаредиш OSS Assistant? Extension-ът и текущата страница ще се презаредят.",
+        confirmLabel: "Да, презареди",
+        cancelLabel: "Отказ",
+        onConfirm: performExtensionReload
+      });
+    });
+    return reloadBtn;
+  }
 
   function sendRecycleRemoteConfigDebugMessage(type, payload) {
     return new Promise((resolve, reject) => {
@@ -145,7 +214,7 @@
     G5TS: { ports: "2", has5g: false },
     EX220: { ports: "4", has5g: true },
     NX220: { ports: "4", has5g: true },
-    HX520: { ports: "4", has5g: false },
+    HX520: { ports: "2", has5g: true },
     "Deco M4": { ports: "2", has5g: false },
     "ZXHN H3601P": { ports: "3", has5g: true },
     H3601P: { ports: "3", has5g: true }
@@ -209,7 +278,7 @@
   }
 
   function parseForEX220(text) {
-    const passM = text.match(/Wireless\s+Password\/PIN\s*[:\-]?\s*([^\s]+)/i);
+    const passM = text.match(/Wireless\s+Password(?:\/PIN)?\s*[:\-]?\s*([^\s]+)/i);
     const pass = passM ? passM[1].trim() : null;
     const parts = text.split(/SSID\s*:/i).slice(1);
     const cleaned = parts.map(p => p.split(/SSID\s*:/i)[0]).map(p => p.trim()).filter(Boolean);
@@ -271,7 +340,7 @@
         ssid = `${a1[1].toUpperCase()}_${num}`;
       }
     }
-    const passM = text.match(/(?:PASSWORD|KEY|WiFi Key|Wireless Password\/PIN)[\s:]+([^\s]+)/i);
+    const passM = text.match(/(?:Wireless Password(?:\/PIN)?|WiFi Key|KEY|PASSWORD)[\s:]+([^\s]+)/i);
     if (passM) pass = passM[1].trim();
     return { ssid, pass };
   }
@@ -441,7 +510,7 @@
       if (ssid2 && !ssid2.toUpperCase().endsWith("_5G")) ssid2 = `${ssid2}_5G`;
       pass = genericParse(text).pass;
       has5g = true;
-    } else if (dev.model === "EX220" || dev.model === "NX220") {
+    } else if (dev.model === "EX220" || dev.model === "NX220" || dev.model === "HX520") {
       const r = parseForEX220(text);
       ssid1 = r.ssid1; ssid2 = r.ssid2; pass = r.pass;
       has5g = true;
@@ -451,6 +520,12 @@
     } else {
       const g = genericParse(text);
       ssid1 = g.ssid; pass = g.pass;
+    }
+
+    // Any 5G-capable device that only yielded SSID1 (e.g. HX520 via generic parse) still
+    // needs SSID2 with the _5G suffix for the recycle WiFi test form.
+    if (has5g && ssid1 && !ssid2) {
+      ssid2 = ssid1.toUpperCase().endsWith("_5G") ? ssid1 : `${ssid1}_5G`;
     }
 
     ssid1 = normalizeZeros(ssid1);
@@ -542,7 +617,9 @@
     resetBtn.type = "button";
     resetBtn.value = resetBtn.textContent = "RESET";
 
-    [fillBtn, autoBtn, resetBtn].forEach(btn => {
+    const reloadExtensionBtn = createReloadExtensionButton(anchorBtn);
+
+    [fillBtn, autoBtn, resetBtn, reloadExtensionBtn].forEach(btn => {
       btn.className = anchorBtn.className;
       if (anchorBtn.getAttribute("style")) btn.setAttribute("style", anchorBtn.getAttribute("style"));
       btn.style.marginLeft = "6px";
@@ -609,6 +686,7 @@
     anchorBtn.parentElement.insertBefore(fillBtn, anchorBtn.nextSibling);
     anchorBtn.parentElement.insertBefore(autoBtn, fillBtn.nextSibling);
     anchorBtn.parentElement.insertBefore(resetBtn, autoBtn.nextSibling);
+    anchorBtn.parentElement.insertBefore(reloadExtensionBtn, resetBtn.nextSibling);
   }
 
   // -------------------------------
@@ -2423,7 +2501,7 @@
     { names: ["Advanced ONT", "GPONs Basic", "GPON CPE ZXHN F670L V1.1"], categoryId: "gpon", reason: "broad_gpon" },
     { names: ["DTV CAM", "DTH CAM"], categoryId: "cam_modules", reason: "broad_cam_modules" },
     { names: ["D3 Wifi Modems", "D3 Modems"], categoryId: "modems", reason: "broad_modems" },
-    { names: ["DTH STB", "SD STB"], categoryId: "dth_kaon_nagra", reason: "broad_dth" },
+    { names: ["SD STB"], categoryId: "dth_kaon_nagra", reason: "broad_dth" },
     { names: ["IPTV ZTE"], categoryId: "android_iptv", reason: "broad_iptv" },
     { names: ["ZTE MF296N+ Antenna"], categoryId: "netbox", reason: "device_not_exact_in_local_catalog" },
     { names: ["A1 Hybrid"], categoryId: "austrian", reason: "broad_austrian" }
@@ -2434,6 +2512,7 @@
     { names: ["HD Boxes - KSTB 6106"], categoryId: "xplore_zapper", deviceId: "kaon_kstb6106_zapper" },
     { names: ["A1 ADB 2220"], categoryId: "austrian", deviceId: "adb_modem_2220" },
     { names: ["Kaon Xplore 5020"], categoryId: "xplore_zapper", deviceId: "kaon_kstb5020_xploretv" },
+    { names: ["DTH STB"], categoryId: "dth_kaon_nagra", deviceId: "dth_kaon_kstb1001" },
     { names: ["DTH STB Nagra DTS3460"], categoryId: "dth_kaon_nagra", deviceId: "dth_nagra_dts3460" },
     { names: ["TP-LINK Deco M4, AC1200"], categoryId: "routers", deviceId: "tp_link_deco_m4" },
     { names: ["Cube ZTE MC 801A 5G"], categoryId: "netbox", deviceId: "cube_zte_801a" },
@@ -3884,6 +3963,7 @@
     });
   }
   const RECYCLE_STATE_KSTB5019_DEVICE_ID = "kaon_kstb5019_xploretv";
+  const RECYCLE_STATE_KSTB5020_DEVICE_ID = "kaon_kstb5020_xploretv";
   const RECYCLE_STATE_KSTB5019_CATEGORY_ID = "xplore_zapper";
   const RECYCLE_STATE_KSTB5019_OTT_INFO_ID = "wifi-oss-recycle-state-kstb5019-ott-info";
   const RECYCLE_STATE_KSTB5019_OTT_INFO_TEXT = "OTT е избрано по подразбиране.";
@@ -7881,6 +7961,54 @@
     return "";
   }
 
+  // True when the operator is recycling KSTB5019 or KSTB5020 (single selected device in
+  // xplore_zapper). Used to enable scanner shortcut blocking for MAC barcode scans.
+  function isRecycleXploreKaon5019Or5020SelectedContext() {
+    if (readSelectedRecycleEntryCategory() !== RECYCLE_STATE_KSTB5019_CATEGORY_ID) return false;
+    const deviceIds = readSelectedRecycleDeviceIdsStorage();
+    if (!Array.isArray(deviceIds) || deviceIds.length !== 1) return false;
+    const id = String(deviceIds[0] || "").trim();
+    return id === RECYCLE_STATE_KSTB5019_DEVICE_ID || id === RECYCLE_STATE_KSTB5020_DEVICE_ID;
+  }
+
+  // Barcode scanners often emit Tab/Alt/Ctrl/F-keys as prefix/suffix. On MAC scans for
+  // KSTB5019/KSTB5020 those can steal focus, switch tabs, or activate browser chrome.
+  function shouldBlockRecycleXploreKaonMacScannerShortcut(e) {
+    if (!e || !e.isTrusted) return false;
+    const key = String(e.key || "");
+    if (key === "Escape") return false;
+    if (e.altKey || e.metaKey) return true;
+    if (key === "Tab" || key === "PageUp" || key === "PageDown" || key === "ContextMenu") return true;
+    if (/^F\d{1,2}$/.test(key)) return true;
+    if (e.ctrlKey) {
+      const lower = key.toLowerCase();
+      if (["a", "c", "v", "x", "z", "y"].includes(lower)) return false;
+      return true;
+    }
+    return false;
+  }
+
+  function consumeRecycleXploreKaonMacScannerShortcut(e) {
+    if (!shouldBlockRecycleXploreKaonMacScannerShortcut(e)) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.stopImmediatePropagation(); } catch (err) {}
+    e.__wifiOssScannerShortcutBlocked = true;
+    return true;
+  }
+
+  function attachRecycleXploreKaonMacScannerShortcutGuard(input, isContextActive) {
+    if (!input || input.dataset.wifiOssXploreKaonMacScannerGuardBound === "1") return;
+    input.dataset.wifiOssXploreKaonMacScannerGuardBound = "1";
+    const contextFn = typeof isContextActive === "function"
+      ? isContextActive
+      : () => !!isContextActive;
+    input.addEventListener("keydown", (e) => {
+      if (!contextFn()) return;
+      consumeRecycleXploreKaonMacScannerShortcut(e);
+    }, true);
+  }
+
   function setRecycleSerialInputValue(input, value) {
     const proto = Object.getPrototypeOf(input);
     const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
@@ -7969,6 +8097,7 @@
     if (e.type === "keydown") {
       const normalized = e.__wifiOssSerialNormalized || (e.defaultPrevented ? getRecycleSerialCodeNormalizationChar(e) : "");
       if (normalized) return `normalized-to-${normalized}`;
+      if (e.__wifiOssScannerShortcutBlocked) return "blocked-scanner-shortcut";
       if (key === "Enter") return "enter-guard";
       if (e.ctrlKey || e.metaKey || e.altKey) return "modifier-shortcut";
       if (/^Arrow/.test(key) || ["Backspace", "Delete", "Tab", "Escape", "Home", "End"].includes(key)) return "navigation-or-edit-key";
@@ -10464,6 +10593,7 @@
       return p;
     };
     attachRecycleSerialDebug(serialInput);
+    attachRecycleXploreKaonMacScannerShortcutGuard(serialInput, isRecycleXploreKaon5019Or5020SelectedContext);
 
     const panel = document.createElement("div");
     panel.className = RECYCLE_ENTRY_PANEL_CLASS;
@@ -11643,6 +11773,27 @@
     return true;
   }
 
+  function injectRecycleStateXploreKaonMacScannerGuard() {
+    if (!isRecycleStatePagePath()) return false;
+    if (!isRecycleXploreKaon5019Or5020SelectedContext()) return true;
+
+    const macInput = document.getElementById(RECYCLE_STATE_MAC_INPUT_ID);
+    const serialInput = document.getElementById(RECYCLE_STATE_SERIAL_INPUT_ID);
+    if (macInput) attachRecycleXploreKaonMacScannerShortcutGuard(macInput, isRecycleXploreKaon5019Or5020SelectedContext);
+    if (serialInput) attachRecycleXploreKaonMacScannerShortcutGuard(serialInput, isRecycleXploreKaon5019Or5020SelectedContext);
+    return true;
+  }
+
+  function startRecycleStateXploreKaonMacScannerGuardObserver() {
+    if (!isRecycleStatePagePath()) return;
+    if (injectRecycleStateXploreKaonMacScannerGuard()) return;
+
+    const obs = new MutationObserver(() => {
+      if (injectRecycleStateXploreKaonMacScannerGuard()) obs.disconnect();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
   function injectRecycleStateKstb5019XploreTvHelper() {
     if (!isRecycleStatePagePath()) return true;
 
@@ -11859,6 +12010,138 @@
     obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
   }
 
+  const SHAREPOINT_RECYCLE_SCHEDULE_DATETIME_ID = "wifi-oss-sharepoint-recycle-schedule-datetime";
+  let sharePointRecycleScheduleDateTimeTimer = 0;
+
+  function isSharePointRecycleSchedulePage() {
+    try {
+      const host = String(window.location.hostname || "").toLowerCase();
+      const path = String(window.location.pathname || "").toLowerCase();
+      return host.endsWith(".sharepoint.com") && path.includes("/lists/ossrecycleschedule/");
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function formatSharePointRecycleScheduleDateTime(now = new Date()) {
+    const months = [
+      "януари", "февруари", "март", "април", "май", "юни",
+      "юли", "август", "септември", "октомври", "ноември", "декември"
+    ];
+    const weekdays = [
+      "Неделя", "Понеделник", "Вторник", "Сряда", "Четвъртък", "Петък", "Събота"
+    ];
+    const day = now.getDate();
+    const month = months[now.getMonth()] || "";
+    const year = now.getFullYear();
+    const weekday = weekdays[now.getDay()] || "";
+    const hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return {
+      dateLine: `${day} ${month} ${year}г.`,
+      timeLine: `${weekday} ${hours}:${minutes}`
+    };
+  }
+
+  function findSharePointRecycleScheduleTitleRow() {
+    const titleBtn = document.querySelector('button[data-automationid="headerTitleButton"][title="OSSRecycleSchedule"]')
+      || document.querySelector('button[data-automationid="headerTitleButton"][value="OSSRecycleSchedule"]');
+    if (!titleBtn) return null;
+    return titleBtn.closest('[class*="titleRow_"]') || titleBtn.parentElement;
+  }
+
+  function renderSharePointRecycleScheduleDateTime(widget) {
+    if (!widget) return;
+    const formatted = formatSharePointRecycleScheduleDateTime(new Date());
+    const dateEl = widget.querySelector("[data-wifi-oss-sp-date]");
+    const timeEl = widget.querySelector("[data-wifi-oss-sp-time]");
+    if (dateEl) dateEl.textContent = formatted.dateLine;
+    if (timeEl) timeEl.textContent = formatted.timeLine;
+  }
+
+  function ensureSharePointRecycleScheduleDateTimeWidget() {
+    if (!isSharePointRecycleSchedulePage()) return false;
+
+    let widget = document.getElementById(SHAREPOINT_RECYCLE_SCHEDULE_DATETIME_ID);
+    const titleRow = findSharePointRecycleScheduleTitleRow();
+    if (!titleRow) return false;
+
+    if (widget && widget.parentElement !== titleRow) {
+      try { widget.remove(); } catch (e) {}
+      widget = null;
+    }
+
+    if (!widget) {
+      widget = document.createElement("div");
+      widget.id = SHAREPOINT_RECYCLE_SCHEDULE_DATETIME_ID;
+      widget.setAttribute("role", "status");
+      widget.setAttribute("aria-live", "polite");
+      widget.style.marginLeft = "12px";
+      widget.style.display = "inline-flex";
+      widget.style.flexDirection = "column";
+      widget.style.justifyContent = "center";
+      widget.style.alignSelf = "center";
+      widget.style.lineHeight = "1.2";
+      widget.style.fontSize = "13px";
+      widget.style.fontWeight = "600";
+      widget.style.color = "#323130";
+      widget.style.whiteSpace = "nowrap";
+
+      const dateEl = document.createElement("div");
+      dateEl.dataset.wifiOssSpDate = "1";
+      dateEl.style.fontSize = "13px";
+      dateEl.style.fontWeight = "600";
+      dateEl.style.color = "#323130";
+
+      const timeEl = document.createElement("div");
+      timeEl.dataset.wifiOssSpTime = "1";
+      timeEl.style.fontSize = "13px";
+      timeEl.style.fontWeight = "700";
+      timeEl.style.color = "#605e5c";
+
+      widget.appendChild(dateEl);
+      widget.appendChild(timeEl);
+
+      const syncIconHost = titleRow.querySelector('[data-automationid="od-ListState-icon"]')?.closest("span")
+        || titleRow.querySelector(".listStateIconSpan_f985366c")
+        || titleRow.querySelector('[class*="listStateIconSpan_"]');
+      if (syncIconHost && syncIconHost.parentElement === titleRow) {
+        syncIconHost.insertAdjacentElement("afterend", widget);
+      } else {
+        titleRow.appendChild(widget);
+      }
+    }
+
+    renderSharePointRecycleScheduleDateTime(widget);
+    return true;
+  }
+
+  function startSharePointRecycleScheduleDateTimeWidget() {
+    if (!isSharePointRecycleSchedulePage()) return;
+
+    const tick = () => {
+      const widget = document.getElementById(SHAREPOINT_RECYCLE_SCHEDULE_DATETIME_ID);
+      if (widget) renderSharePointRecycleScheduleDateTime(widget);
+      else ensureSharePointRecycleScheduleDateTimeWidget();
+    };
+
+    ensureSharePointRecycleScheduleDateTimeWidget();
+    if (sharePointRecycleScheduleDateTimeTimer) clearInterval(sharePointRecycleScheduleDateTimeTimer);
+    sharePointRecycleScheduleDateTimeTimer = setInterval(tick, 30000);
+
+    const obs = new MutationObserver(() => {
+      if (!document.getElementById(SHAREPOINT_RECYCLE_SCHEDULE_DATETIME_ID)) {
+        ensureSharePointRecycleScheduleDateTimeWidget();
+      }
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
+  if (isSharePointRecycleSchedulePage()) {
+    startSharePointRecycleScheduleDateTimeWidget();
+    return;
+  }
+
   loadLastClipboardText();
   restoreRecycleRemoteDebugSessionState();
   injectButton();
@@ -11870,6 +12153,7 @@
   startCamModulesOperationHintObserver();
   startRecycleStateDthAutofillObserver();
   startRecycleStateKstb5019XploreTvHelperObserver();
+  startRecycleStateXploreKaonMacScannerGuardObserver();
   startRecycleStateEx220SsidWarningObserver();
   startAfterRecycleCaptureSnLabelObserver();
   startConaxCardErrorDialogObserver();
