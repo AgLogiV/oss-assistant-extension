@@ -7,6 +7,7 @@ const { Presentation, PresentationFile } = await import("@oai/artifact-tool");
 const BUILD_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DECK_DIR = path.resolve(BUILD_DIR, "..");
 const REF_DIR = path.join(DECK_DIR, "assets");
+const SCREENSHOT_DIR = path.join(DECK_DIR, "assets", "screenshots");
 const OUT_DIR = path.join(DECK_DIR, "output");
 const PREVIEW_DIR = path.join(DECK_DIR, "preview");
 
@@ -155,6 +156,40 @@ function bullets(slide, items, { left, top, width, gap = 14, size = 15, color = 
     y += lineH * lines + gap;
   }
   return y;
+}
+
+async function readPngSize(imagePath) {
+  const buf = await fs.promises.readFile(imagePath);
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+function fitSize(maxWidth, maxHeight, imgWidth, imgHeight) {
+  const ratio = imgWidth / imgHeight;
+  let width = maxWidth;
+  let height = width / ratio;
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * ratio;
+  }
+  return { width: Math.round(width), height: Math.round(height) };
+}
+
+async function screenshotImage(slide, { left, top, maxWidth, maxHeight, file }) {
+  const imagePath = path.join(SCREENSHOT_DIR, file);
+  const { width: imgW, height: imgH } = await readPngSize(imagePath);
+  const accent = 6;
+  const innerMaxW = maxWidth - accent;
+  const { width: fitW, height: fitH } = fitSize(innerMaxW, maxHeight, imgW, imgH);
+  const frameW = fitW + accent;
+  const frameH = fitH;
+  const frameLeft = left + Math.round((maxWidth - frameW) / 2);
+  const frameTop = top + Math.round((maxHeight - frameH) / 2);
+
+  card(slide, { left: frameLeft, top: frameTop, width: frameW, height: frameH, fill: C.cardBg, line: { fill: C.lightLine, width: 1 } });
+  rect(slide, { left: frameLeft, top: frameTop, width: accent, height: frameH, fill: C.red, radius: 6000 });
+  const img = slide.images.add({ blob: await readImageBlob(imagePath), fit: "contain", alt: "" });
+  img.position = { left: frameLeft + accent, top: frameTop, width: fitW, height: fitH };
+  return { left: frameLeft, top: frameTop, width: frameW, height: frameH };
 }
 
 async function sectionDivider({ num, title, subtitle, accent = C.red }) {
@@ -570,10 +605,10 @@ function contractRemoveButtonPlanSlide() {
 
   const top = 252, gap = 22, cw = (W - 2 * MARGIN - 3 * gap) / 4, ch = 292;
   const pillars = [
-    { i: "↓", t: "По-малко грешки", d: "Валидация още при въвеждане — формат, кирилица и категория се хващат навреме." },
-    { i: "⚡", t: "По-бърза обработка", d: "По-малко ръчни стъпки и по-бърз отговор от асистента на всяко действие." },
-    { i: "↺", t: "По-малко ръчна работа", d: "Без преписване от етикети и без ръчно търсене в Excel за SAP / материал." },
-    { i: "✓", t: "По-сигурно провизиониране", d: "Правилен сериен номер, правилен SAP и правилна категория от самото начало." },
+    { i: "↺", t: "Автоматизация", d: "Попълва и предлага стойности в контекст, вместо техникът да ги търси ръчно." },
+    { i: "⚡", t: "По-бърз процес", d: "Намалява Excel lookup, copy/paste, въвеждане и прескачане между прозорци." },
+    { i: "✓", t: "Предотвратяване на грешки", d: "Хваща грешен serial, категория или material преди те да стигнат надолу по процеса." },
+    { i: "?", t: "Насоки за техника", d: "Показва подходящо устройство, help image или следваща безопасна стъпка." },
   ];
   pillars.forEach((p, i) => {
     const x = MARGIN + i * (cw + gap);
@@ -586,7 +621,7 @@ function contractRemoveButtonPlanSlide() {
 
   const bTop = top + ch + 20;
   rect(s, { left: MARGIN, top: bTop, width: W - 2 * MARGIN, height: 42, fill: C.red, radius: 8000 });
-  txt(s, "Резултат:  по-защитен, по-бърз и по-малко зависим от ръчно въвеждане процес.", { left: MARGIN + 24, top: bTop, width: W - 2 * MARGIN - 48, height: 42, size: 15, bold: true, color: C.white, font: FONT.title, valign: "middle" });
+  txt(s, "Резултат: помощен слой между техника и OSS - по-бърз процес, по-малко ръчно въвеждане и по-малко грешки.", { left: MARGIN + 24, top: bTop, width: W - 2 * MARGIN - 48, height: 42, size: 14.5, bold: true, color: C.white, font: FONT.title, valign: "middle" });
   footer(s);
 }
 
@@ -639,6 +674,8 @@ function contractRemoveButtonPlanSlide() {
   card(s, { left: rx, top: ptop + 192, width: rw, height: 168, fill: C.ink });
   txt(s, "~58  →  ~8", { left: rx + 24, top: ptop + 216, width: rw - 48, height: 54, size: 36, bold: true, color: C.white, font: FONT.title });
   txt(s, "средно действия на цикъл: преди и с OSS Assistant", { left: rx + 24, top: ptop + 276, width: rw - 48, height: 60, size: 14, color: "#E7E9EE", font: FONT.body, line: 1.18 });
+  rect(s, { left: MARGIN, top: 620, width: W - 2 * MARGIN, height: 34, fill: "#FFFFFFE6", radius: 8000 });
+  txt(s, "Стойностите са ориентировъчни и показват средния брой ръчни действия за един цялостен цикъл по обработване на едно устройство.", { left: MARGIN + 20, top: 620, width: W - 2 * MARGIN - 40, height: 34, size: 11.5, bold: true, color: C.grey, font: FONT.body, valign: "middle" });
   footer(s);
 }
 
@@ -677,123 +714,160 @@ await sectionDivider({
 });
 
 // ============================================================
-// SLIDE 6 — Serial validation
+// SLIDE 8 — Guided recycle entry and serial validation
 // ============================================================
 {
   const s = presentation.slides.add();
   s.background.fill = C.bg;
   header(s, "ВЕЧЕ РАБОТИ · ВАЛИДАЦИЯ");
-  titleBlock(s, "Валидация на серийни номера", "Правилният сериен номер е първата стъпка към правилен SAP и провизиониране.");
+  titleBlock(s, "Насочено въвеждане и serial validation", "Изборът на категория и устройство задава контекст за целия работен ден.");
 
-  const top = 250, lw = 600;
+  const top = 246, lw = 420, gap = 24;
   card(s, { left: MARGIN, top, width: lw, height: 356 });
-  txt(s, "Extension-ът пази още в началото", { left: MARGIN + 28, top: top + 24, width: lw - 56, height: 30, size: 17, bold: true, color: C.ink, font: FONT.title });
-  bullets(s, [
-    "Проверява дали номерът отговаря на избраната категория и устройство",
-    "Не приема кирилица и невалидни символи",
-    "Спира грешен формат и грешен баркод",
-    "Предупреждава или блокира продължаването при грешка",
-  ], { left: MARGIN + 28, top: top + 74, width: lw - 56, size: 15, color: C.grey, gap: 16, lineH: 46, dotColor: C.red });
-
-  const rx = MARGIN + lw + 24, rw = W - MARGIN - rx;
-  card(s, { left: rx, top, width: rw, height: 356, fill: C.ink });
-  txt(s, "Пази от", { left: rx + 26, top: top + 24, width: rw - 52, height: 28, size: 15, bold: true, color: "#FFFFFFB0", font: FONT.title });
-  const guards = ["грешен формат", "невалидни символи", "кирилица", "грешна категория", "грешен баркод"];
-  guards.forEach((g, i) => {
-    const y = top + 66 + i * 52;
-    rect(s, { left: rx + 26, top: y, width: rw - 52, height: 42, fill: "#242730", radius: 9000 });
-    txt(s, "✕", { left: rx + 40, top: y, width: 24, height: 42, size: 15, bold: true, color: C.coral, font: FONT.title, valign: "middle" });
-    txt(s, g, { left: rx + 66, top: y, width: rw - 92, height: 42, size: 14, color: C.white, font: FONT.body, valign: "middle" });
+  txt(s, "Контекстът води процеса", { left: MARGIN + 26, top: top + 22, width: lw - 52, height: 28, size: 17, bold: true, color: C.ink, font: FONT.title });
+  const flow = ["Избор на категория", "Избор на устройство", "Валидация на serial", "Филтриране на SAP/material"];
+  flow.forEach((label, i) => {
+    const y = top + 64 + i * 48;
+    rect(s, { left: MARGIN + 26, top: y, width: lw - 52, height: 36, fill: i === 2 ? "#FBE6EA" : "#F4F5F7", radius: 9000 });
+    txt(s, String(i + 1), { left: MARGIN + 40, top: y, width: 22, height: 36, size: 13, bold: true, color: i === 2 ? C.redDeep : C.midGrey, font: FONT.title, valign: "middle", align: "center" });
+    txt(s, label, { left: MARGIN + 74, top: y, width: lw - 116, height: 36, size: 13.5, bold: true, color: C.grey, font: FONT.body, valign: "middle" });
   });
+  rect(s, { left: MARGIN + 26, top: top + 274, width: lw - 52, height: 58, fill: C.ink, radius: 8000 });
+  txt(s, "Невалиден формат, кирилица или грешен идентификатор се хващат преди да доведат до provisioning проблем.", { left: MARGIN + 42, top: top + 282, width: lw - 84, height: 42, size: 12.5, bold: true, color: C.white, font: FONT.body, valign: "middle", line: 1.12 });
+
+  const rx = MARGIN + lw + gap, rw = W - MARGIN - rx;
+  await screenshotImage(s, { left: rx, top, maxWidth: rw, maxHeight: 356, file: "slide08-invalid-serial-warning.png" });
   footer(s);
 }
 
 // ============================================================
-// SLIDE 7 — SAP + duplicate protection
+// SLIDE 9A — SAP/material selection and filtering
 // ============================================================
 {
   const s = presentation.slides.add();
   s.background.fill = C.bg;
-  header(s, "ВЕЧЕ РАБОТИ · SAP / ЗАЩИТА");
-  titleBlock(s, "Правилен SAP и защита от повторна обработка", "Две функции, които пестят време и предотвратяват скъпи грешки.");
+  header(s, "ВЕЧЕ РАБОТИ · SAP / MATERIAL");
+  titleBlock(s, "SAP/material според избрания контекст", "От търсене в Excel и copy/paste към ограничен избор и безопасно auto-fill.");
 
-  const top = 250, gap = 24, cw = (W - 2 * MARGIN - gap) / 2, ch = 356;
-  // SAP
-  const x1 = MARGIN;
-  card(s, { left: x1, top, width: cw, height: ch });
-  rect(s, { left: x1, top, width: cw, height: 6, fill: C.red, radius: 6000 });
-  txt(s, "SAP / материал автоматизация", { left: x1 + 28, top: top + 30, width: cw - 56, height: 30, size: 19, bold: true, color: C.ink, font: FONT.title });
-  bullets(s, [
-    "Предлага правилните SAP / материал опции според категорията и устройството",
-    "При възможност попълва стойността автоматично",
-    "Край на ръчното търсене в Excel и отделни списъци",
-    "По-малък риск от грешен материал и неправилно заведено устройство",
-  ], { left: x1 + 28, top: top + 78, width: cw - 56, size: 14.5, color: C.grey, gap: 14, lineH: 42, dotColor: C.red });
-
-  // Duplicate
-  const x2 = MARGIN + cw + gap;
-  card(s, { left: x2, top, width: cw, height: ch });
-  rect(s, { left: x2, top, width: cw, height: 6, fill: C.red, radius: 6000 });
-  txt(s, "Защита от повторно бракуване / рециклиране", { left: x2 + 28, top: top + 30, width: cw - 56, height: 30, size: 19, bold: true, color: C.ink, font: FONT.title, line: 1.02 });
-  bullets(s, [
-    "Предупреждава, ако серийният номер вече е обработван",
-    "Важно при голям обем, когато е лесно да се пропусне",
-    "Намалява риска от повторна обработка на едно и също устройство",
-  ], { left: x2 + 28, top: top + 84, width: cw - 56, size: 14.5, color: C.grey, gap: 14, lineH: 42, dotColor: C.red });
-  const noteY = top + ch - 66;
-  rect(s, { left: x2 + 28, top: noteY, width: cw - 56, height: 46, fill: "#FBE6EA", radius: 8000 });
-  txt(s, "Работи в основния сценарий — предупреждава при вече обработен сериен номер.", { left: x2 + 44, top: noteY, width: cw - 88, height: 46, size: 12.5, bold: true, color: C.redDeep, font: FONT.body, valign: "middle", line: 1.1 });
+  const top = 246, lw = 430, gap = 24, rw = W - 2 * MARGIN - lw - gap;
+  const blocks = [
+    { label: "Проблем в OSS", fill: "#FBE6EA", accent: C.red, text: "Търсене в Excel, смяна на прозорец, copy/paste и ръчно въвеждане на material." },
+    { label: "Как помага на техника", fill: "#E4F5EC", accent: C.greenOk, text: "Показва бързи бутони само за избраната category/device; при един безопасен кандидат попълва стойността." },
+    { label: "Спестени действия", fill: C.cardBg, accent: C.red, text: "Намалява търсене, смяна на прозорец, copy/paste и typing. При двусмислен избор не избира автоматично." },
+  ];
+  blocks.forEach((b, i) => {
+    const y = top + i * 118;
+    card(s, { left: MARGIN, top: y, width: lw, height: 104, fill: b.fill });
+    rect(s, { left: MARGIN, top: y, width: 6, height: 104, fill: b.accent, radius: 6000 });
+    txt(s, b.label, { left: MARGIN + 24, top: y + 18, width: lw - 48, height: 20, size: 14.5, bold: true, color: C.ink, font: FONT.title });
+    txt(s, b.text, { left: MARGIN + 24, top: y + 46, width: lw - 48, height: 48, size: 12.5, color: C.grey, font: FONT.body, line: 1.12 });
+  });
+  await screenshotImage(s, { left: MARGIN + lw + gap, top, maxWidth: rw, maxHeight: 356, file: "slide09-sap-material-buttons.png" });
   footer(s);
 }
 
 // ============================================================
-// SLIDE 8 — SSID/password + labels
+// SLIDE 9B — Duplicate/history protection
+// ============================================================
+{
+  const s = presentation.slides.add();
+  s.background.fill = C.bg;
+  header(s, "ВЕЧЕ РАБОТИ · ПОВТОРНА ОБРАБОТКА");
+  titleBlock(s, "Защита от повторна обработка", "История и локална защита предупреждават преди устройство да се обработи отново.");
+
+  const top = 246, lw = 430, gap = 24, rw = W - 2 * MARGIN - lw - gap;
+  const blocks = [
+    { label: "Проблем в OSS", fill: "#FBE6EA", accent: C.red, text: "Едно физическо устройство може да се въведе повторно или с различен идентификатор." },
+    { label: "Как помага на техника", fill: "#E4F5EC", accent: C.greenOk, text: "Проверява OSS history и локална защита; предупреждава преди Продължи." },
+    { label: "Намален риск", fill: C.cardBg, accent: C.red, text: "По-малко грешни количества, несъответствия, повторно handling и ръчни корекции." },
+  ];
+  blocks.forEach((b, i) => {
+    const y = top + i * 118;
+    card(s, { left: MARGIN, top: y, width: lw, height: 104, fill: b.fill });
+    rect(s, { left: MARGIN, top: y, width: 6, height: 104, fill: b.accent, radius: 6000 });
+    txt(s, b.label, { left: MARGIN + 24, top: y + 18, width: lw - 48, height: 20, size: 14.5, bold: true, color: C.ink, font: FONT.title });
+    txt(s, b.text, { left: MARGIN + 24, top: y + 46, width: lw - 48, height: 48, size: 12.5, color: C.grey, font: FONT.body, line: 1.12 });
+  });
+  const shotTop = top;
+  const shotMaxH = 300;
+  const shot = await screenshotImage(s, { left: MARGIN + lw + gap, top: shotTop, maxWidth: rw, maxHeight: shotMaxH, file: "slide10-duplicate-warning.png" });
+  const noteTop = shot.top + shot.height + 10;
+  rect(s, { left: MARGIN + lw + gap, top: noteTop, width: rw, height: 48, fill: "#FBE6EA", radius: 8000 });
+  txt(s, "Покритието е ценна защита, но специфични edge cases продължават да се тестват.", { left: MARGIN + lw + gap + 18, top: noteTop + 6, width: rw - 36, height: 36, size: 11.5, bold: true, color: C.redDeep, font: FONT.body, valign: "middle", line: 1.08 });
+  footer(s);
+}
+
+// ============================================================
+// SLIDE 10 — Clipboard autofill and labels
 // ============================================================
 {
   const s = presentation.slides.add();
   s.background.fill = C.bg;
   header(s, "ВЕЧЕ РАБОТИ · УСКОРЯВАНЕ");
-  titleBlock(s, "Автоматично попълване и генериране на етикети", "По-малко преписване на ръка и по-бърза обработка на устройства.");
+  titleBlock(s, "Clipboard autofill и labels/barcodes", "По-малко преписване и подготвен print output, без показване на чувствителни данни.");
 
-  const top = 250, gap = 24, cw = (W - 2 * MARGIN - gap) / 2, ch = 356;
-  const x1 = MARGIN;
-  card(s, { left: x1, top, width: cw, height: ch, fill: C.ink });
-  txt(s, "SSID / парола чрез Google Lens", { left: x1 + 28, top: top + 28, width: cw - 56, height: 30, size: 19, bold: true, color: C.white, font: FONT.title });
-  bullets(s, [
-    "Текстът от етикета се взема с Google Lens",
-    "Extension-ът разпознава нужните данни",
-    "Автоматично попълва user, парола и полетата според устройството",
-    "Край на лупите и ръчното преписване от малки етикети",
-  ], { left: x1 + 28, top: top + 76, width: cw - 56, size: 14.5, color: "#E7E9EE", gap: 14, lineH: 42, dotColor: C.coral });
-
-  const x2 = MARGIN + cw + gap;
-  card(s, { left: x2, top, width: cw, height: ch });
-  rect(s, { left: x2, top, width: cw, height: 6, fill: C.red, radius: 6000 });
-  txt(s, "Генериране на етикети", { left: x2 + 28, top: top + 30, width: cw - 56, height: 30, size: 19, bold: true, color: C.ink, font: FONT.title });
-  bullets(s, [
-    "Автоматично генериране вместо един по един",
-    "Директна икономия на време при повече устройства",
-    "По-малко повтаряема ръчна работа и грешки",
-    "Особено полезно при австрийските устройства",
-  ], { left: x2 + 28, top: top + 78, width: cw - 56, size: 14.5, color: C.grey, gap: 14, lineH: 42, dotColor: C.red });
+  const top = 246, gap = 24, cw = (W - 2 * MARGIN - gap) / 2;
+  const zones = [
+    {
+      x: MARGIN,
+      title: "SSID / PSK от clipboard",
+      text: "Попълва разпознати SSID, PSK и портове. Google Lens е незадължителен начин за text capture към clipboard, не Extension integration.",
+      screenshot: "slide11-ssid-autofill.png",
+      fill: C.ink,
+      titleColor: C.white,
+      textColor: "#E7E9EE",
+    },
+    {
+      x: MARGIN + cw + gap,
+      title: "Labels и barcode sheets",
+      text: "Подготвя печат от подходящите редове и намалява повторяемата подготовка. Използвай само синтетични данни в demo.",
+      screenshot: "slide11-label-barcode-preview.png",
+      fill: C.cardBg,
+      titleColor: C.ink,
+      textColor: C.grey,
+    },
+  ];
+  const shotTop = top + 148;
+  const shotMaxH = 200;
+  for (const z of zones) {
+    card(s, { left: z.x, top, width: cw, height: 356, fill: z.fill });
+    if (z.fill === C.cardBg) rect(s, { left: z.x, top, width: cw, height: 6, fill: C.red, radius: 6000 });
+    txt(s, z.title, { left: z.x + 26, top: top + 22, width: cw - 52, height: 28, size: 18, bold: true, color: z.titleColor, font: FONT.title });
+    txt(s, z.text, { left: z.x + 26, top: top + 58, width: cw - 52, height: 72, size: 12.5, color: z.textColor, font: FONT.body, line: 1.14 });
+    await screenshotImage(s, { left: z.x + 26, top: shotTop, maxWidth: cw - 52, maxHeight: shotMaxH, file: z.screenshot });
+  }
+  rect(s, { left: MARGIN, top: 618, width: W - 2 * MARGIN, height: 36, fill: "#FBE6EA", radius: 8000 });
+  txt(s, "Ръчна грешка в SSID/PSK може да остави test-а да чака timeout - наблюдавано около 10 минути.", { left: MARGIN + 20, top: 618, width: W - 2 * MARGIN - 40, height: 36, size: 11.5, bold: true, color: C.redDeep, font: FONT.body, valign: "middle" });
   footer(s);
 }
 
-checklistSlide(
-  "ВЕЧЕ РАБОТИ · ОБЗОР",
-  "Какво вече работи",
-  "Функции, които подпомагат оператора днес.",
-  [
-    "Валидация на серийни номера (формат, кирилица, категория)",
-    "Предлагане и ограничаване на SAP / материал",
-    "Автоматично попълване на SSID / парола (Google Lens)",
-    "Генериране и принтиране на етикети",
-    "Автоматично задаване на категория и модел от разпределението",
-    "Помощ и насоки при CAM модули",
-    "Предупреждение при повторно бракуване (основен сценарий)",
-    "Спиране на defected устройства от принтиране, освен ако не са селектирани",
-  ],
-);
+// ============================================================
+// SLIDE 11 — Working and testing overview
+// ============================================================
+{
+  const s = presentation.slides.add();
+  s.background.fill = C.bg;
+  header(s, "ВЕЧЕ РАБОТИ · ОБЗОР");
+  titleBlock(s, "Работи, тества се, развива се", "Ясно разграничение между текущата оперативна помощ и следващите подобрения.");
+
+  const top = 246, gap = 20, cw = (W - 2 * MARGIN - 2 * gap) / 3, ch = 320;
+  const columns = [
+    { label: "Работи", fill: "#E4F5EC", accent: C.greenOk, items: ["Serial validation и keyboard protection", "SAP/material filtering и quick buttons", "Clipboard autofill, labels и CAM насоки"] },
+    { label: "Работи и се тества", fill: "#FBE6EA", accent: C.red, items: ["Dailywork panel и auto-selection", "Recycle/scrap counters и title badge", "Защита от duplicate processing"] },
+    { label: "В разработка", fill: "#F4F5F7", accent: C.midGrey, items: ["Auto-update rollout", "KSTB5019/5020 contract cases", "Remove-from-contract workflow"] },
+  ];
+  columns.forEach((col, i) => {
+    const x = MARGIN + i * (cw + gap);
+    card(s, { left: x, top, width: cw, height: ch, fill: col.fill });
+    rect(s, { left: x, top, width: cw, height: 6, fill: col.accent, radius: 6000 });
+    txt(s, col.label, { left: x + 24, top: top + 24, width: cw - 48, height: 28, size: 18, bold: true, color: C.ink, font: FONT.title });
+    bullets(s, col.items, { left: x + 24, top: top + 76, width: cw - 48, size: 13.2, color: C.grey, gap: 16, lineH: 52, dotColor: col.accent });
+  });
+  rect(s, { left: MARGIN, top: 586, width: W - 2 * MARGIN, height: 52, fill: "#FBE6EA", radius: 8000 });
+  rect(s, { left: MARGIN, top: 586, width: 6, height: 52, fill: C.red, radius: 8000 });
+  txt(s, "Dailywork и counters: Работи и се тества с конкретни колеги, но все още не е напълно стабилно.", { left: MARGIN + 24, top: 594, width: W - 2 * MARGIN - 48, height: 36, size: 13, bold: true, color: C.redDeep, font: FONT.body, valign: "middle" });
+  footer(s);
+}
 
 improvementCardsSlide(
   "ВЕЧЕ РАБОТИ · ПОДОБРЕНИЯ",
@@ -1004,17 +1078,17 @@ for (let i = 0; i < presentation.slides.count; i++) {
 
 // ---------- export ----------
 const pptx = await PresentationFile.exportPptx(presentation);
-let dest = path.join(OUT_DIR, "output.pptx");
+let dest = path.join(OUT_DIR, "output-v2.pptx");
 try {
   await writeBlob(pptx, dest);
 } catch (e) {
   if (String(e.message).includes("EBUSY") || String(e.code).includes("EBUSY")) {
-    dest = path.join(OUT_DIR, "OSS-Assistant-prezentaciya.pptx");
+    dest = path.join(OUT_DIR, "output-v2-review.pptx");
     try {
       await writeBlob(pptx, dest);
     } catch (e2) {
       if (String(e2.message).includes("EBUSY") || String(e2.code).includes("EBUSY")) {
-        dest = path.join(OUT_DIR, "output-latest.pptx");
+        dest = path.join(OUT_DIR, "output-v2-latest.pptx");
         await writeBlob(pptx, dest);
       } else {
         throw e2;
