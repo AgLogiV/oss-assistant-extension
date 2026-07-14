@@ -16,7 +16,8 @@
 | `assets/screenshots/` | Реални OSS скрийншоти за слайдове 8–11 |
 | `output/output.pptx` | Build export (v2, 25 слайда) — генерира се от `build.mjs` |
 | `output/output-v2.pptx` | Същият build export — дублирано име |
-| `output/output-v2.1.pptx` | **Speaker edition** — ръчни редакции на текст/изказвания върху v2 (не се презаписва от build) |
+| `output/output-v2.1.pptx` | Speaker edition — ръчни редакции на текст/изказвания върху v2 |
+| `output/output-v2.2.pptx` | **Актуална за среща** — v2.1 + FAQ слайдове (ръчно копирани) |
 | `preview/` | PNG preview на слайдове (генерира се при build, не е в git) |
 | `scripts/readdocx.mjs` | Помощен скрипт за извличане на текст от `.docx` |
 
@@ -30,7 +31,7 @@
 Пътищата в `build.mjs` са **относителни** — работи на всеки клонинг на repo-то.
 
 **Изход от build:** `presentation/output/output.pptx` + `output-v2.pptx`  
-**За представяне (ръчно полиран текст):** `presentation/output/output-v2.1.pptx`  
+**За представяне (ръчно полиран текст):** `presentation/output/output-v2.2.pptx` (актуален) · `output-v2.1.pptx` (предишна speaker edition)  
 **Preview:** `presentation/preview/slide-XX.png`
 
 `build.mjs` **не пише** в `output-v2.1.pptx` — ръчните редакции там са безопасни при rebuild.
