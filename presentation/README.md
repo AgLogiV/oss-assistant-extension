@@ -14,8 +14,9 @@
 | `narrative_plan.md` | Ранен narrative plan (може да е остарял спрямо `build.mjs`) |
 | `assets/` | A1 art plates (cover, chart, final) |
 | `assets/screenshots/` | Реални OSS скрийншоти за слайдове 8–11 |
-| `output/output.pptx` | Каноничен export за срещи (v2, 25 слайда) |
-| `output/output-v2.pptx` | Същият export — дублирано име за яснота |
+| `output/output.pptx` | Build export (v2, 25 слайда) — генерира се от `build.mjs` |
+| `output/output-v2.pptx` | Същият build export — дублирано име |
+| `output/output-v2.1.pptx` | **Speaker edition** — ръчни редакции на текст/изказвания върху v2 (не се презаписва от build) |
 | `preview/` | PNG preview на слайдове (генерира се при build, не е в git) |
 | `scripts/readdocx.mjs` | Помощен скрипт за извличане на текст от `.docx` |
 
@@ -28,8 +29,11 @@
 
 Пътищата в `build.mjs` са **относителни** — работи на всеки клонинг на repo-то.
 
-**Изход:** `presentation/output/output.pptx` (и копие `output-v2.pptx`)  
+**Изход от build:** `presentation/output/output.pptx` + `output-v2.pptx`  
+**За представяне (ръчно полиран текст):** `presentation/output/output-v2.1.pptx`  
 **Preview:** `presentation/preview/slide-XX.png`
+
+`build.mjs` **не пише** в `output-v2.1.pptx` — ръчните редакции там са безопасни при rebuild.
 
 Не отваряй стари fallback файлове като `output-v2-review.pptx` — те не се обновяват при build.
 
