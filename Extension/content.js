@@ -3986,6 +3986,7 @@
   };
   const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
   const RECYCLE_HISTORY_TECHNICIAN_PATH_RE = /\/sap-recycle-devices-by-technician\/(\d+)\/(\d+)\/?$/;
+  const RECYCLE_HISTORY_BASE_PATH = "/bbs2";
   const RECYCLE_WAREHOUSE_CELLS_PATH_RE = /^(.*\/sap-warehouse-cells-recycle\/(\d+))\/?$/;
   const RECYCLE_WAREHOUSE_CELLS_LIST_ID = "_recycleWarehouseCellsList";
   const RECYCLE_ENTRY_CATEGORY_IDS = new Set([
@@ -4455,6 +4456,13 @@
     return new Date(date.getFullYear(), date.getMonth(), date.getDate() + Number(deltaDays || 0));
   }
 
+  function normalizeRecycleHistoryTemplatePath(path) {
+    return String(path || "").replace(
+      /^\/bbs2_1\/sap-recycle-devices-by-technician\//,
+      `${RECYCLE_HISTORY_BASE_PATH}/sap-recycle-devices-by-technician/`
+    );
+  }
+
   function sanitizeRecycleHistoryUrl(rawUrl) {
     if (!rawUrl) return "";
     try {
@@ -4462,7 +4470,7 @@
       if (url.origin !== window.location.origin) return "";
       const m = url.pathname.match(RECYCLE_HISTORY_PATH_RE);
       if (!m) return "";
-      return m[1];
+      return normalizeRecycleHistoryTemplatePath(m[1]);
     } catch (e) {}
     return "";
   }
@@ -5740,7 +5748,9 @@
   function getRecycleHistoryFallbackBasePath() {
     try {
       const match = String(window.location.pathname || "").match(/^(\/[^/]+)(?:\/|$)/);
-      return match ? match[1] : "";
+      const pageBase = match ? match[1] : "";
+      if (pageBase === "/bbs2_1" || pageBase === "/bbs2") return RECYCLE_HISTORY_BASE_PATH;
+      return pageBase;
     } catch (e) {}
     return "";
   }
