@@ -22,6 +22,12 @@
   const RECYCLE_REMOTE_CONFIG_APPLY_ELIGIBLE_ACTION = "applyEligibleDevices";
   const DAILYWORK_FETCH_SCHEDULE_MESSAGE_TYPE = "dailywork.fetchSchedule";
   const EXTENSION_RELOAD_MESSAGE_TYPE = "extension.reload";
+  const EXTENSION_RELOAD_CONFIRM_MODAL_ID = "wifi-oss-extension-reload-confirm";
+  const EXTENSION_RELOAD_BUTTON_ID = "wifi-oss-assistant-reload-extension-btn";
+  const EXTENSION_FILL_BUTTON_ID = "wifi-oss-assistant-btn";
+  const EXTENSION_AUTO_BUTTON_ID = "wifi-oss-assistant-auto-btn";
+  const EXTENSION_RESET_BUTTON_ID = "wifi-oss-assistant-reset-btn";
+  let extensionReloadConfirmKeydownHandler = null;
 
   function detectOssAssistantBrowserKind() {
     const ua = String(navigator.userAgent || "");
@@ -54,16 +60,137 @@
     });
   }
 
+  function closeExtensionReloadConfirm() {
+    try {
+      const existing = document.getElementById(EXTENSION_RELOAD_CONFIRM_MODAL_ID);
+      if (existing?.parentNode) existing.parentNode.removeChild(existing);
+    } catch (e) {}
+    if (extensionReloadConfirmKeydownHandler) {
+      try { document.removeEventListener("keydown", extensionReloadConfirmKeydownHandler, true); } catch (e) {}
+      extensionReloadConfirmKeydownHandler = null;
+    }
+  }
+
+  function showExtensionReloadConfirm(onConfirm) {
+    const confirmFn = typeof onConfirm === "function" ? onConfirm : () => {};
+    if (document.getElementById(EXTENSION_RELOAD_CONFIRM_MODAL_ID)) return false;
+    const host = document.body || document.documentElement;
+    if (!host) {
+      try { confirmFn(); } catch (e) {}
+      return true;
+    }
+
+    let settled = false;
+    const settle = (confirmed) => {
+      if (settled) return;
+      settled = true;
+      closeExtensionReloadConfirm();
+      if (confirmed) {
+        try { confirmFn(); } catch (e) {}
+      }
+    };
+
+    const overlay = document.createElement("div");
+    overlay.id = EXTENSION_RELOAD_CONFIRM_MODAL_ID;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Презареждане на extension");
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.zIndex = "2147483042";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.padding = "16px";
+    overlay.style.boxSizing = "border-box";
+    overlay.style.background = "rgba(15, 23, 42, 0.45)";
+
+    const card = document.createElement("div");
+    card.style.boxSizing = "border-box";
+    card.style.width = "min(420px, calc(100vw - 32px))";
+    card.style.background = "#ffffff";
+    card.style.borderRadius = "12px";
+    card.style.border = "1px solid #e5e7eb";
+    card.style.boxShadow = "0 20px 50px rgba(15, 23, 42, 0.30)";
+    card.style.padding = "20px";
+
+    const heading = document.createElement("div");
+    heading.textContent = "Презареждане на extension";
+    heading.style.color = "#111827";
+    heading.style.fontSize = "16px";
+    heading.style.fontWeight = "900";
+    heading.style.marginBottom = "10px";
+
+    const body = document.createElement("div");
+    body.textContent = "Сигурен ли си, че искаш да презаредиш OSS Assistant? Extension-ът и текущата страница ще се презаредят.";
+    body.style.color = "#374151";
+    body.style.fontSize = "14px";
+    body.style.lineHeight = "1.45";
+
+    const footer = document.createElement("div");
+    footer.style.display = "flex";
+    footer.style.justifyContent = "flex-end";
+    footer.style.gap = "8px";
+    footer.style.marginTop = "18px";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Отказ";
+    cancelBtn.style.cursor = "pointer";
+    cancelBtn.style.border = "1px solid #cfd6df";
+    cancelBtn.style.borderRadius = "8px";
+    cancelBtn.style.background = "#ffffff";
+    cancelBtn.style.color = "#334155";
+    cancelBtn.style.fontSize = "14px";
+    cancelBtn.style.fontWeight = "800";
+    cancelBtn.style.padding = "9px 16px";
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.textContent = "Да, презареди";
+    confirmBtn.style.cursor = "pointer";
+    confirmBtn.style.border = "1px solid #b91c1c";
+    confirmBtn.style.borderRadius = "8px";
+    confirmBtn.style.background = "#e2001a";
+    confirmBtn.style.color = "#ffffff";
+    confirmBtn.style.fontSize = "14px";
+    confirmBtn.style.fontWeight = "800";
+    confirmBtn.style.padding = "9px 18px";
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    card.appendChild(heading);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    host.appendChild(overlay);
+
+    card.addEventListener("click", (e) => { e.stopPropagation(); });
+    overlay.addEventListener("click", () => { settle(false); });
+    cancelBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); settle(false); });
+    confirmBtn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); settle(true); });
+
+    extensionReloadConfirmKeydownHandler = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); settle(false); }
+      else if (e.key === "Enter") { e.stopPropagation(); settle(true); }
+    };
+    document.addEventListener("keydown", extensionReloadConfirmKeydownHandler, true);
+
+    try { confirmBtn.focus({ preventScroll: true }); } catch (e) { try { confirmBtn.focus(); } catch (e2) {} }
+    return true;
+  }
+
   function createReloadExtensionButton(anchorBtn) {
     const reloadBtn = document.createElement(anchorBtn.tagName.toLowerCase());
-    reloadBtn.id = "wifi-oss-assistant-reload-extension-btn";
+    reloadBtn.id = EXTENSION_RELOAD_BUTTON_ID;
     reloadBtn.type = "button";
     reloadBtn.value = reloadBtn.textContent = "Reload Extension";
     reloadBtn.title = "Презарежда OSS Assistant (Chrome / Edge)";
     reloadBtn.className = anchorBtn.className;
     if (anchorBtn.getAttribute("style")) reloadBtn.setAttribute("style", anchorBtn.getAttribute("style"));
     reloadBtn.style.marginLeft = "6px";
-    reloadBtn.addEventListener("click", (e) => {
+
+    const handleReloadClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (reloadBtn.disabled) return;
@@ -80,14 +207,13 @@
         });
       };
 
-      showRecycleAssignmentChangeConfirm({
-        title: "Презареждане на extension",
-        message: "Сигурен ли си, че искаш да презаредиш OSS Assistant? Extension-ът и текущата страница ще се презаредят.",
-        confirmLabel: "Да, презареди",
-        cancelLabel: "Отказ",
-        onConfirm: performExtensionReload
-      });
-    });
+      if (!showExtensionReloadConfirm(performExtensionReload)) {
+        try { window.alert("Диалогът за презареждане вече е отворен."); } catch (e2) {}
+      }
+    };
+
+    reloadBtn.addEventListener("mousedown", (e) => { e.preventDefault(); }, true);
+    reloadBtn.addEventListener("click", handleReloadClick, true);
     return reloadBtn;
   }
 
@@ -589,8 +715,16 @@
     if (autoMode) { try { syncClipboardBaselineOnActivate(); } catch (e) {} }
   }
 
-  function injectButton() {
-    if (document.getElementById("wifi-oss-assistant-btn")) return;
+  let assistantToolbarWindowHooksInstalled = false;
+  let assistantToolbarObserverTimer = null;
+  let assistantToolbarRetryTimer = null;
+
+  function isAssistantButtonConnected(id) {
+    const el = document.getElementById(id);
+    return !!(el && el.isConnected);
+  }
+
+  function findAssistantToolbarAnchor() {
     const buttons = document.querySelectorAll("input[type='submit'], input[type='button'], button");
     let anchorBtn = null;
     let continueBtn = null;
@@ -599,34 +733,63 @@
       if (txt === "запази") { anchorBtn = b; break; }
       if (!continueBtn && txt === "продължи") continueBtn = b;
     }
-    if (!anchorBtn) anchorBtn = continueBtn;
-    if (!anchorBtn || !anchorBtn.parentElement) { setTimeout(injectButton, 1000); return; }
+    return anchorBtn || continueBtn || null;
+  }
+
+  function applyAssistantButtonChrome(btn, anchorBtn) {
+    btn.className = anchorBtn.className;
+    if (anchorBtn.getAttribute("style")) btn.setAttribute("style", anchorBtn.getAttribute("style"));
+    btn.style.marginLeft = "6px";
+  }
+
+  function removeAssistantToolbarButtons() {
+    [EXTENSION_FILL_BUTTON_ID, EXTENSION_AUTO_BUTTON_ID, EXTENSION_RESET_BUTTON_ID, EXTENSION_RELOAD_BUTTON_ID].forEach((id) => {
+      try { document.getElementById(id)?.remove(); } catch (e) {}
+    });
+  }
+
+  function installAssistantToolbarWindowHooks() {
+    if (assistantToolbarWindowHooksInstalled) return;
+    assistantToolbarWindowHooksInstalled = true;
+    window.addEventListener("focus", () => { if (autoMode) syncClipboardBaselineOnActivate(); }, true);
+    document.addEventListener("visibilitychange", () => {
+      if (autoMode && document.visibilityState === "visible") syncClipboardBaselineOnActivate();
+    }, true);
+  }
+
+  function ensureAssistantToolbarButtons() {
+    if (isAssistantButtonConnected(EXTENSION_FILL_BUTTON_ID) && isAssistantButtonConnected(EXTENSION_RELOAD_BUTTON_ID)) {
+      return true;
+    }
+
+    const anchorBtn = findAssistantToolbarAnchor();
+    if (!anchorBtn?.parentElement) return false;
+
+    removeAssistantToolbarButtons();
 
     const fillBtn = document.createElement(anchorBtn.tagName.toLowerCase());
-    fillBtn.id = "wifi-oss-assistant-btn";
+    fillBtn.id = EXTENSION_FILL_BUTTON_ID;
     fillBtn.type = "button";
     fillBtn.value = fillBtn.textContent = "ПОПЪЛНИ";
 
     const autoBtn = document.createElement(anchorBtn.tagName.toLowerCase());
-    autoBtn.id = "wifi-oss-assistant-auto-btn";
+    autoBtn.id = EXTENSION_AUTO_BUTTON_ID;
     autoBtn.type = "button";
     autoBtn.value = autoBtn.textContent = "АВТОМАТИЧНО";
 
     const resetBtn = document.createElement(anchorBtn.tagName.toLowerCase());
-    resetBtn.id = "wifi-oss-assistant-reset-btn";
+    resetBtn.id = EXTENSION_RESET_BUTTON_ID;
     resetBtn.type = "button";
     resetBtn.value = resetBtn.textContent = "RESET";
 
     const reloadExtensionBtn = createReloadExtensionButton(anchorBtn);
 
-    [fillBtn, autoBtn, resetBtn, reloadExtensionBtn].forEach(btn => {
-      btn.className = anchorBtn.className;
-      if (anchorBtn.getAttribute("style")) btn.setAttribute("style", anchorBtn.getAttribute("style"));
-      btn.style.marginLeft = "6px";
+    [fillBtn, autoBtn, resetBtn, reloadExtensionBtn].forEach((btn) => {
+      applyAssistantButtonChrome(btn, anchorBtn);
     });
 
-    fillBtn.addEventListener("click", (e) => { e.preventDefault(); main(); });
-    autoBtn.addEventListener("click", (e) => { e.preventDefault(); setAutoMode(!autoMode); });
+    fillBtn.addEventListener("click", (e) => { e.preventDefault(); main(); }, true);
+    autoBtn.addEventListener("click", (e) => { e.preventDefault(); setAutoMode(!autoMode); }, true);
     resetBtn.addEventListener("click", (e) => {
       e.preventDefault();
       const performReset = () => {
@@ -646,10 +809,6 @@
         hideRecycleSerialHelp();
       };
 
-      // Reset clears the category/device. If the dailywork distribution assigned something
-      // for today and there is a current selection to clear, confirm first so Reset cannot
-      // silently drop the scheduled category/device. No assignment or nothing selected =>
-      // reset immediately.
       const assignment = readDailyworkAssignmentForToday();
       let hasSelection = false;
       try {
@@ -669,24 +828,53 @@
         return;
       }
       performReset();
-    });
-    autoButtonRef = autoBtn;
-
-    let savedAuto = false;
-    try { savedAuto = window.localStorage.getItem(AUTO_MODE_KEY) === "1"; } catch (e) {}
-    setAutoMode(savedAuto);
-
-    // When switching tabs/windows, prevent "catching up" by processing the current clipboard.
-    // Instead, treat the current clipboard as baseline and only process subsequent changes.
-    window.addEventListener("focus", () => { if (autoMode) syncClipboardBaselineOnActivate(); }, true);
-    document.addEventListener("visibilitychange", () => {
-      if (autoMode && document.visibilityState === "visible") syncClipboardBaselineOnActivate();
     }, true);
+
+    autoButtonRef = autoBtn;
+    if (!assistantToolbarWindowHooksInstalled) {
+      let savedAuto = false;
+      try { savedAuto = window.localStorage.getItem(AUTO_MODE_KEY) === "1"; } catch (e) {}
+      setAutoMode(savedAuto);
+      installAssistantToolbarWindowHooks();
+    } else {
+      autoBtn.style.backgroundColor = autoMode ? "#4CAF50" : "";
+    }
 
     anchorBtn.parentElement.insertBefore(fillBtn, anchorBtn.nextSibling);
     anchorBtn.parentElement.insertBefore(autoBtn, fillBtn.nextSibling);
     anchorBtn.parentElement.insertBefore(resetBtn, autoBtn.nextSibling);
     anchorBtn.parentElement.insertBefore(reloadExtensionBtn, resetBtn.nextSibling);
+    return true;
+  }
+
+  function scheduleAssistantToolbarEnsure() {
+    if (assistantToolbarObserverTimer) return;
+    assistantToolbarObserverTimer = setTimeout(() => {
+      assistantToolbarObserverTimer = null;
+      ensureAssistantToolbarButtons();
+    }, 200);
+  }
+
+  function startAssistantToolbarObserver() {
+    if (!ensureAssistantToolbarButtons()) {
+      if (!assistantToolbarRetryTimer) {
+        assistantToolbarRetryTimer = setTimeout(() => {
+          assistantToolbarRetryTimer = null;
+          startAssistantToolbarObserver();
+        }, 1000);
+      }
+      return;
+    }
+
+    const host = document.documentElement || document.body;
+    if (!host || host.dataset.wifiOssAssistantToolbarObserved === "1") return;
+    host.dataset.wifiOssAssistantToolbarObserved = "1";
+    const obs = new MutationObserver(() => { scheduleAssistantToolbarEnsure(); });
+    obs.observe(host, { childList: true, subtree: true });
+  }
+
+  function injectButton() {
+    startAssistantToolbarObserver();
   }
 
   // -------------------------------
@@ -699,6 +887,8 @@
   const RECYCLE_LIST_ID = "_recycleDevicesByTechnician";
   const RECYCLE_EDIT_COLUMNS_BTN_ID = "_recycleDevicesByTechnician_edit_columns";
   const RECYCLE_PRINT_LABELS_BTN_ID = "_recycleDevicesByTechnician_print_labels";
+  const RECYCLE_MANUAL_LABELS_TOGGLE_ID = "wifi-oss-recycle-manual-labels-toggle";
+  const RECYCLE_MANUAL_LABELS_PANEL_ID = "wifi-oss-recycle-manual-labels-panel";
 
   let __labelTemplateSvgDataUrl = null;
 
@@ -1684,7 +1874,7 @@
       nativeTarget.addEventListener("click", printFilteredRecycleBarcodes, true);
     }
 
-    // Add companion button: "Принтирай Всичко"
+    // Add companion button for the standard barcode label sheet.
     const existingAllBtnId = "_recycleDevicesByTechnician_printAll";
     if (!document.getElementById(existingAllBtnId)) {
       const allBtn = document.createElement("button");
@@ -1694,7 +1884,8 @@
       // copy inline styles if any, then tweak spacing
       if (btn.getAttribute("style")) allBtn.setAttribute("style", btn.getAttribute("style"));
       allBtn.style.marginLeft = "8px";
-      allBtn.innerHTML = 'Принтирай Всичко';
+      allBtn.textContent = "СТАНДАРТНИ ЕТИКЕТИ";
+      allBtn.title = "Стандартни етикети";
 
       const anchorA = btn.closest("a");
       if (anchorA && anchorA.parentElement) {
@@ -1706,6 +1897,47 @@
       allBtn.addEventListener("click", printFilteredRecycleBarcodes, true);
     }
 
+    return true;
+  }
+
+  function syncRecycleAustrianLabelsButton() {
+    const standardButton = document.getElementById("_recycleDevicesByTechnician_printAll");
+    const austrianButton = document.getElementById(RECYCLE_PRINT_LABELS_BTN_ID);
+    if (!standardButton || !austrianButton) return false;
+
+    if (standardButton.textContent !== "СТАНДАРТНИ ЕТИКЕТИ") {
+      standardButton.textContent = "СТАНДАРТНИ ЕТИКЕТИ";
+    }
+    if (standardButton.title !== "Стандартни етикети") {
+      standardButton.title = "Стандартни етикети";
+    }
+
+    // Keep the original button and its click handler; only move and restyle it.
+    const desiredClassName = standardButton.className || austrianButton.className;
+    if (austrianButton.className !== desiredClassName) austrianButton.className = desiredClassName;
+    if (austrianButton.textContent !== "АВСТРИЙСКИ ЕТИКЕТИ") {
+      austrianButton.textContent = "АВСТРИЙСКИ ЕТИКЕТИ";
+    }
+    if (austrianButton.title !== "Австрийски етикети") {
+      austrianButton.title = "Австрийски етикети";
+    }
+    austrianButton.style.display = "inline-block";
+    austrianButton.style.marginLeft = "8px";
+    austrianButton.style.marginRight = "0";
+    austrianButton.style.padding = standardButton.style.padding || "7px 12px";
+    austrianButton.style.border = standardButton.style.border || "0";
+    austrianButton.style.background = standardButton.style.background || "#e1251b";
+    austrianButton.style.color = standardButton.style.color || "#fff";
+    austrianButton.style.fontWeight = "normal";
+    austrianButton.style.cursor = "pointer";
+    austrianButton.style.boxSizing = "border-box";
+    austrianButton.style.verticalAlign = "top";
+    const standardHeight = Math.ceil(standardButton.getBoundingClientRect().height || 0);
+    if (standardHeight > 0) austrianButton.style.height = `${standardHeight}px`;
+
+    if (standardButton.nextElementSibling !== austrianButton) {
+      standardButton.insertAdjacentElement("afterend", austrianButton);
+    }
     return true;
   }
 
@@ -1849,6 +2081,488 @@
     return true;
   }
 
+  function getManualRecycleLabelsContext() {
+    const selectedCategoryId = String(readSelectedRecycleEntryCategory() || "").trim();
+    if (selectedCategoryId) {
+      return {
+        categoryId: selectedCategoryId,
+        deviceIds: readSelectedRecycleDeviceIdsStorage(),
+        source: "избраната категория"
+      };
+    }
+
+    const assignment = readDailyworkAssignmentForToday();
+    const assignedCategoryId = String(assignment?.categoryId || "").trim();
+    if (assignedCategoryId) {
+      return {
+        categoryId: assignedCategoryId,
+        deviceIds: Array.isArray(assignment.deviceIds) ? assignment.deviceIds.slice() : [],
+        source: "днешното разпределение"
+      };
+    }
+    return null;
+  }
+
+  function buildManualRecycleBarcodeItems(context, serials) {
+    const categoryId = String(context?.categoryId || "").trim();
+    const selectedDevices = Array.from(new Set(Array.isArray(context?.deviceIds) ? context.deviceIds : []))
+      .map(deviceId => getRecycleDeviceById(deviceId))
+      .filter(device => device && device.categoryId === categoryId);
+    const device = selectedDevices.length === 1 ? selectedDevices[0] : null;
+    const name = String(device?.displayName || getRecycleEntryCategoryLabel(categoryId) || "").trim();
+    const sapId = device
+      ? String(getRecycleEffectiveMaterialId(device, "sap") || device.materialId || "").trim()
+      : "";
+
+    return Array.from(serials || []).map(serial => ({
+      name,
+      sapId,
+      serial: String(serial || "").trim()
+    }));
+  }
+
+  function findRecyclePrintAllButton(listRoot) {
+    const explicitButton = document.getElementById("_recycleDevicesByTechnician_printAll");
+    if (explicitButton) return explicitButton;
+    const scope = listRoot?.parentElement || listRoot || document;
+    return Array.from(scope.querySelectorAll("button, a, input[type='button'], input[type='submit']"))
+      .find(element => String(element.textContent || element.value || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase()
+        .includes("ПРИНТИРАЙ ВСИЧКО")) || null;
+  }
+
+  function injectManualRecycleLabelsUi() {
+    const listRoot = document.getElementById(RECYCLE_LIST_ID);
+    const fallbackAnchor = document.getElementById(RECYCLE_PRINT_LABELS_BTN_ID)
+      || document.getElementById(RECYCLE_EDIT_COLUMNS_BTN_ID)
+      || document.getElementById("_recycleDevicesByTechnician_printAll")
+      || document.getElementById("_recycleDevicesByTechnician_printBarcode");
+    if (!fallbackAnchor) return false;
+    const standardPrintButton = findRecyclePrintAllButton(listRoot) || fallbackAnchor;
+    const austrianPrintButton = document.getElementById(RECYCLE_PRINT_LABELS_BTN_ID);
+    const toggleAnchor = austrianPrintButton || standardPrintButton;
+    const alignManualLabelsToggle = (button) => {
+      if (!button) return;
+      button.style.boxSizing = "border-box";
+      button.style.verticalAlign = "top";
+      const standardHeight = Math.ceil(standardPrintButton.getBoundingClientRect().height || 0);
+      if (standardHeight > 0) button.style.height = `${standardHeight}px`;
+    };
+
+    let panel = document.getElementById(RECYCLE_MANUAL_LABELS_PANEL_ID);
+    let toggle = document.getElementById(RECYCLE_MANUAL_LABELS_TOGGLE_ID);
+    if (panel && toggle) {
+      alignManualLabelsToggle(toggle);
+      if (toggleAnchor.nextElementSibling !== toggle) toggleAnchor.insertAdjacentElement("afterend", toggle);
+      const actionsRow = toggleAnchor.closest(".row");
+      if (actionsRow?.parentElement && panel.previousElementSibling !== actionsRow) {
+        actionsRow.insertAdjacentElement("afterend", panel);
+      }
+      return true;
+    }
+
+    toggle = document.createElement("button");
+    toggle.id = RECYCLE_MANUAL_LABELS_TOGGLE_ID;
+    toggle.type = "button";
+    toggle.textContent = "РЪЧНИ ЕТИКЕТИ";
+    toggle.title = "Въвеждане и печат на етикети по сериен номер";
+    toggle.style.marginLeft = "24px";
+    toggle.style.padding = "7px 12px";
+    toggle.style.border = "0";
+    toggle.style.background = "#e1251b";
+    toggle.style.color = "#fff";
+    toggle.style.fontWeight = "800";
+    toggle.style.fontSize = "12px";
+    toggle.style.cursor = "pointer";
+    alignManualLabelsToggle(toggle);
+
+    panel = document.createElement("section");
+    panel.id = RECYCLE_MANUAL_LABELS_PANEL_ID;
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", "Ръчно генериране на етикети");
+    panel.setAttribute("aria-hidden", "true");
+    panel.style.width = "100%";
+    panel.style.display = "none";
+    panel.style.marginTop = "12px";
+    panel.style.padding = "12px";
+    panel.style.border = "1px solid #d4d4d4";
+    panel.style.background = "#fafafa";
+    panel.style.boxSizing = "border-box";
+    panel.style.boxShadow = "none";
+
+    const title = document.createElement("div");
+    title.textContent = "Ръчно генериране на стандартни етикети";
+    title.style.fontWeight = "800";
+    title.style.fontSize = "15px";
+    title.style.marginBottom = "5px";
+
+    const contextText = document.createElement("div");
+    contextText.style.fontSize = "12px";
+    contextText.style.color = "#555";
+    contextText.style.marginBottom = "8px";
+
+    const deviceDetailsArea = document.createElement("div");
+    deviceDetailsArea.style.display = "grid";
+    deviceDetailsArea.style.gridTemplateColumns = "minmax(130px, 220px) minmax(130px, 220px)";
+    deviceDetailsArea.style.justifyContent = "start";
+    deviceDetailsArea.style.gap = "6px";
+    deviceDetailsArea.style.marginBottom = "8px";
+    deviceDetailsArea.style.padding = "8px";
+    deviceDetailsArea.style.border = "1px solid #dce8e4";
+    deviceDetailsArea.style.borderRadius = "6px";
+    deviceDetailsArea.style.background = "#ffffff";
+
+    const createDeviceDetailField = (labelText, id, placeholder) => {
+      const wrap = document.createElement("label");
+      wrap.textContent = labelText;
+      wrap.style.display = "flex";
+      wrap.style.flexDirection = "column";
+      wrap.style.gap = "4px";
+      wrap.style.color = "#23463e";
+      wrap.style.fontSize = "11px";
+      wrap.style.fontWeight = "800";
+      const field = document.createElement("input");
+      field.id = id;
+      field.type = "text";
+      field.autocomplete = "off";
+      field.placeholder = placeholder;
+      field.style.minWidth = "0";
+      field.style.boxSizing = "border-box";
+      field.style.height = "32px";
+      field.style.padding = "7px 9px";
+      field.style.border = "1px solid #cbdcd6";
+      field.style.borderRadius = "4px";
+      field.style.background = "#fff";
+      field.style.color = "#33443f";
+      field.style.fontSize = "12px";
+      field.style.fontWeight = "700";
+      wrap.appendChild(field);
+      return { wrap, field };
+    };
+
+    const manualNameField = createDeviceDetailField("Име на устройство", "wifi-oss-recycle-manual-label-name", "напр. TP-Link EX220");
+    const manualSapField = createDeviceDetailField("SAP ID", "wifi-oss-recycle-manual-label-sap", "напр. 121150");
+    deviceDetailsArea.appendChild(manualNameField.wrap);
+    deviceDetailsArea.appendChild(manualSapField.wrap);
+    [manualNameField.field, manualSapField.field].forEach(field => {
+      field.addEventListener("input", () => {
+        delete field.dataset.wifiOssManualLabelsAutoValue;
+      });
+    });
+
+    const automaticDeviceWarning = document.createElement("div");
+    automaticDeviceWarning.textContent = "Внимание: ако устройството за етикета е различно от автоматично избраното, промени ръчно Име на устройство и SAP ID преди да добавиш серийния номер.";
+    automaticDeviceWarning.style.display = "none";
+    automaticDeviceWarning.style.marginBottom = "8px";
+    automaticDeviceWarning.style.padding = "8px 10px";
+    automaticDeviceWarning.style.border = "1px solid #d28a1d";
+    automaticDeviceWarning.style.borderRadius = "6px";
+    automaticDeviceWarning.style.background = "#fff7e6";
+    automaticDeviceWarning.style.color = "#7a4300";
+    automaticDeviceWarning.style.fontSize = "12px";
+    automaticDeviceWarning.style.fontWeight = "700";
+    automaticDeviceWarning.style.lineHeight = "1.35";
+
+    const inputArea = document.createElement("div");
+    inputArea.style.display = "flex";
+    inputArea.style.flexWrap = "wrap";
+    inputArea.style.alignItems = "center";
+    inputArea.style.gap = "6px";
+    inputArea.style.padding = "8px";
+    inputArea.style.border = "1px solid #dce8e4";
+    inputArea.style.borderRadius = "6px";
+    inputArea.style.background = "#ffffff";
+
+    const inputLabel = document.createElement("label");
+    inputLabel.textContent = "Сериен номер";
+    inputLabel.style.flex = "0 0 auto";
+    inputLabel.style.color = "#23463e";
+    inputLabel.style.fontSize = "12px";
+    inputLabel.style.fontWeight = "800";
+
+    const input = document.createElement("input");
+    input.id = "wifi-oss-recycle-manual-label-serial";
+    input.type = "text";
+    input.name = "ManualSerialNo";
+    input.autocomplete = "off";
+    input.placeholder = "Сериен номер";
+    input.style.flex = "0 1 320px";
+    input.style.width = "320px";
+    input.style.maxWidth = "100%";
+    input.style.minWidth = "0";
+    input.style.boxSizing = "border-box";
+    input.style.height = "32px";
+    input.style.padding = "7px 9px";
+    input.style.border = "1px solid #cbdcd6";
+    input.style.borderRadius = "4px";
+    input.style.background = "#fff";
+    input.style.color = "#33443f";
+    input.style.fontSize = "13px";
+    input.style.fontWeight = "700";
+    input.style.outline = "none";
+
+    const inputHint = document.createElement("div");
+    inputHint.textContent = "Сканирай или въведи номер и натисни Enter.";
+    inputHint.style.flex = "1 1 100%";
+    inputHint.style.color = "#52625e";
+    inputHint.style.fontSize = "11px";
+    inputHint.style.lineHeight = "1.35";
+
+    inputArea.appendChild(inputLabel);
+    inputArea.appendChild(input);
+    inputArea.appendChild(inputHint);
+
+    const list = document.createElement("div");
+    list.style.display = "flex";
+    list.style.flexDirection = "column";
+    list.style.gap = "5px";
+    list.style.marginTop = "10px";
+
+    const manualSerials = [];
+
+    const status = document.createElement("div");
+    status.style.display = "none";
+    status.style.marginTop = "8px";
+    status.style.fontSize = "12px";
+    status.style.fontWeight = "700";
+
+    const printBtn = document.createElement("button");
+    printBtn.type = "button";
+    printBtn.textContent = "ПРИНТИРАЙ ЕТИКЕТИ";
+    printBtn.style.marginTop = "10px";
+    printBtn.style.padding = "8px 14px";
+    printBtn.style.border = "0";
+    printBtn.style.background = "#e1251b";
+    printBtn.style.color = "#fff";
+    printBtn.style.fontWeight = "800";
+    printBtn.style.cursor = "pointer";
+
+    const refreshContextText = () => {
+      const context = getManualRecycleLabelsContext();
+      if (!context) {
+        automaticDeviceWarning.style.display = "none";
+        [manualNameField.field, manualSapField.field].forEach(field => {
+          if (field.dataset.wifiOssManualLabelsAutoValue === "1") {
+            field.value = "";
+            delete field.dataset.wifiOssManualLabelsAutoValue;
+          }
+        });
+        contextText.textContent = "Не е избрана категория. Въведи Име на устройство и SAP ID ръчно; серийният номер ще бъде добавен без category validation.";
+        return null;
+      }
+      const autoItem = buildManualRecycleBarcodeItems(context, [""])[0] || null;
+      const canAutofill = Boolean(String(autoItem?.name || "").trim() && String(autoItem?.sapId || "").trim());
+      if (canAutofill) {
+        const applyAutoValue = (field, value) => {
+          if (!field.value || field.dataset.wifiOssManualLabelsAutoValue === "1") {
+            field.value = value;
+            field.dataset.wifiOssManualLabelsAutoValue = "1";
+          }
+        };
+        applyAutoValue(manualNameField.field, String(autoItem.name || "").trim());
+        applyAutoValue(manualSapField.field, String(autoItem.sapId || "").trim());
+        automaticDeviceWarning.style.display = "block";
+        contextText.textContent = `Проверка спрямо ${context.source}: ${getRecycleEntryCategoryLabel(context.categoryId)}. Името и SAP ID са попълнени автоматично.`;
+      } else {
+        automaticDeviceWarning.style.display = "none";
+        contextText.textContent = `Проверка спрямо ${context.source}: ${getRecycleEntryCategoryLabel(context.categoryId)}. Избери точно едно устройство, за да се попълнят автоматично Име и SAP ID.`;
+      }
+      return context;
+    };
+
+    const showStatus = (text, variant) => {
+      status.textContent = text;
+      status.style.display = "block";
+      status.style.color = variant === "error" ? "#b42318" : "#18713b";
+    };
+
+    const renderManualSerials = () => {
+      list.textContent = "";
+      if (!manualSerials.length) {
+        const empty = document.createElement("div");
+        empty.textContent = "Няма добавени устройства.";
+        empty.style.fontSize = "12px";
+        empty.style.color = "#666";
+        list.appendChild(empty);
+        return;
+      }
+      manualSerials.forEach((item, index) => {
+        const serial = String(item?.serial || "").trim();
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.justifyContent = "space-between";
+        row.style.gap = "8px";
+        row.style.padding = "6px 8px";
+        row.style.background = "#fff";
+        row.style.border = "1px solid #d9d9d9";
+
+        const value = document.createElement("code");
+        value.textContent = serial;
+        value.style.fontWeight = "700";
+        value.style.wordBreak = "break-all";
+
+        const details = document.createElement("div");
+        details.textContent = `${String(item?.name || "").trim() || "Без име"} | SAP ID: ${String(item?.sapId || "").trim() || "—"}`;
+        details.style.marginTop = "2px";
+        details.style.color = "#52625e";
+        details.style.fontSize = "10px";
+        details.style.lineHeight = "1.25";
+
+        const textWrap = document.createElement("div");
+        textWrap.style.minWidth = "0";
+        textWrap.style.flex = "1 1 auto";
+        textWrap.appendChild(value);
+        textWrap.appendChild(details);
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "−";
+        removeBtn.title = `Премахни ${serial}`;
+        removeBtn.setAttribute("aria-label", `Премахни ${serial}`);
+        removeBtn.style.width = "26px";
+        removeBtn.style.height = "26px";
+        removeBtn.style.display = "inline-flex";
+        removeBtn.style.alignItems = "center";
+        removeBtn.style.justifyContent = "center";
+        removeBtn.style.padding = "0";
+        removeBtn.style.appearance = "none";
+        removeBtn.style.border = "0";
+        removeBtn.style.borderRadius = "3px";
+        removeBtn.style.background = "#e1251b";
+        removeBtn.style.color = "#fff";
+        removeBtn.style.fontFamily = "Arial, sans-serif";
+        removeBtn.style.fontSize = "18px";
+        removeBtn.style.fontWeight = "800";
+        removeBtn.style.lineHeight = "26px";
+        removeBtn.style.cursor = "pointer";
+        removeBtn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          manualSerials.splice(index, 1);
+          renderManualSerials();
+          showStatus(`Премахнат е ${serial}.`, "ok");
+          try { input.focus(); } catch (e) {}
+        });
+
+        row.appendChild(textWrap);
+        row.appendChild(removeBtn);
+        list.appendChild(row);
+      });
+    };
+
+    const addManualSerial = () => {
+      const context = refreshContextText();
+      const serial = String(input.value || "").trim();
+      const manualName = String(manualNameField.field.value || "").trim();
+      const manualSapId = String(manualSapField.field.value || "").trim();
+      if (!serial) {
+        showStatus("Въведи сериен номер.", "error");
+        return false;
+      }
+      const defaultItem = context ? buildManualRecycleBarcodeItems(context, [serial])[0] : null;
+      const name = manualName || String(defaultItem?.name || "").trim();
+      const sapId = manualSapId || String(defaultItem?.sapId || "").trim();
+      if (!name || !sapId) {
+        showStatus("Преди да добавиш серийния номер попълни Име на устройство и SAP ID.", "error");
+        return false;
+      }
+      let manualOverride = false;
+      if (!context) {
+        if (!manualName || !manualSapId) {
+          showStatus("Без избрана категория попълни ръчно Име на устройство и SAP ID.", "error");
+          return false;
+        }
+        manualOverride = true;
+      } else {
+        const result = validateRecycleSerialForSelection(context.categoryId, serial);
+        if (!result?.ok) {
+          if (!manualName || !manualSapId) {
+            showStatus(`${result?.msg || "Невалиден сериен номер."} Попълни Име на устройство и SAP ID за ръчно добавяне.`, "error");
+            return false;
+          }
+          manualOverride = true;
+        }
+      }
+      const key = serial.toUpperCase();
+      if (manualSerials.some(item => String(item?.serial || "").toUpperCase() === key)) {
+        showStatus("Този сериен номер вече е добавен.", "error");
+        try { input.select(); } catch (e) {}
+        return false;
+      }
+      manualSerials.push({ serial, name, sapId, manualOverride });
+      input.value = "";
+      renderManualSerials();
+      showStatus(manualOverride ? `Добавено ръчно устройство: ${serial}.` : `Добавено устройство: ${serial}.`, "ok");
+      return true;
+    };
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const opening = panel.style.display === "none";
+      panel.style.display = opening ? "block" : "none";
+      panel.setAttribute("aria-hidden", opening ? "false" : "true");
+      toggle.textContent = opening ? "СКРИЙ РЪЧНИ ЕТИКЕТИ" : "РЪЧНИ ЕТИКЕТИ";
+      if (opening) {
+        refreshContextText();
+        renderManualSerials();
+        try { input.focus(); } catch (e) {}
+      }
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (normalizeRecycleSerialKeydown(input, event)) return;
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      addManualSerial();
+    });
+    // KSTB5019/5020 barcode scanners can send Tab/Alt/Ctrl/F-key prefixes or suffixes.
+    // Apply the existing guard to this manual field too, while leaving Enter available
+    // for adding the scanned serial number to the print list.
+    attachRecycleXploreKaonMacScannerShortcutGuard(input, isRecycleXploreKaon5019Or5020SelectedContext);
+    input.addEventListener("focus", () => {
+      input.style.borderColor = "#236b5a";
+      input.style.boxShadow = "0 0 0 2px rgba(35, 107, 90, 0.14)";
+    });
+    input.addEventListener("blur", () => {
+      input.style.borderColor = "#cbdcd6";
+      input.style.boxShadow = "none";
+    });
+
+    printBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      refreshContextText();
+      const items = manualSerials.slice();
+      if (!items.length) {
+        showStatus("Добави поне един сериен номер с Enter.", "error");
+        return;
+      }
+      showStatus(`Подготвям ${items.length} етикет${items.length === 1 ? "" : "а"} за печат.`, "ok");
+      await printRecycleBarcodeSheetInIframe(items);
+    });
+
+    panel.appendChild(title);
+    panel.appendChild(contextText);
+    panel.appendChild(deviceDetailsArea);
+    panel.appendChild(automaticDeviceWarning);
+    panel.appendChild(inputArea);
+    panel.appendChild(list);
+    panel.appendChild(status);
+    panel.appendChild(printBtn);
+    renderManualSerials();
+
+    toggleAnchor.insertAdjacentElement("afterend", toggle);
+    const actionsRow = toggleAnchor.closest(".row");
+    if (actionsRow?.parentElement) actionsRow.insertAdjacentElement("afterend", panel);
+    else toggleAnchor.insertAdjacentElement("afterend", panel);
+    return true;
+  }
+
   function startLabelsObservers() {
     // Many listControls are dynamic; watch DOM and inject when available.
     const tryInjectAll = () => {
@@ -1863,7 +2577,9 @@
         printBtnId: RECYCLE_PRINT_LABELS_BTN_ID
       });
       const c = bindRecyclePrintBarcodeButton();
-      return a && b && c;
+      const d = syncRecycleAustrianLabelsButton();
+      const e = injectManualRecycleLabelsUi();
+      return a && b && c && d && e;
     };
 
     if (tryInjectAll()) return;
@@ -2037,11 +2753,15 @@
   const SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING = "Това устройство няма Material ID, стойността е попълнена автоматично.";
   const SWAP_MATERIAL_CATALOG_REPLACED_WARNING = "Material ID беше различен от каталога. Стойността е заменена с правилния SAP за избраното устройство.";
   const SWAP_MATERIAL_MISSING_AMBIGUOUS_WARNING = "Това устройство няма Material ID, моля изберете кое е устройството.";
+  const SWAP_MATERIAL_EX220_MANUAL_PICK_WARNING = "Избрани са TP-Link EX220 и TP-Link EX220 Home. SAP не се попълва автоматично — избери правилния модел от снимките по-долу според етикета на устройството.";
+  const RECYCLE_EX220_PAIR_SELECTION_WARNING = "За TP-Link EX220 трябва да са избрани и двата модела в каталога: TP-Link EX220 и TP-Link EX220 Home.";
   const SWAP_MATERIAL_SIMILAR_WARNINGS = {
     "1000059633": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
     "1000055165": "Внимание: TP-Link NX520 и TP-Link NX220v са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
     "124173": "Внимание: ZTE G5B и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
-    "121561": "Внимание: ZTE G5B и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството."
+    "121561": "Внимание: ZTE G5B и ZTE MC888A са визуално сходни устройства, но са с различни SAP номера. Моля, уверете се, че сте избрали правилния модел, като проверите точния модел от етикета на устройството.",
+    "121150": "Внимание: TP-Link EX220 и TP-Link EX220 Home са визуално сходни устройства, но са с различни SAP номера. Провери точния модел от етикета на устройството.",
+    "121376": "Внимание: TP-Link EX220 и TP-Link EX220 Home са визуално сходни устройства, но са с различни SAP номера. Провери точния модел от етикета на устройството."
   };
 
   const SWAP_MATERIAL_MODELS_DEFAULT = [
@@ -2226,6 +2946,56 @@
     // - "BG108322" -> "108322"
     // - "118550_DISMANTLED" -> "118550"
     return raw.replace(/\D+/g, "");
+  }
+
+  function parseSapIdFromIdentityText(text) {
+    const match = String(text || "").match(/SAP\s+([0-9][0-9\-BG_]*)/i);
+    return normalizeSwapMaterialId(match?.[1]);
+  }
+
+  function getEx220ManualMaterialIdSet() {
+    return new Set(["121150", "121376"]);
+  }
+
+  function findEx220MaterialIdHintOnSwapPage(root, input) {
+    const allowed = getEx220ManualMaterialIdSet();
+    const found = new Set();
+
+    const consider = (raw) => {
+      const text = String(raw || "");
+      if (!text) return;
+      const fromSapLabel = parseSapIdFromIdentityText(text);
+      if (fromSapLabel && allowed.has(fromSapLabel)) found.add(fromSapLabel);
+      allowed.forEach(id => {
+        if (new RegExp(`(?:^|\\D)${id}(?:_DISMANTLED)?(?:\\D|$)`, "i").test(text)) found.add(id);
+      });
+    };
+
+    consider(document.getElementById("pageTitle")?.textContent);
+
+    const visit = (node) => {
+      if (!node || found.size > 1) return;
+      if (node === input) return;
+      if (node.nodeType === 1) {
+        if (node.classList?.contains("wifi-oss-swap-material-panel")) return;
+        if (node.id === SWAP_MATERIAL_SIMILAR_WARNING_ID) return;
+        Array.from(node.childNodes || []).forEach(visit);
+        return;
+      }
+      if (node.nodeType === 3) consider(node.textContent);
+    };
+    visit(root);
+
+    if (found.size === 1) return Array.from(found)[0];
+    return "";
+  }
+
+  function tryFillEx220MaterialIdFromPageText(root, input) {
+    if (!input || normalizeSwapMaterialId(input.value)) return "";
+    const materialId = findEx220MaterialIdHintOnSwapPage(root, input);
+    if (!materialId) return "";
+    setSwapMaterialInputValue(input, materialId);
+    return materialId;
   }
 
   function attachSwapMaterialRewriteRule(input) {
@@ -2521,7 +3291,7 @@
     { names: ["ZTE MF293N+ Antenna"], categoryId: "netbox", deviceId: "zte_mf293n" },
     { names: ["ZTE MF283U+ext. Antenna"], categoryId: "netbox", deviceId: "zte_mf283u" },
     { names: ["ZTE MC888A 5G"], categoryId: "netbox", deviceId: "zte_mc888a" },
-    { names: ["TP-Link EX220"], categoryId: "routers", deviceId: "tp_link_ex220" },
+    { names: ["TP-Link EX220", "TP-Link EX220 Home"], categoryId: "routers", deviceIds: ["tp_link_ex220", "tp_link_ex220_home"] },
     { names: ["STB SDMC DV9161 (AndroidTV)"], categoryId: "android_iptv", deviceId: "stb_sdmc_dv9161_androidtv" }
   ];
 
@@ -2541,12 +3311,15 @@
       mapping.names.forEach(name => addDailyworkDeviceMappingIndexEntry(index, name, entry));
     });
     DAILYWORK_DEVICE_CONCRETE_MAPPINGS.forEach(mapping => {
+      const deviceIds = Array.isArray(mapping.deviceIds)
+        ? mapping.deviceIds
+        : (mapping.deviceId ? [mapping.deviceId] : []);
       const entry = {
         action: "category_device",
         categoryId: mapping.categoryId,
-        deviceIds: [mapping.deviceId],
+        deviceIds: deviceIds.map(id => String(id || "").trim()).filter(Boolean),
         confidence: "exact",
-        reason: "exact_device_alias"
+        reason: deviceIds.length > 1 ? "exact_device_alias_group" : "exact_device_alias"
       };
       mapping.names.forEach(name => addDailyworkDeviceMappingIndexEntry(index, name, entry));
     });
@@ -2558,15 +3331,22 @@
   function isDailyworkConcreteRecycleDeviceMappingSafe(selection) {
     const categoryId = String(selection?.categoryId || "").trim();
     const deviceIds = Array.isArray(selection?.deviceIds) ? selection.deviceIds : [];
-    if (selection?.action !== "category_device" || !categoryId || deviceIds.length !== 1) return false;
-    const deviceId = String(deviceIds[0] || "").trim();
-    if (!deviceId || !RECYCLE_DEVICE_ID_SET.has(deviceId)) return false;
-    const matches = RECYCLE_DEVICE_CATALOG.filter(device => (
-      isRecycleDeviceEnabled(device)
-      && device.deviceId === deviceId
-      && device.categoryId === categoryId
-    ));
-    return matches.length === 1;
+    if (selection?.action !== "category_device" || !categoryId || !deviceIds.length) return false;
+
+    const seen = new Set();
+    for (const rawId of deviceIds) {
+      const deviceId = String(rawId || "").trim();
+      if (!deviceId || seen.has(deviceId)) return false;
+      seen.add(deviceId);
+      if (!RECYCLE_DEVICE_ID_SET.has(deviceId)) return false;
+      const matches = RECYCLE_DEVICE_CATALOG.filter(device => (
+        isRecycleDeviceEnabled(device)
+        && device.deviceId === deviceId
+        && device.categoryId === categoryId
+      ));
+      if (matches.length !== 1) return false;
+    }
+    return true;
   }
 
   function cloneDailyworkDeviceSelection(selection) {
@@ -3524,14 +4304,27 @@
     const fillCandidate = getRecycleMaterialFillCandidate(category, input, materialModelsForRecycleContext);
     let materialNoticeMessage = "";
     let shouldAutoContinueAfterControlledFill = false;
+    let skipAutoContinueForManualEx220 = false;
     if (fillCandidate.ok) {
       setSwapMaterialInputValue(input, fillCandidate.materialId);
       materialNoticeMessage = fillCandidate.reason === "material_mismatch"
         ? SWAP_MATERIAL_CATALOG_REPLACED_WARNING
         : SWAP_MATERIAL_MISSING_AUTO_FILLED_WARNING;
       shouldAutoContinueAfterControlledFill = true;
+    } else if (fillCandidate.reason === "manual_material_required" && !normalizeSwapMaterialId(input.value)) {
+      const recoveredMaterialId = tryFillEx220MaterialIdFromPageText(root, input);
+      if (recoveredMaterialId) {
+        // SAP recovered from page text (e.g. "SAP 121150 — TP-Link EX220"). Keep it, but do not auto-continue.
+        skipAutoContinueForManualEx220 = true;
+      } else {
+        materialNoticeMessage = SWAP_MATERIAL_EX220_MANUAL_PICK_WARNING;
+        skipAutoContinueForManualEx220 = true;
+      }
     } else if (hasSelectedSnapshotDevices && fillCandidate.reason === "ambiguous_material") {
       materialNoticeMessage = SWAP_MATERIAL_MISSING_AMBIGUOUS_WARNING;
+    } else if (fillCandidate.reason === "manual_material_required") {
+      // Field already has a SAP — leave it untouched and do not force auto-continue from this branch.
+      skipAutoContinueForManualEx220 = false;
     }
 
     const panel = document.createElement("div");
@@ -3575,7 +4368,10 @@
     }
     if (materialNoticeMessage) setRecycleInlineAlert(materialWarning, materialNoticeMessage, "warning");
     if (shouldAutoContinueAfterControlledFill) autoContinueSwapMaterialIfReady(root, input);
-    else if (!(hasSelectedSnapshotDevices && fillCandidate.reason === "ambiguous_material")) autoContinueSwapMaterialIfReady(root, input);
+    else if (!skipAutoContinueForManualEx220 && !(hasSelectedSnapshotDevices && (
+      fillCandidate.reason === "ambiguous_material"
+      || (fillCandidate.reason === "manual_material_required" && !normalizeSwapMaterialId(input.value))
+    ))) autoContinueSwapMaterialIfReady(root, input);
 
     const title = document.createElement("div");
     title.textContent = "Бърз избор на Material Id";
@@ -3721,9 +4517,11 @@
 
     const grid = document.createElement("div");
     grid.style.display = "grid";
-    // Fixed layout: 10 devices per row
-    grid.style.gridTemplateColumns = "repeat(10, minmax(0, 1fr))";
-    grid.style.gap = "6px";
+    // Larger cards: about 5 devices per row
+    grid.style.gridTemplateColumns = "repeat(5, minmax(0, 1fr))";
+    grid.style.gap = "10px";
+    grid.style.maxWidth = "100%";
+    grid.style.alignItems = "stretch";
 
     const dashboardOrigin = "https://oss-assistant.onrender.com";
 
@@ -3903,7 +4701,6 @@
   const RECYCLE_ENTRY_LAST_SERIAL_KEY = "wifi_oss_recycle_entry_last_serial";
   const RECYCLE_ENTRY_PENDING_MATERIAL_KEY = "wifi_oss_recycle_entry_pending_material";
   const RECYCLE_ENTRY_MATERIAL_SNAPSHOT_KEY = "wifi_oss_recycle_entry_material_snapshot";
-  const RECYCLE_HISTORY_TEMPLATE_KEY = "wifi_oss_recycle_history_url_template";
   const DAILYWORK_AUTO_APPLIED_DATE_KEY = "wifi_oss_dailywork_auto_applied_date_v1";
   const DAILYWORK_AUTO_SUPPRESSED_DATE_KEY = "wifi_oss_dailywork_auto_suppressed_date_v1";
   // Records the category/device that the dailywork distribution assigned for the current
@@ -3970,6 +4767,30 @@
   const RECYCLE_STATE_EX220_SSID_WARNING_ID = "wifi-oss-recycle-state-ex220-ssid-warning";
   const RECYCLE_STATE_EX220_DEVICE_IDS = new Set(["tp_link_ex220", "tp_link_ex220_home"]);
   const RECYCLE_STATE_EX220_SSID_WARNING_TEXT = "\u0418\u043c\u0435\u0442\u043e \u043d\u0430 \u043c\u0440\u0435\u0436\u0430\u0442\u0430 \u0435 \u043d\u0435\u043e\u0431\u0438\u0447\u0430\u0439\u043d\u043e \u0437\u0430 \u0442\u043e\u0437\u0438 \u043c\u043e\u0434\u0435\u043b. \u041f\u0440\u043e\u0432\u0435\u0440\u0438 \u043e\u0442 \u0435\u0442\u0438\u043a\u0435\u0442\u0430 \u043d\u0430 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e\u0442\u043e \u0434\u0430\u043b\u0438 \u0442\u043e\u0432\u0430 \u043d\u0430\u0438\u0441\u0442\u0438\u043d\u0430 \u0435 TP-Link EX220.";
+
+  function normalizeRecycleSelectedDeviceIdSet(deviceIds) {
+    const ids = new Set();
+    (Array.isArray(deviceIds) ? deviceIds : []).forEach(rawId => {
+      const id = String(rawId || "").trim();
+      if (id) ids.add(id);
+    });
+    return ids;
+  }
+
+  function getRecycleEx220PairSelectionState(categoryId, deviceIds) {
+    const category = String(categoryId || "").trim();
+    if (category !== "routers") return "none";
+    const ids = normalizeRecycleSelectedDeviceIdSet(deviceIds);
+    const hasEx220 = ids.has("tp_link_ex220");
+    const hasEx220Home = ids.has("tp_link_ex220_home");
+    if (hasEx220 && hasEx220Home) return "complete";
+    if (hasEx220 || hasEx220Home) return "partial";
+    return "none";
+  }
+
+  function hasPartialRecycleEx220PairSelection(categoryId, deviceIds) {
+    return getRecycleEx220PairSelectionState(categoryId, deviceIds) === "partial";
+  }
   const RECYCLE_STATE_DTH_AUTOFILL_CONFIG_BY_DEVICE_ID = {
     dth_kaon_kstb1001: {
       categoryId: "dth_kaon_nagra",
@@ -3984,11 +4805,10 @@
       focusInputId: "_wflowRecycleState_CardNo"
     }
   };
-  const RECYCLE_HISTORY_PATH_RE = /^(.*\/sap-recycle-devices-by-technician\/\d+\/\d+)\/?$/;
-  const RECYCLE_HISTORY_TECHNICIAN_PATH_RE = /\/sap-recycle-devices-by-technician\/(\d+)\/(\d+)\/?$/;
   const RECYCLE_HISTORY_BASE_PATH = "/bbs2";
   const RECYCLE_WAREHOUSE_CELLS_PATH_RE = /^(.*\/sap-warehouse-cells-recycle\/(\d+))\/?$/;
   const RECYCLE_WAREHOUSE_CELLS_LIST_ID = "_recycleWarehouseCellsList";
+  const RECYCLE_WAREHOUSE_LIST_ID = "_recycleWarehouseList";
   const RECYCLE_ENTRY_CATEGORY_IDS = new Set([
     "android_iptv",
     "xplore_zapper",
@@ -4024,6 +4844,22 @@
   const RECYCLE_HISTORY_CONTINUE_WAIT_MS = 1500;
   const RECYCLE_HISTORY_FROM_PARAM = "RecycleDevicesByTechnician.From";
   const RECYCLE_HISTORY_TO_PARAM = "RecycleDevicesByTechnician.To";
+  const RECYCLE_CELLS_CONTEXT_LKG_KEY = "wifi_oss_recycle_cells_context_lkg_v1";
+  const RECYCLE_CELLS_CONTEXT_LKG_MAX_DAYS = 30;
+  const RECYCLE_HISTORY_TECHNICIAN_PATH_RE = /^\/bbs2(?:_1)?\/sap-recycle-devices-by-technician\/(\d+)\/(\d+)\/?$/i;
+  const RECYCLE_WAREHOUSE_ID_FROM_TEXT_RES = [
+    /\/sap-warehouse-cells-recycle\/(\d+)/gi,
+    /\/sap-warehouse-recycle\/(\d+)/gi,
+    /\/sap-recycle-devices-by-technician\/\d+\/(\d+)/gi
+  ];
+  const RECYCLE_WAREHOUSE_INDEX_PATHS = [
+    `${RECYCLE_HISTORY_BASE_PATH}/sap-warehouse-recycle`,
+    "/bbs2_1/sap-warehouse-recycle"
+  ];
+  const RECYCLE_CELLS_WAREHOUSE_PROBE_MAX = 6;
+  const RECYCLE_WAREHOUSE_INDEX_CACHE_MS = 5 * 60 * 1000;
+  let recycleWarehouseIndexIdsCache = { at: 0, ids: [] };
+  let recycleWarehouseIndexFetchInFlight = null;
   // Local processed-serial ledger: an independent, offline-proof guard against
   // recycling/scrapping the same device more than once. It is written when a serial
   // passes the recycle entry gate and checked together with the server history, so a
@@ -4463,49 +5299,89 @@
     );
   }
 
-  function sanitizeRecycleHistoryUrl(rawUrl) {
-    if (!rawUrl) return "";
-    try {
-      const url = new URL(String(rawUrl), window.location.href);
-      if (url.origin !== window.location.origin) return "";
-      const m = url.pathname.match(RECYCLE_HISTORY_PATH_RE);
-      if (!m) return "";
-      return normalizeRecycleHistoryTemplatePath(m[1]);
-    } catch (e) {}
-    return "";
+  function normalizeRecycleCellsPath(path) {
+    return String(path || "").replace(
+      /^\/bbs2_1\/sap-warehouse-cells-recycle\//,
+      `${RECYCLE_HISTORY_BASE_PATH}/sap-warehouse-cells-recycle/`
+    );
   }
 
-  function readRecycleHistoryTemplatePath() {
+  function readRecycleCellsContextLkg() {
     try {
-      const raw = String(localStorage.getItem(RECYCLE_HISTORY_TEMPLATE_KEY) || "");
-      const path = sanitizeRecycleHistoryUrl(raw);
-      if (path) return path;
-      if (raw) localStorage.removeItem(RECYCLE_HISTORY_TEMPLATE_KEY);
+      const raw = localStorage.getItem(RECYCLE_CELLS_CONTEXT_LKG_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      const at = String(data?.at || "").trim();
+      if (at) {
+        const ageMs = Date.now() - new Date(at).getTime();
+        if (!Number.isFinite(ageMs) || ageMs > RECYCLE_CELLS_CONTEXT_LKG_MAX_DAYS * 24 * 60 * 60 * 1000) return null;
+      }
+      const technicianId = String(data?.technicianId || "").trim();
+      const warehouseId = String(data?.warehouseId || "").trim();
+      if (!technicianId || !warehouseId || !/^\d+$/.test(technicianId) || !/^\d+$/.test(warehouseId)) return null;
+      return {
+        technicianId,
+        warehouseId,
+        cellsPath: String(data?.cellsPath || "").trim(),
+        cellsUrl: String(data?.cellsUrl || "").trim(),
+        historyTemplatePath: String(data?.historyTemplatePath || "").trim(),
+        at
+      };
     } catch (e) {}
-    return "";
+    return null;
   }
 
-  function writeRecycleHistoryTemplatePath(path) {
-    const clean = sanitizeRecycleHistoryUrl(path);
-    if (!clean) return "";
-    try { localStorage.setItem(RECYCLE_HISTORY_TEMPLATE_KEY, clean); } catch (e) {}
-    return clean;
+  function writeRecycleCellsContextLkg(details = {}) {
+    const technicianId = String(details?.technicianId || "").trim();
+    const warehouseId = String(details?.warehouseId || "").trim();
+    if (!technicianId || !warehouseId || !/^\d+$/.test(technicianId) || !/^\d+$/.test(warehouseId)) return;
+    const cellsPath = normalizeRecycleCellsPath(String(details?.cellsPath || "").trim());
+    const cellsUrl = String(details?.cellsUrl || "").trim();
+    const historyTemplatePath = normalizeRecycleHistoryTemplatePath(
+      String(details?.historyTemplatePath || "").trim()
+        || `${RECYCLE_HISTORY_BASE_PATH}/sap-recycle-devices-by-technician/${technicianId}/${warehouseId}`
+    );
+    try {
+      localStorage.setItem(RECYCLE_CELLS_CONTEXT_LKG_KEY, JSON.stringify({
+        technicianId,
+        warehouseId,
+        cellsPath,
+        cellsUrl,
+        historyTemplatePath,
+        at: new Date().toISOString()
+      }));
+    } catch (e) {}
+  }
+
+  function parseRecycleHistoryTemplatePath(pathOrUrl) {
+    let pathname = "";
+    try {
+      const url = resolveRecycleSameOriginUrl(pathOrUrl);
+      pathname = normalizeRecycleHistoryTemplatePath(url ? url.pathname : String(pathOrUrl || ""));
+    } catch (e) {
+      pathname = normalizeRecycleHistoryTemplatePath(String(pathOrUrl || ""));
+    }
+    const match = String(pathname || "").match(RECYCLE_HISTORY_TECHNICIAN_PATH_RE);
+    if (!match) return null;
+    return {
+      technicianId: match[1],
+      warehouseId: match[2],
+      templatePath: normalizeRecycleHistoryTemplatePath(pathname)
+    };
   }
 
   function discoverRecycleHistoryTemplateFromDom() {
     const candidates = [];
-    try { candidates.push(window.location.href); } catch (e) {}
     try {
       document.querySelectorAll('a[href*="sap-recycle-devices-by-technician"]').forEach(a => {
         candidates.push(a.getAttribute("href") || a.href || "");
       });
     } catch (e) {}
-
     for (const raw of candidates) {
-      const clean = sanitizeRecycleHistoryUrl(raw);
-      if (clean) return writeRecycleHistoryTemplatePath(clean);
+      const parsed = parseRecycleHistoryTemplatePath(raw);
+      if (parsed) return parsed;
     }
-    return readRecycleHistoryTemplatePath();
+    return null;
   }
 
   function resolveRecycleSameOriginUrl(rawUrl) {
@@ -4518,93 +5394,10 @@
     return null;
   }
 
-  function parseDailyworkTechnicianFromHistoryUrl(rawUrl, source = "history-link") {
-    const url = resolveRecycleSameOriginUrl(rawUrl);
-    if (!url) return null;
-    const match = url.pathname.match(RECYCLE_HISTORY_TECHNICIAN_PATH_RE);
-    if (!match) return null;
-    return {
-      ok: true,
-      technicianId: match[1],
-      source,
-      warehouseId: match[2],
-      url: `${url.pathname}${url.search || ""}`,
-      reason: "parsed_history_technician_url"
-    };
-  }
-
-  function detectDailyworkTechnicianFromHistoryDom() {
-    const candidates = [];
-    try { candidates.push({ value: window.location.href, source: "history-link" }); } catch (e) {}
-    try {
-      document.querySelectorAll('a[href*="sap-recycle-devices-by-technician"]').forEach(a => {
-        candidates.push({ value: a.getAttribute("href") || a.href || "", source: "history-link" });
-      });
-    } catch (e) {}
-    try {
-      const stored = String(localStorage.getItem(RECYCLE_HISTORY_TEMPLATE_KEY) || "");
-      if (stored) candidates.push({ value: stored, source: "history-template-cache" });
-    } catch (e) {}
-
-    for (const candidate of candidates) {
-      const parsed = parseDailyworkTechnicianFromHistoryUrl(candidate.value, candidate.source);
-      if (parsed) return parsed;
-    }
-    return null;
-  }
-
-  function readRecycleHistoryCurrentUserIdFromDom() {
-    try {
-      const text = String(document.body?.innerText || "");
-      const match = text.match(/\bA1BG\s*([0-9]{3,})\b/i);
-      if (match) return match[1];
-    } catch (e) {}
-    return "";
-  }
-
-  function readRecycleHistorySelectedWarehouseIdFromDom(technicianId = "") {
-    const technician = String(technicianId || "").trim();
-    try {
-      const selects = Array.from(document.querySelectorAll("select"));
-      for (const select of selects) {
-        const style = window.getComputedStyle ? window.getComputedStyle(select) : null;
-        if (style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")) continue;
-        if (select.disabled) continue;
-        const option = select.selectedOptions?.[0] || select.options?.[select.selectedIndex] || null;
-        const rawCandidates = [
-          select.value,
-          option?.value,
-          option?.textContent
-        ];
-        for (const raw of rawCandidates) {
-          const match = String(raw || "").trim().match(/^([0-9]{2,6})$/);
-          if (!match) continue;
-          const warehouseId = match[1];
-          if (technician && warehouseId === technician) continue;
-          return warehouseId;
-        }
-      }
-    } catch (e) {}
-    return "";
-  }
-
-  function detectDailyworkTechnicianFromHeaderDom() {
-    const technicianId = readRecycleHistoryCurrentUserIdFromDom();
-    const warehouseId = readRecycleHistorySelectedWarehouseIdFromDom(technicianId);
-    if (!technicianId || !warehouseId) return null;
-    return {
-      ok: true,
-      technicianId,
-      source: "header-user-warehouse-select",
-      warehouseId,
-      url: "",
-      reason: "parsed_header_user_and_selected_warehouse"
-    };
-  }
-
   function sanitizeDailyworkCellsUrl(rawUrl) {
     const url = resolveRecycleSameOriginUrl(rawUrl);
     if (!url) return null;
+    url.pathname = normalizeRecycleCellsPath(url.pathname || "");
     const match = url.pathname.match(RECYCLE_WAREHOUSE_CELLS_PATH_RE);
     if (!match) return null;
     url.search = "";
@@ -4618,73 +5411,351 @@
 
   function discoverDailyworkCellsUrlFromDom() {
     const candidates = [];
-    try { candidates.push(window.location.href); } catch (e) {}
+    const pushCandidate = (value) => {
+      const v = String(value || "").trim();
+      if (v) candidates.push(v);
+    };
+    try { pushCandidate(window.location.href); } catch (e) {}
     try {
-      document.querySelectorAll('a[href*="sap-warehouse-cells-recycle"]').forEach(a => {
-        candidates.push(a.getAttribute("href") || a.href || "");
+      document.querySelectorAll('a[href*="sap-warehouse-cells-recycle"], a[href*="warehouse-cells-recycle"]').forEach(a => {
+        pushCandidate(a.getAttribute("href") || a.href || "");
+      });
+    } catch (e) {}
+    try {
+      document.querySelectorAll('iframe[src*="warehouse-cells-recycle"], iframe[src*="sap-warehouse-cells-recycle"]').forEach(frame => {
+        pushCandidate(frame.getAttribute("src") || "");
       });
     } catch (e) {}
     try {
       document.querySelectorAll(".fa-address-card").forEach(icon => {
         const link = icon.closest?.("a[href]");
-        if (link) candidates.push(link.getAttribute("href") || link.href || "");
+        if (link) pushCandidate(link.getAttribute("href") || link.href || "");
       });
+    } catch (e) {}
+
+    try {
+      const listCells = discoverRecycleWarehouseCellsUrlFromListDom(document);
+      if (listCells) return listCells;
     } catch (e) {}
 
     for (const candidate of candidates) {
       const clean = sanitizeDailyworkCellsUrl(candidate);
       if (clean) return clean;
     }
+
+    const lkg = readRecycleCellsContextLkg();
+    if (lkg?.cellsPath) {
+      const clean = sanitizeDailyworkCellsUrl(lkg.cellsPath);
+      if (clean) return clean;
+    }
+    if (lkg?.cellsUrl) {
+      const clean = sanitizeDailyworkCellsUrl(lkg.cellsUrl);
+      if (clean) return clean;
+    }
     return null;
   }
 
-  function parseDailyworkTechnicianFromCellsDocument(doc, cellsInfo = {}) {
-    const root = doc?.getElementById?.(RECYCLE_WAREHOUSE_CELLS_LIST_ID);
-    if (!root) {
-      return {
-        ok: false,
-        technicianId: "",
-        source: "unavailable",
-        warehouseId: String(cellsInfo.warehouseId || ""),
-        url: cellsInfo.path || "",
-        reason: "cells_list_not_found"
-      };
+  function buildRecycleCellsInfoForWarehouseId(warehouseId) {
+    const id = String(warehouseId || "").trim();
+    if (!/^\d+$/.test(id)) return null;
+    const path = `${RECYCLE_HISTORY_BASE_PATH}/sap-warehouse-cells-recycle/${id}`;
+    try {
+      const url = new URL(path, window.location.origin).href;
+      return { warehouseId: id, url, path };
+    } catch (e) {}
+    return null;
+  }
+
+  function collectRecycleWarehouseIdsFromText(text) {
+    const ids = [];
+    const seen = new Set();
+    const push = (value) => {
+      const id = String(value || "").trim();
+      if (!/^\d+$/.test(id) || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    const haystack = String(text || "");
+    for (const re of RECYCLE_WAREHOUSE_ID_FROM_TEXT_RES) {
+      re.lastIndex = 0;
+      let match;
+      while ((match = re.exec(haystack))) push(match[1]);
     }
+    return ids;
+  }
+
+  function parseRecycleWarehouseIdsFromListDocument(doc) {
+    const root = doc?.getElementById?.(RECYCLE_WAREHOUSE_LIST_ID);
+    if (!root) return [];
+
+    const ids = [];
+    const seen = new Set();
+    const push = (value) => {
+      const id = String(value || "").trim();
+      if (!/^\d+$/.test(id) || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+
     const table = root.querySelector("table");
-    if (!table) {
-      return {
-        ok: false,
-        technicianId: "",
-        source: "unavailable",
-        warehouseId: String(cellsInfo.warehouseId || ""),
-        url: cellsInfo.path || "",
-        reason: "cells_table_not_found"
-      };
-    }
+    if (!table) return [];
 
     const headerCells = Array.from(table.querySelectorAll("tr th"));
-    const idIdx = headerCells.findIndex(th => String(th.getAttribute("rel") || "").toLowerCase() === "u.id");
+    let idIdx = headerCells.findIndex(th => String(th.getAttribute("rel") || "").toLowerCase() === "id");
     if (idIdx < 0) {
-      return {
-        ok: false,
-        technicianId: "",
-        source: "unavailable",
-        warehouseId: String(cellsInfo.warehouseId || ""),
-        url: cellsInfo.path || "",
-        reason: "cells_id_column_not_found"
-      };
+      idIdx = headerCells.findIndex(th => normalizeLabelText(th.textContent) === "id");
     }
 
-    const firstDataRow = Array.from(table.querySelectorAll("tbody tr")).find(tr => tr.querySelectorAll("td").length > 0);
-    const technicianId = String(firstDataRow?.querySelectorAll("td")?.[idIdx]?.textContent || "").trim();
+    const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
+    for (const tr of rows) {
+      const relId = String(tr.getAttribute("rel") || "").trim();
+      if (/^\d+$/.test(relId)) {
+        push(relId);
+        continue;
+      }
+
+      try {
+        const cellsLink = tr.querySelector('.viewWarehouseCells a[href], a[href*="sap-warehouse-cells-recycle"]');
+        if (cellsLink) {
+          const clean = sanitizeDailyworkCellsUrl(cellsLink.getAttribute("href") || cellsLink.href || "");
+          if (clean?.warehouseId) {
+            push(clean.warehouseId);
+            continue;
+          }
+        }
+      } catch (e) {}
+
+      if (idIdx >= 0) {
+        const tds = tr.querySelectorAll("td");
+        push((tds[idIdx]?.textContent || "").trim());
+      }
+    }
+
+    return ids;
+  }
+
+  function discoverRecycleWarehouseCellsUrlFromListDom(doc = document) {
+    try {
+      const root = doc?.getElementById?.(RECYCLE_WAREHOUSE_LIST_ID);
+      if (!root) return null;
+      const cellsLink = root.querySelector('.viewWarehouseCells a[href*="sap-warehouse-cells-recycle"], a[href*="sap-warehouse-cells-recycle"]');
+      if (!cellsLink) return null;
+      return sanitizeDailyworkCellsUrl(cellsLink.getAttribute("href") || cellsLink.href || "");
+    } catch (e) {}
+    return null;
+  }
+
+  function discoverRecycleWarehouseIdsFromDom() {
+    const ids = [];
+    const seen = new Set();
+    const push = (value) => {
+      const id = String(value || "").trim();
+      if (!/^\d+$/.test(id) || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+
+    try { collectRecycleWarehouseIdsFromText(window.location.href).forEach(push); } catch (e) {}
+
+    try {
+      parseRecycleWarehouseIdsFromListDocument(document).forEach(push);
+      if (ids.length) return ids;
+    } catch (e) {}
+
+    try {
+      document.querySelectorAll([
+        'a[href*="warehouse-cells-recycle"]',
+        'a[href*="sap-warehouse-recycle"]',
+        'a[href*="sap-recycle-devices-by-technician"]',
+        'iframe[src*="warehouse-cells-recycle"]',
+        'iframe[src*="sap-warehouse-recycle"]'
+      ].join(", ")).forEach(el => {
+        collectRecycleWarehouseIdsFromText(el.getAttribute("href") || el.getAttribute("src") || el.href || "").forEach(push);
+      });
+    } catch (e) {}
+
+    try {
+      const domHistory = discoverRecycleHistoryTemplateFromDom();
+      if (domHistory?.warehouseId) push(domHistory.warehouseId);
+    } catch (e) {}
+
+    try {
+      const navRoots = document.querySelectorAll("nav, header, .navbar, #header, .breadcrumb, [class*='nav'], [class*='menu']");
+      const roots = navRoots.length ? navRoots : [document.body];
+      for (const root of roots) {
+        collectRecycleWarehouseIdsFromText(root.innerHTML || "").forEach(push);
+      }
+    } catch (e) {}
+
+    return ids;
+  }
+
+  async function fetchRecycleWarehouseIdsFromIndex() {
+    const now = Date.now();
+    if (recycleWarehouseIndexIdsCache.ids.length && (now - recycleWarehouseIndexIdsCache.at) < RECYCLE_WAREHOUSE_INDEX_CACHE_MS) {
+      return recycleWarehouseIndexIdsCache.ids.slice();
+    }
+    if (recycleWarehouseIndexFetchInFlight) return recycleWarehouseIndexFetchInFlight;
+
+    recycleWarehouseIndexFetchInFlight = (async () => {
+      const ids = [];
+      const seen = new Set();
+      const push = (value) => {
+        const id = String(value || "").trim();
+        if (!/^\d+$/.test(id) || seen.has(id)) return;
+        seen.add(id);
+        ids.push(id);
+      };
+
+      for (const indexPath of RECYCLE_WAREHOUSE_INDEX_PATHS) {
+        try {
+          const url = new URL(indexPath, window.location.origin).href;
+          const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+          if (!res.ok) continue;
+          const html = await res.text();
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          parseRecycleWarehouseIdsFromListDocument(doc).forEach(push);
+          if (!ids.length) collectRecycleWarehouseIdsFromText(html).forEach(push);
+          if (ids.length) break;
+        } catch (e) {}
+      }
+
+      recycleWarehouseIndexIdsCache = { at: Date.now(), ids: ids.slice() };
+      return ids;
+    })();
+
+    try {
+      return await recycleWarehouseIndexFetchInFlight;
+    } finally {
+      recycleWarehouseIndexFetchInFlight = null;
+    }
+  }
+
+  async function discoverRecycleWarehouseIds() {
+    const ordered = [];
+    const seen = new Set();
+    const push = (value) => {
+      const id = String(value || "").trim();
+      if (!/^\d+$/.test(id) || seen.has(id)) return;
+      seen.add(id);
+      ordered.push(id);
+    };
+
+    const lkg = readRecycleCellsContextLkg();
+    if (lkg?.warehouseId) push(lkg.warehouseId);
+
+    discoverRecycleWarehouseIdsFromDom().forEach(push);
+
+    const indexIds = await fetchRecycleWarehouseIdsFromIndex();
+    indexIds.forEach(push);
+
+    return ordered.slice(0, RECYCLE_CELLS_WAREHOUSE_PROBE_MAX);
+  }
+
+  async function resolveRecycleCellsFetchCandidates() {
+    const candidates = [];
+    const seenPaths = new Set();
+    const push = (cellsInfo, source) => {
+      if (!cellsInfo?.path || seenPaths.has(cellsInfo.path)) return;
+      seenPaths.add(cellsInfo.path);
+      candidates.push({ cellsInfo, source });
+    };
+
+    const discovered = discoverDailyworkCellsUrlFromDom();
+    if (discovered) push(discovered, "dom-or-lkg-path");
+
+    const warehouseIds = await discoverRecycleWarehouseIds();
+    for (const warehouseId of warehouseIds) {
+      const built = buildRecycleCellsInfoForWarehouseId(warehouseId);
+      if (built) push(built, "discovered-warehouse");
+    }
+
+    return candidates;
+  }
+
+  async function fetchDailyworkTechnicianFromCellsInfo(cellsInfo, source = "") {
+    try {
+      const currentCells = sanitizeDailyworkCellsUrl(window.location.href);
+      if (currentCells && currentCells.path === cellsInfo.path) {
+        return parseDailyworkTechnicianFromCellsDocument(document, cellsInfo);
+      }
+    } catch (e) {}
+
+    const res = await fetch(cellsInfo.url, { credentials: "same-origin", cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const result = parseDailyworkTechnicianFromCellsDocument(doc, cellsInfo);
+    if (result.ok && source === "discovered-warehouse") {
+      result.source = "cells-table-discovered-warehouse";
+      result.reason = "parsed_first_cells_table_row_discovered_warehouse";
+    }
+    return result;
+  }
+
+  function parseDailyworkTechnicianIdsFromCellsDocument(doc, cellsInfo = {}) {
+    const root = doc?.getElementById?.(RECYCLE_WAREHOUSE_CELLS_LIST_ID);
+    if (!root) return [];
+    const table = root.querySelector("table");
+    if (!table) return [];
+
+    const headerCells = Array.from(table.querySelectorAll("tr th"));
+    let idIdx = headerCells.findIndex(th => String(th.getAttribute("rel") || "").toLowerCase() === "u.id");
+    if (idIdx < 0) {
+      idIdx = headerCells.findIndex(th => normalizeLabelText(th.textContent) === "id");
+    }
+    if (idIdx < 0) return [];
+
+    const ids = [];
+    const seen = new Set();
+    const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
+    for (const tr of rows) {
+      const tds = tr.querySelectorAll("td");
+      const technicianId = String(tds[idIdx]?.textContent || "").trim();
+      if (!/^\d+$/.test(technicianId) || seen.has(technicianId)) continue;
+      seen.add(technicianId);
+      ids.push(technicianId);
+    }
+    return ids;
+  }
+
+  function parseDailyworkTechnicianFromCellsDocument(doc, cellsInfo = {}) {
+    const technicianIds = parseDailyworkTechnicianIdsFromCellsDocument(doc, cellsInfo);
+    const lkg = readRecycleCellsContextLkg();
+    const preferredId = String(lkg?.technicianId || "").trim();
+    const technicianId = (preferredId && technicianIds.includes(preferredId))
+      ? preferredId
+      : String(technicianIds[0] || "").trim();
+
     if (!technicianId) {
+      const root = doc?.getElementById?.(RECYCLE_WAREHOUSE_CELLS_LIST_ID);
+      if (!root) {
+        return {
+          ok: false,
+          technicianId: "",
+          source: "unavailable",
+          warehouseId: String(cellsInfo.warehouseId || ""),
+          url: cellsInfo.path || "",
+          reason: "cells_list_not_found"
+        };
+      }
+      if (!root.querySelector("table")) {
+        return {
+          ok: false,
+          technicianId: "",
+          source: "unavailable",
+          warehouseId: String(cellsInfo.warehouseId || ""),
+          url: cellsInfo.path || "",
+          reason: "cells_table_not_found"
+        };
+      }
       return {
         ok: false,
         technicianId: "",
         source: "unavailable",
         warehouseId: String(cellsInfo.warehouseId || ""),
         url: cellsInfo.path || "",
-        reason: "cells_first_row_id_empty"
+        reason: technicianIds.length ? "cells_first_row_id_empty" : "cells_id_column_not_found"
       };
     }
 
@@ -4694,19 +5765,72 @@
       source: "cells-table",
       warehouseId: String(cellsInfo.warehouseId || ""),
       url: cellsInfo.path || "",
-      reason: "parsed_first_cells_table_row"
+      reason: technicianIds.length > 1 ? "parsed_cells_table_rows_preferred_lkg" : "parsed_first_cells_table_row"
     };
   }
 
+  async function collectRecycleTechnicianIdCandidates() {
+    const ordered = [];
+    const seen = new Set();
+    const push = (value) => {
+      const id = String(value || "").trim();
+      if (!/^\d+$/.test(id) || seen.has(id)) return;
+      seen.add(id);
+      ordered.push(id);
+    };
+
+    const lkg = readRecycleCellsContextLkg();
+    if (lkg?.technicianId) push(lkg.technicianId);
+
+    const fetchCandidates = await resolveRecycleCellsFetchCandidates();
+    let warehouseId = String(lkg?.warehouseId || "").trim();
+
+    for (const { cellsInfo } of fetchCandidates) {
+      if (!warehouseId) warehouseId = String(cellsInfo.warehouseId || "").trim();
+      try {
+        let doc = null;
+        const currentCells = sanitizeDailyworkCellsUrl(window.location.href);
+        if (currentCells && currentCells.path === cellsInfo.path) doc = document;
+        else {
+          const res = await fetch(cellsInfo.url, { credentials: "same-origin", cache: "no-store" });
+          if (!res.ok) continue;
+          doc = new DOMParser().parseFromString(await res.text(), "text/html");
+        }
+        parseDailyworkTechnicianIdsFromCellsDocument(doc, cellsInfo).forEach(push);
+        if (ordered.length) break;
+      } catch (e) {}
+    }
+
+    return {
+      warehouseId,
+      technicianIds: ordered.slice(0, RECYCLE_CELLS_WAREHOUSE_PROBE_MAX)
+    };
+  }
+
+  function rememberRecycleCellsTechnicianResult(result, cellsInfo = {}) {
+    if (!result?.ok) return;
+    writeRecycleCellsContextLkg({
+      technicianId: result.technicianId,
+      warehouseId: result.warehouseId,
+      cellsPath: cellsInfo.path || result.url || "",
+      cellsUrl: cellsInfo.url || ""
+    });
+  }
+
   async function detectDailyworkTechnicianDryRun() {
-    const historyResult = detectDailyworkTechnicianFromHistoryDom();
-    if (historyResult) return historyResult;
-
-    const headerResult = detectDailyworkTechnicianFromHeaderDom();
-    if (headerResult) return headerResult;
-
-    const cellsInfo = discoverDailyworkCellsUrlFromDom();
-    if (!cellsInfo) {
+    const fetchCandidates = await resolveRecycleCellsFetchCandidates();
+    if (!fetchCandidates.length) {
+      const lkg = readRecycleCellsContextLkg();
+      if (lkg) {
+        return {
+          ok: true,
+          technicianId: lkg.technicianId,
+          source: "cells-lkg",
+          warehouseId: lkg.warehouseId,
+          url: lkg.cellsPath || "",
+          reason: "lkg_technician_warehouse"
+        };
+      }
       return {
         ok: false,
         technicianId: "",
@@ -4717,29 +5841,51 @@
       };
     }
 
-    try {
-      const currentCells = sanitizeDailyworkCellsUrl(window.location.href);
-      if (currentCells && currentCells.path === cellsInfo.path) {
-        return parseDailyworkTechnicianFromCellsDocument(document, cellsInfo);
+    let lastFailure = null;
+    for (const candidate of fetchCandidates) {
+      const { cellsInfo, source } = candidate;
+      try {
+        if (source === "discovered-warehouse") {
+          try { console.info("[recycleHistory] auto-fetch cells", { url: cellsInfo.url, warehouseId: cellsInfo.warehouseId, source }); } catch (e) {}
+        }
+        const result = await fetchDailyworkTechnicianFromCellsInfo(cellsInfo, source);
+        if (result.ok) {
+          rememberRecycleCellsTechnicianResult(result, cellsInfo);
+          return result;
+        }
+        lastFailure = result;
+      } catch (error) {
+        lastFailure = {
+          ok: false,
+          technicianId: "",
+          source: "unavailable",
+          warehouseId: String(cellsInfo.warehouseId || ""),
+          url: cellsInfo.path || "",
+          reason: `cells_fetch_failed: ${String(error?.message || error || "unknown")}`
+        };
       }
-    } catch (e) {}
+    }
 
-    try {
-      const res = await fetch(cellsInfo.url, { credentials: "same-origin", cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
-      const doc = new DOMParser().parseFromString(html, "text/html");
-      return parseDailyworkTechnicianFromCellsDocument(doc, cellsInfo);
-    } catch (error) {
+    const lkg = readRecycleCellsContextLkg();
+    if (lkg) {
       return {
-        ok: false,
-        technicianId: "",
-        source: "unavailable",
-        warehouseId: String(cellsInfo.warehouseId || ""),
-        url: cellsInfo.path || "",
-        reason: `cells_fetch_failed: ${String(error?.message || error || "unknown")}`
+        ok: true,
+        technicianId: lkg.technicianId,
+        source: "cells-lkg",
+        warehouseId: lkg.warehouseId,
+        url: lkg.cellsPath || fetchCandidates[0]?.cellsInfo?.path || "",
+        reason: `cells_probe_failed_using_lkg: ${String(lastFailure?.reason || "unknown")}`
       };
     }
+
+    return lastFailure || {
+      ok: false,
+      technicianId: "",
+      source: "unavailable",
+      warehouseId: "",
+      url: "",
+      reason: "cells_probe_exhausted"
+    };
   }
 
   function createDailyworkMatchDryRunResult(overrides = {}) {
@@ -5741,40 +6887,76 @@
     return "";
   }
 
-  function buildRecycleHistoryUrlForDateRange(now = new Date()) {
-    return buildRecycleHistoryUrlFromTemplatePath(discoverRecycleHistoryTemplateFromDom(), now);
-  }
-
-  function getRecycleHistoryFallbackBasePath() {
+  function buildRecycleHistoryUrlForTodayOnly(templatePath, now = new Date()) {
+    if (!templatePath) return "";
     try {
-      const match = String(window.location.pathname || "").match(/^(\/[^/]+)(?:\/|$)/);
-      const pageBase = match ? match[1] : "";
-      if (pageBase === "/bbs2_1" || pageBase === "/bbs2") return RECYCLE_HISTORY_BASE_PATH;
-      return pageBase;
+      const url = new URL(templatePath, window.location.origin);
+      url.search = "";
+      const today = formatRecycleHistoryDate(now);
+      url.searchParams.set(RECYCLE_HISTORY_FROM_PARAM, today);
+      url.searchParams.set(RECYCLE_HISTORY_TO_PARAM, formatRecycleHistoryDate(addRecycleHistoryDays(now, 1)));
+      return url.href;
     } catch (e) {}
     return "";
   }
 
-  async function resolveRecycleHistoryUrlForDateRange(now = new Date()) {
-    const directUrl = buildRecycleHistoryUrlForDateRange(now);
-    if (directUrl) return { url: directUrl, reason: "history-template" };
+  function isRecycleHistoryUrlFilteredToToday(url = window.location.href, now = new Date()) {
+    try {
+      const parsed = new URL(String(url), window.location.origin);
+      const today = formatRecycleHistoryDate(now);
+      return String(parsed.searchParams.get(RECYCLE_HISTORY_FROM_PARAM) || "").trim() === today;
+    } catch (e) {}
+    return false;
+  }
 
-    let technician = null;
-    try { technician = await detectDailyworkTechnicianDryRun(); } catch (e) {}
-    const technicianId = String(technician?.technicianId || "").trim();
-    const warehouseId = String(technician?.warehouseId || "").trim();
-    const basePath = getRecycleHistoryFallbackBasePath();
-    if (technician?.ok && technicianId && warehouseId && basePath) {
-      const templatePath = `${basePath}/sap-recycle-devices-by-technician/${technicianId}/${warehouseId}`;
-      const cleanTemplatePath = writeRecycleHistoryTemplatePath(templatePath);
-      const fallbackUrl = buildRecycleHistoryUrlFromTemplatePath(cleanTemplatePath, now);
-      if (fallbackUrl) return { url: fallbackUrl, reason: "technician-cells-fallback" };
+  async function resolveRecycleHistoryUrlForDateRange(now = new Date()) {
+    const candidates = [];
+    const seenUrls = new Set();
+    const pushCandidate = (technicianId, warehouseId, reason) => {
+      const tid = String(technicianId || "").trim();
+      const wid = String(warehouseId || "").trim();
+      if (!tid || !wid) return;
+      const templatePath = normalizeRecycleHistoryTemplatePath(
+        `${RECYCLE_HISTORY_BASE_PATH}/sap-recycle-devices-by-technician/${tid}/${wid}`
+      );
+      const historyUrl = buildRecycleHistoryUrlFromTemplatePath(templatePath, now);
+      if (!historyUrl || seenUrls.has(historyUrl)) return;
+      seenUrls.add(historyUrl);
+      candidates.push({ url: historyUrl, technicianId: tid, warehouseId: wid, reason });
+    };
+
+    let resolveReason = "cells_technician_unavailable";
+    try {
+      const tech = await collectRecycleTechnicianIdCandidates();
+      if (tech.warehouseId && tech.technicianIds.length) {
+        resolveReason = "technician-cells";
+        for (const technicianId of tech.technicianIds) {
+          pushCandidate(technicianId, tech.warehouseId, "technician-cells");
+        }
+      }
+    } catch (e) {}
+
+    const domHistory = discoverRecycleHistoryTemplateFromDom();
+    if (domHistory) {
+      pushCandidate(domHistory.technicianId, domHistory.warehouseId, "history-dom-link");
+      writeRecycleCellsContextLkg({
+        technicianId: domHistory.technicianId,
+        warehouseId: domHistory.warehouseId,
+        historyTemplatePath: domHistory.templatePath
+      });
+      resolveReason = "history-dom-link";
     }
 
-    return {
-      url: "",
-      reason: technician?.reason || "history-template-unavailable"
-    };
+    const lkg = readRecycleCellsContextLkg();
+    if (lkg?.technicianId && lkg?.warehouseId) {
+      pushCandidate(lkg.technicianId, lkg.warehouseId, "cells-lkg");
+      if (!candidates.length) resolveReason = "cells-lkg";
+    }
+
+    if (!candidates.length) {
+      return { url: "", candidates: [], reason: resolveReason };
+    }
+    return { url: candidates[0].url, candidates, reason: candidates[0].reason || resolveReason };
   }
 
   function findRecycleHistoryColumnIndex(headerCells, relName, textMatchers, fallbackIdx) {
@@ -5793,26 +6975,44 @@
   function normalizeRecycleHistorySuccess(raw) {
     const text = String(raw || "").replace(/\s+/g, " ").trim();
     const lower = text.toLowerCase();
-    if (lower === "да") return "yes";
-    if (lower === "не") return "no";
+    if (!lower) return "";
+    if (lower === "да" || lower === "yes" || lower === "true" || lower === "1") return "yes";
+    if (lower === "не" || lower === "no" || lower === "false" || lower === "0") return "no";
     return "";
   }
 
   function normalizeRecycleHistoryDateText(raw) {
     const text = String(raw || "").replace(/\s+/g, " ").trim();
-    const m = text.match(/\b(\d{2}\.\d{2}\.\d{4})\b/);
-    return m ? m[1] : "";
+    let m = text.match(/\b(\d{2})\.(\d{2})\.(\d{4})\b/);
+    if (m) return `${m[1]}.${m[2]}.${m[3]}`;
+    m = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+    m = text.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+    if (m) return `${m[1]}.${m[2]}.${m[3]}`;
+    return "";
   }
 
-  function buildRecycleHistoryTodayCounts(items, today = formatRecycleHistoryDate(new Date())) {
+  function buildRecycleHistoryTodayCounts(items, options = {}) {
+    const today = options.today || formatRecycleHistoryDate(new Date());
+    const serverFilteredToday = options.serverFilteredToday === true;
     const counts = { date: today, recycled: 0, scrap: 0, total: 0 };
+    const seenSerials = new Set();
+
     Array.from(items || []).forEach(item => {
-      if (String(item?.recycleDate || "") !== today) return;
-      if (item?.success === "yes") counts.recycled += 1;
-      else if (item?.success === "no") counts.scrap += 1;
-      else return;
-      counts.total += 1;
+      if (!serverFilteredToday && String(item?.recycleDate || "") !== today) return;
+      const serialKey = normalizeRecycleHistorySerial(item?.serialKey || item?.serial);
+      if (!serialKey || seenSerials.has(serialKey)) return;
+      if (item?.success === "yes") {
+        counts.recycled += 1;
+        seenSerials.add(serialKey);
+        counts.total += 1;
+      } else if (item?.success === "no") {
+        counts.scrap += 1;
+        seenSerials.add(serialKey);
+        counts.total += 1;
+      }
     });
+
     return counts;
   }
 
@@ -5823,10 +7023,20 @@
     if (!table) return [];
 
     const headerCells = Array.from(table.querySelectorAll("tr th"));
-    const dateIdx = findRecycleHistoryColumnIndex(headerCells, ["RecycledOn", "RecycleDate", "RecyclingDate", "DateRecycled"], ["\u0434\u0430\u0442\u0430 \u043d\u0430 \u0440\u0435\u0446\u0438\u043a\u043b\u0438\u0440\u0430\u043d\u0435", /recycl.*date/], 2);
+    const dateIdx = findRecycleHistoryColumnIndex(
+      headerCells,
+      ["RecycledOn", "RecycleDate", "RecyclingDate", "DateRecycled", "CompletedOn", "FinishedOn"],
+      ["\u0434\u0430\u0442\u0430 \u043d\u0430 \u0440\u0435\u0446\u0438\u043a\u043b\u0438\u0440\u0430\u043d\u0435", /recycl.*date/],
+      2
+    );
     const serialIdx = findRecycleHistoryColumnIndex(headerCells, "SerialNumber", ["сериен номер", /serial/], 4);
     const sapIdx = findRecycleHistoryColumnIndex(headerCells, "SapId", ["sapid", "sap id"], 5);
-    const successIdx = findRecycleHistoryColumnIndex(headerCells, "IsSuccess", ["успешно рециклиран"], 6);
+    const successIdx = findRecycleHistoryColumnIndex(
+      headerCells,
+      "IsSuccess",
+      ["успешно рециклиран", "успешно рециклирано"],
+      6
+    );
 
     const rows = Array.from(table.querySelectorAll("tbody tr")).filter(tr => tr.querySelectorAll("td").length > 0);
     const items = [];
@@ -5845,6 +7055,115 @@
     return items;
   }
 
+  function parseRecycleHistoryItemsFromLiveDocument() {
+    try {
+      if (!document.getElementById(RECYCLE_LIST_ID)) return null;
+      const items = parseRecycleHistoryItemsFromDocument(document);
+      return items.length ? items : null;
+    } catch (e) {}
+    return null;
+  }
+
+  async function fetchRecycleHistoryItemsFromUrl(url) {
+    const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status}`);
+      err.recycleHistoryStatus = "fetch-failed";
+      throw err;
+    }
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    if (!doc.getElementById(RECYCLE_LIST_ID)) {
+      const err = new Error("Recycle history list not found");
+      err.recycleHistoryStatus = "parse-failed";
+      throw err;
+    }
+    return parseRecycleHistoryItemsFromDocument(doc);
+  }
+
+  async function loadRecycleHistoryAttemptForCandidate(candidate, now = new Date()) {
+    const weekUrl = String(candidate?.url || "");
+    if (!weekUrl) return null;
+
+    const weekItems = await fetchRecycleHistoryItemsFromUrl(weekUrl);
+    let todayCounts = null;
+    const parsed = parseRecycleHistoryTemplatePath(weekUrl);
+    if (parsed?.templatePath) {
+      const todayUrl = buildRecycleHistoryUrlForTodayOnly(parsed.templatePath, now);
+      if (todayUrl && todayUrl !== weekUrl) {
+        try {
+          const todayItems = await fetchRecycleHistoryItemsFromUrl(todayUrl);
+          todayCounts = buildRecycleHistoryTodayCounts(todayItems, { serverFilteredToday: true });
+          try {
+            console.info("[recycleHistory] today fetch", {
+              todayUrl,
+              technicianId: candidate?.technicianId || "",
+              rows: todayItems.length,
+              today: todayCounts
+            });
+          } catch (e) {}
+        } catch (e) {}
+      }
+    }
+    if (!todayCounts) todayCounts = buildRecycleHistoryTodayCounts(weekItems);
+
+    const lkg = readRecycleCellsContextLkg();
+    const lkgBoost = String(candidate?.technicianId || "") === String(lkg?.technicianId || "") ? 1 : 0;
+    const score = (lkgBoost * 1000000)
+      + (Number(todayCounts.recycled || 0) * 1000)
+      + (Number(todayCounts.scrap || 0) * 100)
+      + weekItems.length;
+
+    return { url: weekUrl, items: weekItems, todayCounts, score, candidate, isLkg: !!lkgBoost };
+  }
+
+  function commitRecycleHistoryCache(url, items, startedAt, todayCountsOverride = null) {
+    recycleHistoryCache.key = url;
+    recycleHistoryCache.lookup = buildRecycleHistoryLookup(items);
+    recycleHistoryCache.items = items;
+    recycleHistoryCache.todayCounts = todayCountsOverride || buildRecycleHistoryTodayCounts(items);
+    recycleHistoryCache.loaded = true;
+    const finishedAt = new Date().toISOString();
+    setRecycleHistoryCacheStatus(items.length ? "loaded" : "empty", {
+      url,
+      error: "",
+      rowCount: items.length,
+      lastSuccessAt: finishedAt
+    });
+    recycleHistoryDiscoveryRetriesScheduled = false;
+    try {
+      const parsed = parseRecycleHistoryTemplatePath(url);
+      if (parsed) {
+        writeRecycleCellsContextLkg({
+          technicianId: parsed.technicianId,
+          warehouseId: parsed.warehouseId,
+          historyTemplatePath: parsed.templatePath
+        });
+      }
+    } catch (e) {}
+    if (items.length > 0 && !recycleHistoryCache.todayCounts.total) {
+      try {
+        console.info("[recycleHistory] todayCounts zero despite rows", {
+          url,
+          rows: items.length,
+          today: formatRecycleHistoryDate(new Date()),
+          sampleDates: items.slice(0, 5).map(item => item.recycleDate || item.recycleDateText || ""),
+          sampleSuccess: items.slice(0, 5).map(item => item.success || item.successText || "")
+        });
+      } catch (e) {}
+    }
+    try {
+      console.info("[recycleHistory] loaded", {
+        url,
+        rows: items.length,
+        status: recycleHistoryCache.status,
+        today: recycleHistoryCache.todayCounts,
+        startedAt,
+        finishedAt
+      });
+    } catch (e) {}
+  }
+
   function buildRecycleHistoryLookup(items) {
     const lookup = new Map();
     for (const item of Array.from(items || [])) {
@@ -5856,10 +7175,44 @@
     return lookup;
   }
 
+  let recycleHistoryDiscoveryRetriesScheduled = false;
+
+  function scheduleRecycleHistoryDiscoveryRetries() {
+    if (recycleHistoryDiscoveryRetriesScheduled) return;
+    recycleHistoryDiscoveryRetriesScheduled = true;
+    const delays = [500, 1500, 4000];
+    delays.forEach((delay) => {
+      setTimeout(() => {
+        if (recycleHistoryCache.status !== "missing-url") return;
+        preloadRecycleHistoryCache({ force: true });
+      }, delay);
+    });
+  }
+
   async function preloadRecycleHistoryCache({ force = false } = {}) {
+    const liveItems = parseRecycleHistoryItemsFromLiveDocument();
+    if (liveItems) {
+      const liveUrl = String(window.location.href || "");
+      if (!force && recycleHistoryCache.loaded && recycleHistoryCache.key === liveUrl) return true;
+      const startedAt = new Date().toISOString();
+      setRecycleHistoryCacheStatus("loading", {
+        url: liveUrl,
+        error: "",
+        lastAttemptAt: startedAt
+      });
+      const todayCounts = buildRecycleHistoryTodayCounts(liveItems, {
+        serverFilteredToday: isRecycleHistoryUrlFilteredToToday(liveUrl)
+      });
+      commitRecycleHistoryCache(liveUrl, liveItems, startedAt, todayCounts);
+      return true;
+    }
+
     const resolved = await resolveRecycleHistoryUrlForDateRange();
-    const url = String(resolved?.url || "");
-    if (!url) {
+    const urlCandidates = Array.isArray(resolved?.candidates) && resolved.candidates.length
+      ? resolved.candidates
+      : (resolved?.url ? [{ url: resolved.url, reason: resolved.reason || "unknown" }] : []);
+
+    if (!urlCandidates.length) {
       recycleHistoryCache.loaded = false;
       recycleHistoryCache.lookup = new Map();
       recycleHistoryCache.items = [];
@@ -5871,48 +7224,49 @@
         lastAttemptAt: new Date().toISOString()
       });
       warnRecycleHistoryOnce("missing-url", "History URL/template is unavailable; duplicate validation will fail open.", { reason: resolved?.reason || "unknown" });
+      scheduleRecycleHistoryDiscoveryRetries();
       return false;
     }
 
-    if (!force && recycleHistoryCache.loaded && recycleHistoryCache.key === url) return true;
-    if (recycleHistoryCache.inFlight && recycleHistoryCache.key === url) return recycleHistoryCache.inFlight;
+    const primaryUrl = String(urlCandidates[0]?.url || "");
+    if (!force && recycleHistoryCache.loaded && recycleHistoryCache.key === primaryUrl) return true;
+    if (recycleHistoryCache.inFlight && recycleHistoryCache.key === primaryUrl) return recycleHistoryCache.inFlight;
 
-    recycleHistoryCache.key = url;
+    recycleHistoryCache.key = primaryUrl;
     const startedAt = new Date().toISOString();
     setRecycleHistoryCacheStatus("loading", {
-      url,
+      url: primaryUrl,
       error: "",
       lastAttemptAt: startedAt
     });
-    try { console.info("[recycleHistory] fetch start", { url, startedAt, force: !!force }); } catch (e) {}
+    try { console.info("[recycleHistory] fetch start", { url: primaryUrl, candidates: urlCandidates.length, startedAt, force: !!force }); } catch (e) {}
+
     recycleHistoryCache.inFlight = (async () => {
       try {
-        const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
-        if (!res.ok) {
-          const err = new Error(`HTTP ${res.status}`);
+        const lkg = readRecycleCellsContextLkg();
+        const lkgTechnicianId = String(lkg?.technicianId || "").trim();
+        const orderedCandidates = lkgTechnicianId
+          ? [
+            ...urlCandidates.filter(candidate => String(candidate?.technicianId || "") === lkgTechnicianId),
+            ...urlCandidates.filter(candidate => String(candidate?.technicianId || "") !== lkgTechnicianId)
+          ]
+          : urlCandidates;
+
+        let best = null;
+        for (const candidate of orderedCandidates) {
+          const attempt = await loadRecycleHistoryAttemptForCandidate(candidate);
+          if (!attempt) continue;
+          best = attempt;
+          if (attempt.isLkg || attempt.todayCounts.total > 0) break;
+        }
+
+        if (!best) {
+          const err = new Error("Recycle history fetch produced no candidates");
           err.recycleHistoryStatus = "fetch-failed";
           throw err;
         }
-        const html = await res.text();
-        const doc = new DOMParser().parseFromString(html, "text/html");
-        if (!doc.getElementById(RECYCLE_LIST_ID)) {
-          const err = new Error("Recycle history list not found");
-          err.recycleHistoryStatus = "parse-failed";
-          throw err;
-        }
-        const items = parseRecycleHistoryItemsFromDocument(doc);
-        recycleHistoryCache.lookup = buildRecycleHistoryLookup(items);
-        recycleHistoryCache.items = items;
-        recycleHistoryCache.todayCounts = buildRecycleHistoryTodayCounts(items);
-        recycleHistoryCache.loaded = true;
-        const finishedAt = new Date().toISOString();
-        setRecycleHistoryCacheStatus(items.length ? "loaded" : "empty", {
-          url,
-          error: "",
-          rowCount: items.length,
-          lastSuccessAt: finishedAt
-        });
-        try { console.info("[recycleHistory] loaded", { url, rows: items.length, status: recycleHistoryCache.status, today: recycleHistoryCache.todayCounts, startedAt, finishedAt }); } catch (e) {}
+
+        commitRecycleHistoryCache(best.url, best.items, startedAt, best.todayCounts);
         return true;
       } catch (e) {
         recycleHistoryCache.lookup = new Map();
@@ -5921,14 +7275,14 @@
         recycleHistoryCache.loaded = false;
         const status = e?.recycleHistoryStatus || "fetch-failed";
         setRecycleHistoryCacheStatus(recycleHistoryCache.lastSuccessAt ? "stale" : status, {
-          url,
+          url: primaryUrl,
           error: String(e?.message || e || "History fetch/parse failed"),
           rowCount: 0
         });
         warnRecycleHistoryOnce(
-          `${status}:${url}`,
-          `History validation unavailable; duplicate validation will fail open. status=${recycleHistoryCache.status}; url=${url || "(none)"}; error=${recycleHistoryCache.error || "(none)"}`,
-          { status: recycleHistoryCache.status, url, error: recycleHistoryCache.error }
+          `${status}:${primaryUrl}`,
+          `History validation unavailable; duplicate validation will fail open. status=${recycleHistoryCache.status}; url=${primaryUrl || "(none)"}; error=${recycleHistoryCache.error || "(none)"}`,
+          { status: recycleHistoryCache.status, url: primaryUrl, error: recycleHistoryCache.error }
         );
         return false;
       } finally {
@@ -6338,6 +7692,11 @@
     return order;
   }
 
+  function requiresManualRecycleMaterialSelection(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.deviceIds)) return false;
+    return getRecycleEx220PairSelectionState("routers", snapshot.deviceIds) === "complete";
+  }
+
   function getRecycleMaterialFillCandidate(categoryId, inputEl, models = swapMaterialModels) {
     const category = String(categoryId || "").trim();
     if (!category) return { ok: false, materialId: "", reason: "missing_category" };
@@ -6351,7 +7710,14 @@
     }
     if (!snapshot) return { ok: false, materialId: "", reason: "missing_or_invalid_snapshot" };
     if (!snapshot.deviceIds.length) return { ok: false, materialId: "", reason: "no_selected_devices" };
-    if (snapshot.materialIds.length !== 1) return { ok: false, materialId: "", reason: "ambiguous_material" };
+    if (requiresManualRecycleMaterialSelection(snapshot)) {
+      // Both EX220 models are selected: never auto-pick SAP. If OSS already filled
+      // Material Id, leave it untouched; only require manual pick when the field is empty.
+      return { ok: false, materialId: "", reason: "manual_material_required" };
+    }
+    if (snapshot.materialIds.length !== 1) {
+      return { ok: false, materialId: "", reason: "ambiguous_material" };
+    }
 
     const materialId = normalizeSwapMaterialId(snapshot.materialIds[0]);
     if (!materialId) return { ok: false, materialId: "", reason: "missing_material" };
@@ -10684,6 +12050,19 @@
       getSelectedRecycleDevicesForValidation(categoryId).length > 0
     );
 
+    const refreshRecycleEx220PairSelectionAlert = () => {
+      const cat = getSelected();
+      const deviceIds = readSelectedRecycleDeviceIdsStorage();
+      if (hasPartialRecycleEx220PairSelection(cat, deviceIds)) {
+        if (serialMsg.dataset.wifiOssRecycleSerialAlertKind === "duplicate") return;
+        setSerialInlineAlert(RECYCLE_EX220_PAIR_SELECTION_WARNING, "warning", "ex220-pair-required");
+        return;
+      }
+      if (serialMsg.dataset.wifiOssRecycleSerialAlertKind === "ex220-pair-required") {
+        clearSerialInlineAlert();
+      }
+    };
+
     const setSelected = (id) => {
       const previous = getSelected();
       if (previous !== id) clearSelectedRecycleDeviceIds();
@@ -10766,6 +12145,7 @@
       if (selectedRecycleDeviceIds.has(id) && serialMsg.dataset.wifiOssRecycleSerialAlertKind === "device-required") {
         clearSerialInlineAlert();
       }
+      refreshRecycleEx220PairSelectionAlert();
       refreshRecycleSerialHelpAvailability(getSelected());
     };
 
@@ -11181,6 +12561,7 @@
       }
       grid.appendChild(restGrid);
       refreshRecycleSerialHelpAvailability(activeCategory.id);
+      refreshRecycleEx220PairSelectionAlert();
     };
 
     panel.__wifiOssRenderRecycleCategories = renderCategories;
@@ -11226,6 +12607,13 @@
         e.stopPropagation();
         hideRecycleSerialHelp();
         setSerialInlineAlert("\u0418\u0437\u0431\u0435\u0440\u0438 \u043f\u043e\u043d\u0435 \u0435\u0434\u043d\u043e \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e.", "error", "device-required");
+        return;
+      }
+      if (hasPartialRecycleEx220PairSelection(cat, readSelectedRecycleDeviceIdsStorage())) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideRecycleSerialHelp();
+        setSerialInlineAlert(RECYCLE_EX220_PAIR_SELECTION_WARNING, "warning", "ex220-pair-required");
         return;
       }
       const r = validateRecycleSerialForSelection(cat, serialInput.value);
@@ -11361,10 +12749,26 @@
     return true;
   }
 
+  function startRecycleCellsContextWarmer() {
+    const warm = () => {
+      try {
+        const currentCells = sanitizeDailyworkCellsUrl(window.location.href);
+        if (currentCells) {
+          const result = parseDailyworkTechnicianFromCellsDocument(document, currentCells);
+          rememberRecycleCellsTechnicianResult(result, currentCells);
+          return;
+        }
+        detectDailyworkTechnicianDryRun().catch(() => {});
+      } catch (e) {}
+    };
+    warm();
+    setTimeout(warm, 1000);
+    setTimeout(warm, 3000);
+  }
+
   function startRecycleEntryObserver() {
     installRecycleEntryStorageSync();
     const tryInject = () => {
-      try { discoverRecycleHistoryTemplateFromDom(); } catch (e) {}
       const hasRecycleEntryRoot = Boolean(document.getElementById(RECYCLE_ENTRY_ROOT_ID));
       if (hasRecycleEntryRoot) setDailyworkScheduleButtonVisible(true);
       else hideDailyworkScheduleUi();
@@ -12159,6 +13563,7 @@
   startSwapMaterialObserver();
   startSwapMaterialDashboardPolling();
   startDeviceFunctionsObserver();
+  startRecycleCellsContextWarmer();
   startRecycleEntryObserver();
   startCamModulesOperationHintObserver();
   startRecycleStateDthAutofillObserver();
