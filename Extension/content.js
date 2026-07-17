@@ -13352,6 +13352,73 @@
 
   const AFTER_RECYCLE_CAPTURE_SN_BTN_ID = "_wflowSavedTestPictureList_captureSn";
   const AFTER_RECYCLE_CAPTURE_SN_LABEL = "СНИМКА НА S/N";
+  const AFTER_RECYCLE_DEVICE_FUNCTION_BTN_ID = "_wflowAfterRecycleState_deviceFunction";
+  const AFTER_RECYCLE_OPEN_CONTRACT_BTN_ID = "wifi-oss-after-recycle-open-contract";
+  const BBS_PENDING_CONTRACT_LOOKUP_KEY = "wifi_oss_pending_bbs_contract_lookup_v1";
+  const BBS_CONTRACT_SEARCH_URL = "https://oss.a1.bg/rcbill/";
+
+  function normalizeAfterRecycleMac(value) {
+    const normalized = String(value || "").replace(/[^0-9a-f]/gi, "").toUpperCase();
+    return /^[0-9A-F]{12}$/.test(normalized) ? normalized : "";
+  }
+
+  function readAfterRecycleMacForContractLookup() {
+    const knownIds = [
+      "_wflowAfterRecycleState_Mac",
+      "_wflowAfterRecycleState_MacAddress",
+      "_wflowAfterRecycleState_MAC"
+    ];
+    const candidates = knownIds
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+
+    document.querySelectorAll("input").forEach(input => {
+      const marker = `${String(input.id || "")} ${String(input.name || "")}`.toLowerCase();
+      if (marker.includes("mac")) candidates.push(input);
+    });
+
+    for (const candidate of candidates) {
+      const mac = normalizeAfterRecycleMac(candidate?.value);
+      if (mac) return mac;
+    }
+    return "";
+  }
+
+  function openBbsContractLookup() {
+    const mac = readAfterRecycleMacForContractLookup();
+    if (!mac) {
+      alert("Не е намерен валиден MAC адрес за това устройство.");
+      return false;
+    }
+
+    // Create the tab while still in the user click event. The tab is navigated
+    // only after the pending MAC was safely stored for the BBS content script.
+    const bbsWindow = window.open("about:blank", "_blank");
+    if (!bbsWindow) {
+      alert("Браузърът блокира новия BBS таб. Разреши изскачащите прозорци за OSS.");
+      return false;
+    }
+    try {
+      chrome.storage.local.set({
+        [BBS_PENDING_CONTRACT_LOOKUP_KEY]: {
+          mac,
+          createdAt: Date.now()
+        }
+      }, () => {
+        if (chrome.runtime.lastError) {
+          try { bbsWindow.close(); } catch (closeError) {}
+          alert("Не успях да подготвя MAC адреса за BBS търсене.");
+          return;
+        }
+        try { bbsWindow.location.href = BBS_CONTRACT_SEARCH_URL; } catch (navigationError) {}
+      });
+    } catch (error) {
+      try { bbsWindow.close(); } catch (closeError) {}
+      alert("Не успях да подготвя MAC адреса за BBS търсене.");
+      return false;
+    }
+    return true;
+  }
 
   function relabelAfterRecycleCaptureSnButton() {
     const btn = document.getElementById(AFTER_RECYCLE_CAPTURE_SN_BTN_ID);
@@ -13384,6 +13451,62 @@
 
     const obs = new MutationObserver(() => {
       if (relabelAfterRecycleCaptureSnButton()) obs.disconnect();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  }
+
+  function injectAfterRecycleOpenContractButton() {
+    const path = String(window.location?.pathname || "");
+    if (!path.includes("/wflow/after-recycle-state/")) return false;
+
+    const existing = document.getElementById(AFTER_RECYCLE_OPEN_CONTRACT_BTN_ID);
+    if (!isRecycleXploreKaon5019Or5020SelectedContext()) {
+      const existingHolder = existing?.closest(".float.padding-10");
+      if (existingHolder) existingHolder.remove();
+      else existing?.remove();
+      return true;
+    }
+    if (existing) return true;
+
+    const deviceFunctionButton = document.getElementById(AFTER_RECYCLE_DEVICE_FUNCTION_BTN_ID);
+    if (!deviceFunctionButton) return false;
+
+    const sourceHolder = deviceFunctionButton.closest(".float.padding-10") || deviceFunctionButton.parentElement;
+    if (!sourceHolder?.parentElement) return false;
+
+    const iconClassName = deviceFunctionButton.querySelector("span")?.className || "fas fas fa-sync";
+    let openHolder = existing?.closest(".float.padding-10") || null;
+    if (!existing) {
+      openHolder = document.createElement("div");
+      openHolder.className = sourceHolder.className;
+      if (sourceHolder.getAttribute("style")) openHolder.setAttribute("style", sourceHolder.getAttribute("style"));
+
+      const button = document.createElement("button");
+      button.id = AFTER_RECYCLE_OPEN_CONTRACT_BTN_ID;
+      button.name = "openContract";
+      button.type = "button";
+      button.className = deviceFunctionButton.className;
+      if (deviceFunctionButton.getAttribute("style")) button.setAttribute("style", deviceFunctionButton.getAttribute("style"));
+      button.innerHTML = `<span class="${iconClassName}"> </span>Отвори в договор`;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openBbsContractLookup();
+      });
+      openHolder.appendChild(button);
+      sourceHolder.insertAdjacentElement("afterend", openHolder);
+    }
+
+    return true;
+  }
+
+  function startAfterRecycleOpenContractButtonObserver() {
+    const path = String(window.location?.pathname || "");
+    if (!path.includes("/wflow/after-recycle-state/")) return;
+    if (injectAfterRecycleOpenContractButton()) return;
+
+    const obs = new MutationObserver(() => {
+      if (injectAfterRecycleOpenContractButton()) obs.disconnect();
     });
     obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
   }
@@ -13573,5 +13696,6 @@
   startRecycleStateXploreKaonMacScannerGuardObserver();
   startRecycleStateEx220SsidWarningObserver();
   startAfterRecycleCaptureSnLabelObserver();
+  startAfterRecycleOpenContractButtonObserver();
   startConaxCardErrorDialogObserver();
 })();

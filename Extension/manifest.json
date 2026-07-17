@@ -86,6 +86,26 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://oss.a1.bg/rcbill/*",
+        "https://oss.a1.bg/RCBill/*",
+        "https://oss.a1.bg/bbs2/*"
+      ],
+      "css": [
+        "bbs-assistant/content.css"
+      ],
+      "js": [
+        "bbs-assistant/dom-utils.js",
+        "bbs-assistant/page-detector.js",
+        "bbs-assistant/mac-search.js",
+        "bbs-assistant/ui-panel.js",
+        "bbs-assistant/content.js",
+        "bbs-assistant/contract-bridge.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }
