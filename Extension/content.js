@@ -11854,6 +11854,8 @@
   function injectRecycleEntryCategoryPanel() {
     const root = document.getElementById(RECYCLE_ENTRY_ROOT_ID);
     if (!root) return false;
+    const recycleFieldset = root.querySelector("fieldset");
+    if (recycleFieldset) recycleFieldset.style.borderTop = "0";
     if (root.querySelector(`.${RECYCLE_ENTRY_PANEL_CLASS}`)) return true;
 
     // Fresh entry page load: reset the per-page "already handled serial" guard so the
@@ -11867,7 +11869,7 @@
     const continueBtn = root.querySelector(`#${RECYCLE_ENTRY_CONTINUE_BTN_ID}`) || document.getElementById(RECYCLE_ENTRY_CONTINUE_BTN_ID);
     if (!continueBtn) return false;
 
-    const fieldset = root.querySelector("fieldset") || root;
+    const fieldset = recycleFieldset || root;
     const serialRow = serialInput.closest(".row") || serialInput.parentElement;
     const serialMsg = document.createElement("div");
     serialMsg.id = "wifi-oss-recycle-serial-msg";
