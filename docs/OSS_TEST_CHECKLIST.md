@@ -178,6 +178,19 @@ Use this checklist in the real/demo OSS environment after loading the extension 
 - Continue with no concrete device selected, category-only `xplore_zapper`, multiple selected Xplore/Zapper devices, `KSTB5020 XploreTV`, and `KSTB6106 Zapper`; confirm the KSTB5019 helper does not activate.
 - Regression smoke: confirm DTH KAON/Nagra Chip Id autofill, EX220 SSID warning, clipboard autofill, and SAP/material flow still work.
 
+## After-Recycle: Open Contract
+
+- Select the supported KSTB5019 or KSTB5020 XploreTV context, complete the recycle flow, and open `/wflow/after-recycle-state/`.
+- Confirm `Отвори в договор` appears next to `Функции на устройство`. Confirm no `Провери договор` button is shown.
+- Confirm the after-recycle page has a valid MAC before clicking. With a missing or invalid MAC, confirm an alert is shown and no BBS tab opens.
+- Click `Отвори в договор`. Expected: one BBS/RCBill tab opens; the source OSS page is not blocked by an overlay.
+- In BBS, confirm the sidebar opens `Договори`, then `Търсене (ББС2)`, and the client search receives the MAC in `_clients_Mac`.
+- Confirm `_clients_get` is submitted once. The sidebar must not repeatedly return the main frame to the empty client-search form.
+- With a known matching MAC, confirm BBS Assistant finds the matching row and the tab opens the corresponding `/bbs2/devices/...` page directly.
+- On the device page, confirm only the matched MAC input has a green background with dark-green border/text.
+- With a MAC that has no matching device link, confirm the flow stops without repeated client-search navigation and without opening an unrelated contract.
+- Regression smoke: repeat `Отвори в договор` in a fresh after-recycle operation and confirm an old pending lookup does not affect the new one.
+
 ## SAP/Material Step
 
 - Continue from a valid recycle entry to the material step.

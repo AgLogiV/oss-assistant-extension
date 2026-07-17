@@ -32,6 +32,7 @@ For device-level validation profile work, read `docs/RECYCLE_DEVICE_VALIDATION_R
 - `Extension/manifest.json` - Chrome MV3 manifest. Defines permissions, internal OSS matches, SharePoint OSSRecycleSchedule match, background service worker, content script, recycle-theme CSS on selected OSS wflow paths, and web-accessible image assets.
 - `Extension/background.js` - MV3 service worker. Handles toolbar-click injection, proxies dashboard fetches/image downloads for `content.js`, optional remote recycle config fetch/cache, Dailywork schedule fetch/cache, and `extension.reload` (stores tab id, reloads extension, then reloads the stored tab on startup).
 - `Extension/content.js` - main extension runtime. It contains clipboard parsing/autofill, button injection, label/barcode printing, device-function UI, SAP/material quick buttons, dashboard polling, and recycle entry validation. It remains local-first for recycle config and has a CSP-safe debug bridge for manual remote refresh/status/clear plus manual visual-only overlay apply.
+- `Extension/bbs-assistant/` - integrated BBS/RCBill client-search helper. Its content scripts mount the BBS Assistant panel and bridge the after-recycle `Отвори в договор` action to the BBS client search and matching device page.
 - `Extension/images/` - extension icons, label templates, and image assets.
 - `Extension/images/devices/` - packaged device images used by SAP/material quick buttons.
 - `Extension/images/categories/` - category card images used by the recycle entry category panel.
@@ -56,6 +57,7 @@ Old `.zip` backup/export files are not part of the extension runtime. Ignore the
   - `recycle-theme.css` at `document_start` on selected OSS recycle/wflow paths (`sap-warehouse-recycle`, `device-recycle`, `device-history`, `recycle-state`, `after-recycle-state`) for production/test OSS hosts
   - `content.js` at `document_idle` on all OSS paths for each production/test host
   - `content.js` at `document_idle` on SharePoint OSSRecycleSchedule list pages
+  - integrated BBS Assistant scripts at `document_idle` in all frames on `oss.a1.bg/rcbill/*`, `oss.a1.bg/RCBill/*`, and `oss.a1.bg/bbs2/*`
 - background service worker: `background.js`
 - OSS matches/host permissions:
   - `https://oss.a1.bg/*`
@@ -418,6 +420,22 @@ General rules for future helpers:
 - protect sensitive existing runtime areas: serial validation, CAM flow, material auto-continue, clipboard autofill, and label/barcode generation.
 
 A possible future example is a DTH-specific helper that reads or copies a `chip id` value into a `serial number` field only for selected devices that require that behavior. This is not implemented behavior yet.
+
+### After-Recycle: `Отвори в договор`
+
+On `/wflow/after-recycle-state/`, the extension injects `Отвори в договор` next to `Функции на устройство` only in the selected KSTB5019/KSTB5020 XploreTV context. There is no `Провери договор` button or background-only contract lookup in the current runtime.
+
+The button reads a valid 12-hex MAC from the after-recycle page, stores a short-lived pending lookup in `chrome.storage.local` under `wifi_oss_pending_bbs_contract_lookup_v1`, and opens a BBS/RCBill tab. The BBS bridge then:
+
+1. opens the legacy sidebar `Договори` section when its `#o_4278` container is hidden;
+2. selects `Търсене (ББС2)` (`#a3` / `valeng="Search2"`);
+3. fills `_clients_Mac` and submits `_clients_get` once only;
+4. lets the integrated BBS Assistant find the matching MAC in the returned contract/device rows;
+5. opens the matching `/bbs2/devices/...` link directly in the BBS tab.
+
+The native BBS search stage is persisted in the pending lookup so the sidebar does not re-open the empty client-search form after the request was submitted. The opened device page carries the matched MAC in its URL fragment; the matching MAC input is styled with a green background and dark-green text/border. The pending lookup is removed before direct device navigation.
+
+This flow depends on the internal BBS DOM and permissions. Validate it manually after OSS/BBS changes; do not reintroduce a background `ExecuteGet` check without a verified response schema.
 
 ### Storage Keys
 
