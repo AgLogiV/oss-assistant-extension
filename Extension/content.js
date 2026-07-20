@@ -12879,6 +12879,62 @@
       setTimeout(focusSerialInputOnce, 0);
     }
 
+    let recycleEntryContractLookupPending = null;
+    let recycleEntryContractApprovedSerialKey = "";
+
+    const createRecycleEntryContractLookupToken = () => {
+      try {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      } catch (error) {}
+      return `recycle-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    };
+
+    const resumeRecycleEntryAfterContractLookup = (token, status) => {
+      const pending = recycleEntryContractLookupPending;
+      if (!pending || String(token || "") !== pending.token) return;
+      recycleEntryContractLookupPending = null;
+      recycleEntryContractApprovedSerialKey = pending.serialKey;
+      try { chrome.storage.local.remove(RECYCLE_ENTRY_CONTRACT_LOOKUP_RESULT_KEY); } catch (error) {}
+      setRecycleInlineAlert(
+        serialMsg,
+        status === "found"
+          ? "Договорът е отворен. Продължавам с описването на устройството."
+          : "Не е намерен договор. Продължавам с описването на устройството.",
+        "ok"
+      );
+      setTimeout(() => { try { continueBtn.click(); } catch (error) {} }, 0);
+    };
+
+    try {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== "local") return;
+        const result = changes?.[RECYCLE_ENTRY_CONTRACT_LOOKUP_RESULT_KEY]?.newValue;
+        if (!result) return;
+        const status = String(result.status || "").trim();
+        if (status !== "found" && status !== "not-found") return;
+        resumeRecycleEntryAfterContractLookup(String(result.token || ""), status);
+      });
+    } catch (error) {}
+
+    const beginRecycleEntryContractLookup = (serialKey) => {
+      if (recycleEntryContractLookupPending) return true;
+      const token = createRecycleEntryContractLookupToken();
+      recycleEntryContractLookupPending = { token, serialKey };
+      const opened = openBbsContractLookup({
+        mac: serialInput.value,
+        recycleEntryToken: token,
+        onFailure: () => resumeRecycleEntryAfterContractLookup(token, "not-found")
+      });
+      if (!opened) {
+        recycleEntryContractLookupPending = null;
+        return false;
+      }
+      // The BBS bridge reports native "no records" responses immediately.
+      // This is only a final fail-open guard for an unavailable or stalled BBS page.
+      setTimeout(() => resumeRecycleEntryAfterContractLookup(token, "not-found"), 10000);
+      return true;
+    };
+
     // Validate before continuing.
     const guardContinue = (e) => {
       const cat = getSelected();
@@ -12972,6 +13028,20 @@
             serialKey: normalizeRecycleHistorySerial(serialInput.value)
           }
         );
+      }
+
+      // KSTB5019/KSTB5020 are MAC-addressed devices. Open their contract lookup
+      // first; the current recycle step resumes only after BBS opens a matching
+      // device contract or confirms that no contract contains the MAC.
+      if (isRecycleXploreKaon5019Or5020SelectedContext()
+          && serialKeyForGuard
+          && serialKeyForGuard !== recycleEntryContractApprovedSerialKey) {
+        if (beginRecycleEntryContractLookup(serialKeyForGuard)) {
+          e.preventDefault();
+          e.stopPropagation();
+          setRecycleInlineAlert(serialMsg, "Проверявам договора на устройството…", "info");
+          return;
+        }
       }
 
       hideRecycleSerialHelp();
@@ -13640,6 +13710,7 @@
   const AFTER_RECYCLE_DEVICE_FUNCTION_BTN_ID = "_wflowAfterRecycleState_deviceFunction";
   const AFTER_RECYCLE_OPEN_CONTRACT_BTN_ID = "wifi-oss-after-recycle-open-contract";
   const BBS_PENDING_CONTRACT_LOOKUP_KEY = "wifi_oss_pending_bbs_contract_lookup_v1";
+  const RECYCLE_ENTRY_CONTRACT_LOOKUP_RESULT_KEY = "wifi_oss_recycle_entry_contract_lookup_result_v1";
   const BBS_CONTRACT_SEARCH_URL = "https://oss.a1.bg/rcbill/";
 
   function normalizeAfterRecycleMac(value) {
@@ -13669,8 +13740,8 @@
     return "";
   }
 
-  function openBbsContractLookup() {
-    const mac = readAfterRecycleMacForContractLookup();
+  function openBbsContractLookup(options = {}) {
+    const mac = normalizeAfterRecycleMac(options?.mac) || readAfterRecycleMacForContractLookup();
     if (!mac) {
       alert("Не е намерен валиден MAC адрес за това устройство.");
       return false;
@@ -13687,11 +13758,13 @@
       chrome.storage.local.set({
         [BBS_PENDING_CONTRACT_LOOKUP_KEY]: {
           mac,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          recycleEntryToken: String(options?.recycleEntryToken || "").trim()
         }
       }, () => {
         if (chrome.runtime.lastError) {
           try { bbsWindow.close(); } catch (closeError) {}
+          try { options?.onFailure?.(); } catch (callbackError) {}
           alert("Не успях да подготвя MAC адреса за BBS търсене.");
           return;
         }
@@ -13699,6 +13772,7 @@
       });
     } catch (error) {
       try { bbsWindow.close(); } catch (closeError) {}
+      try { options?.onFailure?.(); } catch (callbackError) {}
       alert("Не успях да подготвя MAC адреса за BBS търсене.");
       return false;
     }

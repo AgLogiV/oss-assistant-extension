@@ -2,11 +2,13 @@
   "use strict";
 
   const PENDING_LOOKUP_KEY = "wifi_oss_pending_bbs_contract_lookup_v1";
+  const RECYCLE_ENTRY_LOOKUP_RESULT_KEY = "wifi_oss_recycle_entry_contract_lookup_result_v1";
   const MAX_PENDING_AGE_MS = 15 * 60 * 1000;
   const SEARCH_MAC_INPUT_ID = "_clients_Mac";
   const SEARCH_BUTTON_ID = "_clients_get";
   const APPLIED_ATTRIBUTE = "data-wifi-oss-bbs-pending-mac";
   const MATCHED_MAC_HASH_PARAM = "wifi-oss-matched-mac";
+  const RECYCLE_ENTRY_TOKEN_HASH_PARAM = "wifi-oss-recycle-entry-token";
   const MAX_ATTEMPTS = 60;
   const RETRY_DELAY_MS = 500;
 
@@ -57,7 +59,9 @@
         callback({
           mac,
           createdAt,
-          nativeSearchSubmittedAt: Number(pending?.nativeSearchSubmittedAt || 0)
+          nativeSearchSubmittedAt: Number(pending?.nativeSearchSubmittedAt || 0),
+          contractNavigationStartedAt: Number(pending?.contractNavigationStartedAt || 0),
+          recycleEntryToken: String(pending?.recycleEntryToken || "").trim()
         });
       });
     } catch (error) {
@@ -67,6 +71,29 @@
 
   function clearPendingLookup() {
     try { chrome.storage.local.remove(PENDING_LOOKUP_KEY); } catch (error) {}
+  }
+
+  function publishRecycleEntryLookupResult(pending, status) {
+    const token = String(pending?.recycleEntryToken || "").trim();
+    if (!token || !status) return;
+    try {
+      chrome.storage.local.set({
+        [RECYCLE_ENTRY_LOOKUP_RESULT_KEY]: {
+          token,
+          status,
+          completedAt: Date.now()
+        }
+      });
+    } catch (error) {}
+  }
+
+  function getRecycleEntryTokenFromUrl() {
+    try {
+      const hash = String(global.location.hash || "").replace(/^#/, "");
+      return String(new URLSearchParams(hash).get(RECYCLE_ENTRY_TOKEN_HASH_PARAM) || "").trim();
+    } catch (error) {
+      return "";
+    }
   }
 
   function markNativeSearchSubmitted(pending) {
@@ -204,7 +231,7 @@
       input.setAttribute(APPLIED_ATTRIBUTE, pending.mac);
       setInputValue(input, pending.mac);
     }
-    return true;
+    return panel;
   }
 
   function openMatchedDeviceContract(documentRef, pending) {
@@ -226,27 +253,70 @@
 
     if (contractLink.getAttribute(APPLIED_ATTRIBUTE) === pending.mac) return true;
     contractLink.setAttribute(APPLIED_ATTRIBUTE, pending.mac);
-    contractUrl.hash = new URLSearchParams({ [MATCHED_MAC_HASH_PARAM]: pending.mac }).toString();
-    clearPendingLookup();
+    const hashParams = new URLSearchParams({ [MATCHED_MAC_HASH_PARAM]: pending.mac });
+    if (pending.recycleEntryToken) hashParams.set(RECYCLE_ENTRY_TOKEN_HASH_PARAM, pending.recycleEntryToken);
+    contractUrl.hash = hashParams.toString();
+    try {
+      chrome.storage.local.set({
+        [PENDING_LOOKUP_KEY]: {
+          ...pending,
+          contractNavigationStartedAt: Date.now()
+        }
+      });
+    } catch (error) {}
     global.location.assign(contractUrl.href);
     return true;
+  }
+
+  function publishNotFoundRecycleEntryLookup(panel, pending) {
+    const result = panel?.state?.lastSearchResult;
+    if (result?.status !== "not-found") return false;
+    publishRecycleEntryLookupResult(pending, "not-found");
+    clearPendingLookup();
+    return true;
+  }
+
+  function hasNativeBbsNoRecordsMessage(documentRef) {
+    const text = String(documentRef?.body?.textContent || "").replace(/\s+/g, " ").trim();
+    const noRecordsMessage = "\u041d\u0435 \u0431\u044f\u0445\u0430 \u043d\u0430\u043c\u0435\u0440\u0435\u043d\u0438 \u0437\u0430\u043f\u0438\u0441\u0438 \u0438\u043b\u0438 \u043d\u044f\u043c\u0430\u0442\u0435 \u043d\u0435\u043e\u0431\u0445\u043e\u0434\u0438\u043c\u0438\u0442\u0435 \u043f\u0440\u0430\u0432\u0430 \u0437\u0430 \u0442\u0430\u0437\u0438 \u0437\u0430\u044f\u0432\u043a\u0430.";
+    return text.includes(noRecordsMessage);
+  }
+
+  function publishOpenedRecycleEntryContract() {
+    if (!/^\/bbs2\/devices\//.test(String(global.location.pathname || ""))) return;
+    const token = getRecycleEntryTokenFromUrl();
+    if (!token) return;
+    publishRecycleEntryLookupResult({ recycleEntryToken: token }, "found");
+    clearPendingLookup();
   }
 
   function tryApplyPendingLookup(documentRef) {
     readPendingLookup((pending) => {
       if (!pending) return;
+      if (pending.contractNavigationStartedAt) return;
       if (fillNativeMacSearch(documentRef, pending)) return;
+      // BBS can return a native "no records / no rights" notice without
+      // rendering the Assistant panel. Treat that completed search as not found
+      // immediately instead of waiting for the retry timeout.
+      if (pending.nativeSearchSubmittedAt && hasNativeBbsNoRecordsMessage(documentRef)) {
+        publishRecycleEntryLookupResult(pending, "not-found");
+        clearPendingLookup();
+        return;
+      }
       // The sidebar must open Search2 only before the first native search.
       // Afterwards clicking it again resets the main frame to an empty form.
       if (!pending.nativeSearchSubmittedAt && navigateToBbsContractSearch(documentRef)) return;
-      if (fillAssistantPanel(documentRef, pending)) {
-        openMatchedDeviceContract(documentRef, pending);
+      const panel = fillAssistantPanel(documentRef, pending);
+      if (panel) {
+        if (openMatchedDeviceContract(documentRef, pending)) return;
+        publishNotFoundRecycleEntryLookup(panel, pending);
       }
     });
   }
 
   function start() {
     highlightMatchedMac(global.document);
+    publishOpenedRecycleEntryContract();
     let attempts = 0;
     const retry = () => {
       attempts += 1;
