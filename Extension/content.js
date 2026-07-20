@@ -1902,8 +1902,27 @@
 
   function syncRecycleAustrianLabelsButton() {
     const standardButton = document.getElementById("_recycleDevicesByTechnician_printAll");
-    const austrianButton = document.getElementById(RECYCLE_PRINT_LABELS_BTN_ID);
-    if (!standardButton || !austrianButton) return false;
+    if (!standardButton) return false;
+
+    // The list/pagination (and therefore the original icon button) is absent when
+    // there are no recycled or defective devices. Keep an Austrian-label action in
+    // the permanent actions row in that case as well.
+    let austrianButton = document.getElementById(RECYCLE_PRINT_LABELS_BTN_ID);
+    if (!austrianButton) {
+      austrianButton = document.createElement("button");
+      austrianButton.id = RECYCLE_PRINT_LABELS_BTN_ID;
+      austrianButton.type = "button";
+      austrianButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const serials = getRecycleDevicesForBarcodeSheet({ preferSelected: true }).map(item => item.serial);
+        if (!serials.length) {
+          alert("Няма успешно рециклирани устройства за принтиране. Маркирай желаните редове ръчно, за да ги включиш.");
+          return;
+        }
+        printLabelsInIframe(serials);
+      });
+    }
 
     if (standardButton.textContent !== "СТАНДАРТНИ ЕТИКЕТИ") {
       standardButton.textContent = "СТАНДАРТНИ ЕТИКЕТИ";
@@ -2203,6 +2222,113 @@
     contextText.style.color = "#555";
     contextText.style.marginBottom = "8px";
 
+    const devicePickerArea = document.createElement("div");
+    devicePickerArea.style.display = "grid";
+    devicePickerArea.style.gridTemplateColumns = "minmax(180px, 260px) minmax(220px, 360px)";
+    devicePickerArea.style.justifyContent = "start";
+    devicePickerArea.style.gap = "6px";
+    devicePickerArea.style.marginBottom = "8px";
+    devicePickerArea.style.padding = "8px";
+    devicePickerArea.style.border = "1px solid #dce8e4";
+    devicePickerArea.style.borderRadius = "6px";
+    devicePickerArea.style.background = "#ffffff";
+
+    const createDevicePickerField = (labelText, id) => {
+      const wrap = document.createElement("label");
+      wrap.textContent = labelText;
+      wrap.style.display = "flex";
+      wrap.style.flexDirection = "column";
+      wrap.style.gap = "4px";
+      wrap.style.color = "#23463e";
+      wrap.style.fontSize = "11px";
+      wrap.style.fontWeight = "800";
+      const field = document.createElement("select");
+      field.id = id;
+      field.style.minWidth = "0";
+      field.style.boxSizing = "border-box";
+      field.style.height = "32px";
+      field.style.padding = "6px 28px 6px 9px";
+      field.style.border = "1px solid #cbdcd6";
+      field.style.borderRadius = "4px";
+      field.style.background = "#fff";
+      field.style.color = "#33443f";
+      field.style.fontSize = "12px";
+      field.style.fontWeight = "700";
+      field.style.cursor = "pointer";
+      wrap.appendChild(field);
+      return { wrap, field };
+    };
+
+    const manualCategoryField = createDevicePickerField("Категория", "wifi-oss-recycle-manual-label-category");
+    const manualModelField = createDevicePickerField("Модел на устройство", "wifi-oss-recycle-manual-label-model");
+    devicePickerArea.appendChild(manualCategoryField.wrap);
+    devicePickerArea.appendChild(manualModelField.wrap);
+
+    const deviceCatalogArea = document.createElement("div");
+    deviceCatalogArea.style.marginBottom = "8px";
+    deviceCatalogArea.style.padding = "8px";
+    deviceCatalogArea.style.border = "1px solid #dce8e4";
+    deviceCatalogArea.style.borderRadius = "6px";
+    deviceCatalogArea.style.background = "#ffffff";
+
+    const deviceCatalogTitle = document.createElement("div");
+    deviceCatalogTitle.textContent = "Избери устройство от каталога";
+    deviceCatalogTitle.style.marginBottom = "6px";
+    deviceCatalogTitle.style.color = "#23463e";
+    deviceCatalogTitle.style.fontSize = "12px";
+    deviceCatalogTitle.style.fontWeight = "800";
+
+    const deviceCatalogGrid = document.createElement("div");
+    deviceCatalogGrid.style.display = "grid";
+    deviceCatalogGrid.style.gridTemplateColumns = "repeat(auto-fill, minmax(150px, 1fr))";
+    deviceCatalogGrid.style.gap = "8px";
+    deviceCatalogGrid.style.maxWidth = "900px";
+    deviceCatalogGrid.style.alignItems = "stretch";
+    deviceCatalogArea.appendChild(deviceCatalogTitle);
+    deviceCatalogArea.appendChild(deviceCatalogGrid);
+
+    let manualPickerTouched = false;
+
+    const getManualLabelPickerCategories = () => Array.from(RECYCLE_ENTRY_CATEGORY_IDS || [])
+      .filter(categoryId => getRecycleDevicesByCategory(categoryId).some(device => {
+        const name = String(device?.displayName || "").trim();
+        const sapId = String(getRecycleEffectiveMaterialId(device, "sap") || device?.materialId || "").trim();
+        return Boolean(name && sapId);
+      }));
+
+    const addPickerOption = (select, value, text) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      select.appendChild(option);
+    };
+
+    const populateManualModelOptions = (categoryId, selectedDeviceId) => {
+      manualModelField.field.textContent = "";
+      addPickerOption(manualModelField.field, "", "Избери модел");
+      getRecycleDevicesByCategory(categoryId)
+        .filter(device => {
+          const name = String(device?.displayName || "").trim();
+          const sapId = String(getRecycleEffectiveMaterialId(device, "sap") || device?.materialId || "").trim();
+          return Boolean(name && sapId);
+        })
+        .forEach(device => {
+          const sapId = String(getRecycleEffectiveMaterialId(device, "sap") || device.materialId || "").trim();
+          addPickerOption(manualModelField.field, device.deviceId, `${device.displayName} — SAP ${sapId}`);
+        });
+      manualModelField.field.value = String(selectedDeviceId || "").trim();
+    };
+
+    const populateManualCategoryOptions = (selectedCategoryId, selectedDeviceId) => {
+      manualCategoryField.field.textContent = "";
+      addPickerOption(manualCategoryField.field, "", "Избери категория");
+      getManualLabelPickerCategories().forEach(categoryId => {
+        addPickerOption(manualCategoryField.field, categoryId, getRecycleEntryCategoryLabel(categoryId));
+      });
+      manualCategoryField.field.value = String(selectedCategoryId || "").trim();
+      populateManualModelOptions(manualCategoryField.field.value, selectedDeviceId);
+    };
+
     const deviceDetailsArea = document.createElement("div");
     deviceDetailsArea.style.display = "grid";
     deviceDetailsArea.style.gridTemplateColumns = "minmax(130px, 220px) minmax(130px, 220px)";
@@ -2250,6 +2376,132 @@
       field.addEventListener("input", () => {
         delete field.dataset.wifiOssManualLabelsAutoValue;
       });
+    });
+
+    const getSelectedManualPickerDevice = () => {
+      const deviceId = String(manualModelField.field.value || "").trim();
+      const categoryId = String(manualCategoryField.field.value || "").trim();
+      const device = deviceId ? getRecycleDeviceById(deviceId) : null;
+      return device && device.categoryId === categoryId ? device : null;
+    };
+
+    const applyManualPickerDevice = () => {
+      const device = getSelectedManualPickerDevice();
+      if (!device) return null;
+      const name = String(device.displayName || "").trim();
+      const sapId = String(getRecycleEffectiveMaterialId(device, "sap") || device.materialId || "").trim();
+      if (!name || !sapId) return null;
+      manualNameField.field.value = name;
+      manualNameField.field.dataset.wifiOssManualLabelsAutoValue = "1";
+      manualSapField.field.value = sapId;
+      manualSapField.field.dataset.wifiOssManualLabelsAutoValue = "1";
+      return device;
+    };
+
+    const getManualLabelPickerDevices = (categoryId) => getRecycleDevicesByCategory(categoryId)
+      .filter(device => {
+        const name = String(device?.displayName || "").trim();
+        const sapId = String(getRecycleEffectiveMaterialId(device, "sap") || device?.materialId || "").trim();
+        return Boolean(name && sapId);
+      });
+
+    const renderManualDeviceCatalog = () => {
+      const categoryId = String(manualCategoryField.field.value || "").trim();
+      const selectedDeviceId = String(manualModelField.field.value || "").trim();
+      const devices = getManualLabelPickerDevices(categoryId);
+      deviceCatalogGrid.textContent = "";
+      if (!categoryId) {
+        const hint = document.createElement("div");
+        hint.textContent = "Избери категория, за да се покажат моделите със снимки.";
+        hint.style.color = "#52625e";
+        hint.style.fontSize = "11px";
+        deviceCatalogGrid.appendChild(hint);
+        return;
+      }
+      if (!devices.length) {
+        const hint = document.createElement("div");
+        hint.textContent = "Няма налични модели в тази категория.";
+        hint.style.color = "#52625e";
+        hint.style.fontSize = "11px";
+        deviceCatalogGrid.appendChild(hint);
+        return;
+      }
+      devices.forEach(device => {
+        const deviceId = String(device.deviceId || "").trim();
+        const sapId = String(getRecycleEffectiveMaterialId(device, "sap") || device.materialId || "").trim();
+        const selected = deviceId === selectedDeviceId;
+        const card = document.createElement("button");
+        card.type = "button";
+        card.title = `${device.displayName} — SAP ${sapId}`;
+        card.setAttribute("aria-pressed", selected ? "true" : "false");
+        card.style.display = "flex";
+        card.style.flexDirection = "column";
+        card.style.minWidth = "0";
+        card.style.padding = "6px";
+        card.style.border = selected ? "2px solid #236b5a" : "1px solid #cbdcd6";
+        card.style.borderRadius = "5px";
+        card.style.background = selected ? "#e7f5ec" : "#fff";
+        card.style.color = "#23463e";
+        card.style.cursor = "pointer";
+        card.style.textAlign = "left";
+        card.style.boxShadow = selected ? "0 0 0 1px rgba(35, 107, 90, 0.12)" : "none";
+
+        const imageUrl = resolveRecycleImageUrl(getRecycleDeviceImagePath(device));
+        const image = document.createElement("img");
+        image.src = imageUrl || "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+        image.alt = device.displayName || "";
+        image.loading = "lazy";
+        image.style.display = "block";
+        image.style.width = "100%";
+        image.style.height = "74px";
+        image.style.objectFit = "contain";
+        image.style.marginBottom = "5px";
+        image.addEventListener("error", () => { image.style.visibility = "hidden"; });
+
+        const name = document.createElement("div");
+        name.textContent = device.displayName;
+        name.style.fontSize = "11px";
+        name.style.fontWeight = "800";
+        name.style.lineHeight = "1.2";
+        name.style.wordBreak = "break-word";
+
+        const sap = document.createElement("div");
+        sap.textContent = `SAP ID: ${sapId}`;
+        sap.style.marginTop = "2px";
+        sap.style.fontSize = "10px";
+        sap.style.color = selected ? "#1c604f" : "#52625e";
+
+        card.appendChild(image);
+        card.appendChild(name);
+        card.appendChild(sap);
+        card.addEventListener("click", () => {
+          manualPickerTouched = true;
+          manualModelField.field.value = deviceId;
+          applyManualPickerDevice();
+          renderManualDeviceCatalog();
+          refreshContextText();
+        });
+        deviceCatalogGrid.appendChild(card);
+      });
+    };
+
+    manualCategoryField.field.addEventListener("change", () => {
+      manualPickerTouched = true;
+      populateManualModelOptions(manualCategoryField.field.value, "");
+      [manualNameField.field, manualSapField.field].forEach(field => {
+        if (field.dataset.wifiOssManualLabelsAutoValue === "1") {
+          field.value = "";
+          delete field.dataset.wifiOssManualLabelsAutoValue;
+        }
+      });
+      renderManualDeviceCatalog();
+      refreshContextText();
+    });
+    manualModelField.field.addEventListener("change", () => {
+      manualPickerTouched = true;
+      applyManualPickerDevice();
+      renderManualDeviceCatalog();
+      refreshContextText();
     });
 
     const automaticDeviceWarning = document.createElement("div");
@@ -2340,7 +2592,21 @@
     printBtn.style.cursor = "pointer";
 
     const refreshContextText = () => {
-      const context = getManualRecycleLabelsContext();
+      const selectedPickerDevice = getSelectedManualPickerDevice();
+      const pickerCategoryId = String(manualCategoryField.field.value || "").trim();
+      const context = selectedPickerDevice
+        ? {
+          categoryId: selectedPickerDevice.categoryId,
+          deviceIds: [selectedPickerDevice.deviceId],
+          source: "избрания модел в ръчните етикети"
+        }
+        : manualPickerTouched && pickerCategoryId
+          ? {
+            categoryId: pickerCategoryId,
+            deviceIds: [],
+            source: "избраната категория в ръчните етикети"
+          }
+          : getManualRecycleLabelsContext();
       if (!context) {
         automaticDeviceWarning.style.display = "none";
         [manualNameField.field, manualSapField.field].forEach(field => {
@@ -2363,13 +2629,29 @@
         };
         applyAutoValue(manualNameField.field, String(autoItem.name || "").trim());
         applyAutoValue(manualSapField.field, String(autoItem.sapId || "").trim());
-        automaticDeviceWarning.style.display = "block";
-        contextText.textContent = `Проверка спрямо ${context.source}: ${getRecycleEntryCategoryLabel(context.categoryId)}. Името и SAP ID са попълнени автоматично.`;
+        automaticDeviceWarning.style.display = selectedPickerDevice ? "none" : "block";
+        contextText.textContent = selectedPickerDevice
+          ? `Избран модел за етикет: ${autoItem.name} (SAP ID: ${autoItem.sapId}). Името и SAP ID са попълнени автоматично.`
+          : `Проверка спрямо ${context.source}: ${getRecycleEntryCategoryLabel(context.categoryId)}. Името и SAP ID са попълнени автоматично.`;
       } else {
         automaticDeviceWarning.style.display = "none";
         contextText.textContent = `Проверка спрямо ${context.source}: ${getRecycleEntryCategoryLabel(context.categoryId)}. Избери точно едно устройство, за да се попълнят автоматично Име и SAP ID.`;
       }
       return context;
+    };
+
+    const syncManualPickerFromContext = () => {
+      if (manualPickerTouched) {
+        populateManualCategoryOptions(manualCategoryField.field.value, manualModelField.field.value);
+        renderManualDeviceCatalog();
+        return;
+      }
+      const context = getManualRecycleLabelsContext();
+      const categoryId = String(context?.categoryId || "").trim();
+      const selectedDeviceIds = Array.from(new Set(Array.isArray(context?.deviceIds) ? context.deviceIds : []));
+      const selectedDevice = selectedDeviceIds.length === 1 ? getRecycleDeviceById(selectedDeviceIds[0]) : null;
+      populateManualCategoryOptions(categoryId, selectedDevice?.categoryId === categoryId ? selectedDevice.deviceId : "");
+      renderManualDeviceCatalog();
     };
 
     const showStatus = (text, variant) => {
@@ -2507,6 +2789,7 @@
       panel.setAttribute("aria-hidden", opening ? "false" : "true");
       toggle.textContent = opening ? "СКРИЙ РЪЧНИ ЕТИКЕТИ" : "РЪЧНИ ЕТИКЕТИ";
       if (opening) {
+        syncManualPickerFromContext();
         refreshContextText();
         renderManualSerials();
         try { input.focus(); } catch (e) {}
@@ -2548,6 +2831,8 @@
 
     panel.appendChild(title);
     panel.appendChild(contextText);
+    panel.appendChild(devicePickerArea);
+    panel.appendChild(deviceCatalogArea);
     panel.appendChild(deviceDetailsArea);
     panel.appendChild(automaticDeviceWarning);
     panel.appendChild(inputArea);
